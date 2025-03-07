@@ -24,12 +24,6 @@ button:hover {
 }
 
 /* IDs */
-#pageTitle {
-    display: block;
-    color: var(--theme-color);
-    margin: 0 auto 20px;
-    text-align: center;
-}
 
 #search {
     display: flex;

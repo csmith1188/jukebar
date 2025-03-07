@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socketClient = io();
+        const username = "<%= username %>";
+
+        function sendMessage() {
+            const messageInput = document.getElementById("messageInput");
+            const sentMessages = document.getElementById("sentMessages");
+            const messageContent = messageInput.value.trim();
+            if (!messageContent) return; //cannot send empty message
+
+            const message = `${username}: ${messageContent}`;
+
+            const messageElement = document.createElement("p");
+            messageElement.textContent = message;
+            sentMessages.appendChild(messageElement);
+
+            socketClient.emit("message", { username, messageContent });
+
+            messageInput.value = ""; //clear the input after sending
+        };
+
+    </script>
+</head>
+
+<body>
+    <h1>Chat</h1>
+    <p>Welcome, <%= username %>
+    </p>
+    <input type="text" id="messageInput" placeholder="Enter message...">
+    <button onclick="sendMessage()">Send</button>
+    <br>
+    <div id="sentMessages"></div>
+    <br>
+    <a href="/">Go back to home</a>
+</body>
+
+</html>

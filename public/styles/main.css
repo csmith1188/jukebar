@@ -4,7 +4,7 @@
     /*All pages can use this set of colors*/
 
     --color-red: #bf0000;
-    --color-brown: #802000;
+    --color-brown: #643500;
     --color-orange: #ff4000;
     --color-gold: #fa0;
     --color-yellow: #ffbf00;
@@ -13,7 +13,8 @@
     --color-blue: #0040bf;
     --color-purple: #bf00ff;
     --color-pink: #ff4080;
-    --dark-gray: #555;
+    --color-gray: #555;
+    --color-silver: #b3b2ac;
 
     --light-red: #ff6860;
     --light-brown: #bf6040;
@@ -38,6 +39,7 @@
     --bg-light: #d0c8e0;
     --bg-light-blue: #def;
     --bg-light-green: #c8e0c8;
+    --bg-light-yellow: #dbd29b;
 }
 
 body {
@@ -70,6 +72,12 @@ p {
 
 input {
     font-size: inherit;
+    font-family: inherit;
+}
+
+select {
+    font-size: inherit;
+    font-family: inherit;
 }
 
 #header button {
@@ -105,6 +113,13 @@ input {
 	background: white;
 	overflow: auto;
 	position: relative;
+}
+
+#pageTitle {
+    display: block;
+    color: var(--theme-color);
+    margin: 0 auto;
+    text-align: center;
 }
 
 #header {

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+</head>
+
+<body>
+    <h1>Login</h1>
+    <form action="/login" method="POST">
+        <label for="user">Username:</label>
+        <input type="text" name="user">
+
+        <label for="pass">Password:</label>
+        <input type="password" name="pass">
+
+        <button type="submit">Login</button>
+        <br>
+        <p>Or...</p>
+        <a href="<%= AUTH_URL %>?redirectURL=<%= THIS_URL %>">Log in with Formbar</a>
+    </form>
+</body>
+
+</html>

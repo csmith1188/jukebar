@@ -1,0 +1,118 @@
+/* Tags */
+
+* {
+    box-sizing: border-box;
+}
+
+@keyframes gradient {
+    0% {
+        background-position: 0% 0%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* IDs */
+
+#border {
+    width: 600px;
+    height: 800px;
+    margin: 0 auto;
+    animation: gradient 10s infinite;
+    background: linear-gradient(45deg, var(--color-cyan), var(--color-yellow), var(--color-pink), var(--color-cyan), var(--color-yellow), var(--color-pink), var(--color-cyan), var(--color-yellow), var(--color-pink));
+    background-size: 300% 300%;
+    border-radius: 300px 300px 0 0;
+}
+
+#wood {
+    width: 500px;
+    height: 750px;
+    margin: 45px auto;
+    border-radius: 250px 250px 0 0;
+    background-color: #643500;
+}
+
+#halfScreen {
+    height: 200px;
+    width: 400px;
+    margin: 50px auto 10px;
+    border-radius: 250px 250px 0 0;
+    background-color: var(--bg-darker);
+}
+
+#buttonFrame {
+    display: flexbox;
+    width: 450px;
+    height: fit-content;
+    margin: 10px auto;
+    padding: 10px;
+    background-color: var(--color-silver);
+}
+
+
+#bottomLine {
+    display: inline-flex;
+}
+
+#soundSelect {
+    width: 419px;
+    margin: 5px auto;
+}
+
+#searchbar {
+    width: 314px;
+    cursor: text;
+}
+
+#border2 {
+    width: 350px;
+    height: 350px;
+    margin: auto;
+    background-image: linear-gradient(45deg, var(--color-cyan), var(--color-yellow), var(--color-pink));
+    border-radius: 0 0 300px 300px;
+}
+
+#speaker {
+    width: 300px;
+    height: 300px;
+    margin: 20px auto;
+    background-color: var(--bg-darker);
+    border-radius: 0 0 300px 300px;
+}
+
+/* Classes */
+.jukebox {
+    border: 5px inset var(--color-silver);
+    justify-content: center;
+    align-items: center;
+}
+
+.jukeButtons {
+    display: inline;
+    width: 30px;
+    height: 30px;
+    margin-right: 5px;
+    color: var(--color-red);
+    border: 1px solid var(--color-red);
+    background-color: var(--bg-light-yellow);
+    text-align: center;
+    cursor: pointer;
+}
+
+.sound {
+    color: var(--color-red);
+}
+
+.arrow-right {
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-left: 15px solid var(--theme-color);
+}

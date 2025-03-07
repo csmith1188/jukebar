@@ -5,114 +5,140 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Soundboard</title>
+    <link rel="stylesheet" href="../styles/sb.css">
 </head>
 
-<body>
-    <h1>Soundboard</h1>
-    <div id="soundboard">
-        <button class="sound" id="19dfnc">19 dollar Fortnite card</button>
-        <button class="sound" id="afewmomentslater">A few moments later</button>
-        <button class="sound" id="alarmclock">Alarm clock</button>
-        <button class="sound" id="amongusstart">Among us</button>
-        <button class="sound" id="applause">applause</button>
-        <button class="sound" id="bennyhill">Benny hill</button>
-        <button class="sound" id="bombdefused">Bomb defused</button>
-        <button class="sound" id="britishmusic">British music</button>
-        <button class="sound" id="bruh">Bruh</button>
-        <button class="sound" id="butterdog">Butterdog</button>
-        <button class="sound" id="clicknice">Click nice</button>
-        <button class="sound" id="crickets">Crickets</button>
-        <button class="sound" id="curbyourenthusiasm">Curb your enthusiasm</button>
-        <button class="sound" id="dialup">Dial up</button>
-        <button class="sound" id="dogofwisdom">Dog of wisdom</button>
-        <button class="sound" id="dukenukem">Duke nukem</button>
-        <button class="sound" id="dundundun">DUNDUNDUN</button>
-        <button class="sound" id="elevatormusic">Elevator music</button>
-        <button class="sound" id="enemyspotted">Enemy spotted</button>
-        <button class="sound" id="epicsaxguy">Epic sax guy</button>
-        <button class="sound" id="every60seconds">Every 60 seconds</button>
-        <button class="sound" id="fbi">FBI open up</button>
-        <button class="sound" id="feellikeanut">Feel like a nut</button>
-        <button class="sound" id="FinalFantasyVictoryDGKS">Final Fantasy Victory</button>
-        <button class="sound" id="falconpunch">Falcon Punch</button>
-        <button class="sound" id="gangstasparadise">Gangsta paradise</button>
-        <button class="sound" id="getout">GET OUT</button>
-        <button class="sound" id="halotheme">Halo theme</button>
-        <button class="sound" id="highnoon">High noon</button>
-        <button class="sound" id="howdareyou">How dare you</button>
-        <button class="sound" id="inception">Inception</button>
-        <button class="sound" id="intelinside">Intel inside</button>
-        <button class="sound" id="iphonealarm">Iphone alarm</button>
-        <button class="sound" id="ivefallen">I've Fallen</button>
-        <button class="sound" id="johncena">John Cena</button>
-        <button class="sound" id="kahootslobby1">Kahoot lobby</button>
-        <button class="sound" id="legofallapart">Lego fall apart</button>
-        <button class="sound" id="legoyodadeath">Lego Yoda</button>
-        <button class="sound" id="lockedinninja">Locked in ninja</button>
-        <button class="sound" id="loudindianmusic">Loud music</button>
-        <button class="sound" id="lowtaperfade">LOOOOW taper fade</button>
-        <button class="sound" id="mariodeath">Mario dies</button>
-        <button class="sound" id="mgsalert">MGS alert</button>
-        <button class="sound" id="missionfailed">Mission failed</button>
-        <button class="sound" id="mlgairhorn">MLG airhorn</button>
-        <button class="sound" id="nani">Nani</button>
-        <button class="sound" id="nogodpleaseno">No god please no</button>
-        <button class="sound" id="ohyesdaddy">Oh yes daddy</button>
-        <button class="sound" id="peanutbutterjelly">Peanut butter jelly</button>
-        <button class="sound" id="pinkpanther">Pink Panther</button>
-        <button class="sound" id="pizzapizza">Pizza pizza</button>
-        <button class="sound" id="rickroll">Rick roll</button>
-        <button class="sound" id="roundabout">Round about</button>
-        <button class="sound" id="scream">Scream</button>
-        <button class="sound" id="spicymeatball">Spicy meatball</button>
-        <button class="sound" id="steammessage">Steam message</button>
-        <button class="sound" id="tacobell">Taco Bell</button>
-        <button class="sound" id="thatsalotofdamage">That's a lot of damage</button>
-        <button class="sound" id="thatwaseasy">That was easy</button>
-        <button class="sound" id="thisismyhouse">This is my house</button>
-        <button class="sound" id="vienboom">Vine boom</button>
-        <button class="sound" id="watchasay">Wathca say</button>
-        <button class="sound" id="wat">WHAT</button>
-        <button class="sound" id="wassup">Wassup</button>
-        <button class="sound" id="win95start">Windows 95</button>
-        <button class="sound" id="winxpstart">Windows XP start</button>
-        <button class="sound" id="winxpshutdown">Windows XP shutdown</button>
-        <button class="sound" id="wompwomp">Womp womp</button>
-        <button class="sound" id="xperror">XP error</button>
-        <button class="sound" id="yaykidst">YAY</button>
-        <button class="sound" id="zawarudo">ZAWARUDO!</button>
-    </div>
-    <script>
-        let playSounds = true;
-        let userPermissions = 5;
-        // fetch('/getUserPermissions')
-        //     .then(response => response.json())
-        //     .then(data => {
-        //         userPermissions = data.permissions;
-        //     })
-        //     .catch(error => {
-        //         console.error('Error fetching user permissions:', error);
-        //         userPermissions = 0;
-        //     });
+<body id="colorContent">
+    <%- include("partials/header.ejs") %>
+        <div id="content" class="contentBox">
+            <h1 id="pageTitle">Soundboard</h1>
+            <div id="border" class="jukebox">
+                <div id="wood" class="jukebox">
+                    <div id="halfScreen" class="jukebox"></div>
+                    <div id="buttonFrame" class="jukebox">
+                        <select id="soundSelect" class="jukeButtons">
+                            <option class="sound" id="19dfnc">19 dollar Fortnite card</option>
+                            <option class="sound" id="afewmomentslater">A few moments later</option>
+                            <option class="sound" id="alarmclock">Alarm clock</option>
+                            <option class="sound" id="amongusstart">Among us</option>
+                            <option class="sound" id="applause">applause</option>
+                            <option class="sound" id="bennyhill">Benny hill</option>
+                            <option class="sound" id="bombdefused">Bomb defused</option>
+                            <option class="sound" id="britishmusic">British music</option>
+                            <option class="sound" id="bruh">Bruh</option>
+                            <option class="sound" id="butterdog">Butterdog</option>
+                            <option class="sound" id="clicknice">Click nice</option>
+                            <option class="sound" id="crickets">Crickets</option>
+                            <option class="sound" id="curbyourenthusiasm">Curb your enthusiasm</option>
+                            <option class="sound" id="dialup">Dial up</option>
+                            <option class="sound" id="dogofwisdom">Dog of wisdom</option>
+                            <option class="sound" id="dukenukem">Duke nukem</option>
+                            <option class="sound" id="dundundun">DUNDUNDUN</option>
+                            <option class="sound" id="elevatormusic">Elevator music</option>
+                            <option class="sound" id="enemyspotted">Enemy spotted</option>
+                            <option class="sound" id="epicsaxguy">Epic sax guy</option>
+                            <option class="sound" id="every60seconds">Every 60 seconds</option>
+                            <option class="sound" id="fbi">FBI open up</option>
+                            <option class="sound" id="feellikeanut">Feel like a nut</option>
+                            <option class="sound" id="FinalFantasyVictoryDGKS">Final Fantasy Victory</option>
+                            <option class="sound" id="falconpunch">Falcon Punch</option>
+                            <option class="sound" id="gangstasparadise">Gangsta paradise</option>
+                            <option class="sound" id="getout">GET OUT</option>
+                            <option class="sound" id="halotheme">Halo theme</option>
+                            <option class="sound" id="highnoon">High noon</option>
+                            <option class="sound" id="howdareyou">How dare you</option>
+                            <option class="sound" id="inception">Inception</option>
+                            <option class="sound" id="intelinside">Intel inside</option>
+                            <option class="sound" id="iphonealarm">Iphone alarm</option>
+                            <option class="sound" id="ivefallen">I've Fallen</option>
+                            <option class="sound" id="johncena">John Cena</option>
+                            <option class="sound" id="kahootslobby1">Kahoot lobby</option>
+                            <option class="sound" id="legofallapart">Lego fall apart</option>
+                            <option class="sound" id="legoyodadeath">Lego Yoda</option>
+                            <option class="sound" id="lockedinninja">Locked in ninja</option>
+                            <option class="sound" id="loudindianmusic">Loud music</option>
+                            <option class="sound" id="lowtaperfade">LOOOOW taper fade</option>
+                            <option class="sound" id="mariodeath">Mario dies</option>
+                            <option class="sound" id="mgsalert">MGS alert</option>
+                            <option class="sound" id="missionfailed">Mission failed</option>
+                            <option class="sound" id="mlgairhorn">MLG airhorn</option>
+                            <option class="sound" id="nani">Nani</option>
+                            <option class="sound" id="nogodpleaseno">No god please no</option>
+                            <option class="sound" id="ohyesdaddy">Oh yes daddy</option>
+                            <option class="sound" id="peanutbutterjelly">Peanut butter jelly</option>
+                            <option class="sound" id="pinkpanther">Pink Panther</option>
+                            <option class="sound" id="pizzapizza">Pizza pizza</option>
+                            <option class="sound" id="rickroll">Rick roll</option>
+                            <option class="sound" id="roundabout">Round about</option>
+                            <option class="sound" id="scream">Scream</option>
+                            <option class="sound" id="spicymeatball">Spicy meatball</option>
+                            <option class="sound" id="steammessage">Steam message</option>
+                            <option class="sound" id="tacobell">Taco Bell</option>
+                            <option class="sound" id="thatsalotofdamage">That's a lot of damage</option>
+                            <option class="sound" id="thatwaseasy">That was easy</option>
+                            <option class="sound" id="thisismyhouse">This is my house</option>
+                            <option class="sound" id="vienboom">Vine boom</option>
+                            <option class="sound" id="watchasay">Wathca say</option>
+                            <option class="sound" id="wat">WHAT</option>
+                            <option class="sound" id="wassup">Wassup</option>
+                            <option class="sound" id="win95start">Windows 95</option>
+                            <option class="sound" id="winxpstart">Windows XP start</option>
+                            <option class="sound" id="winxpshutdown">Windows XP shutdown</option>
+                            <option class="sound" id="wompwomp">Womp womp</option>
+                            <option class="sound" id="xperror">XP error</option>
+                            <option class="sound" id="yaykidst">YAY</option>
+                            <option class="sound" id="zawarudo">ZAWARUDO!</option>
+                        </select>
+                        <div id="bottomLine">
+                            <button class="jukeButtons">
+                                <div id="play" class="arrow-right"></div>
+                            </button>
+                            <submit id="cancel">
+                                <img src="/images/cancel.png" class="jukeButtons">
+                            </submit>
+                            <input id="searchbar" class="jukeButtons" placeholder="search for a sound"></insert>
+                            <submit id="search">
+                                <img src="/images/search.png" class="jukeButtons">
+                            </submit>
+                        </div>
+                    </div>
+                    <div id="border2" class="jukebox">
+                        <div id="speaker" class="jukebox"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            let playSounds = true;
+            let userPermissions = 5;
+            // fetch('/getUserPermissions')
+            //     .then(response => response.json())
+            //     .then(data => {
+            //         userPermissions = data.permissions;
+            //     })
+            //     .catch(error => {
+            //         console.error('Error fetching user permissions:', error);
+            //         userPermissions = 0;
+            //     });
 
-                function playSound(src) {
-                    const audio = new Audio(src);
-                    audio.play();
-                }
+            function playSound(src) {
+                const audio = new Audio(src);
+                audio.play();
+            }
 
-                window.onload = () => {
-                    // checks if the user has permission to play sounds
-                    document.getElementById('soundboard').addEventListener('click', (event) => {
-                        if (event.target && event.target.classList.contains('sound')) {
-                            if (userPermissions >= 2 && playSounds) {
-                                playSound(`/sfx/${event.target.id}.mp3`);
-                            } else {
-                                alert('You do not have permission to play sounds');
-                            }
+            window.onload = () => {
+                // checks if the user has permission to play sounds
+                document.getElementById('play').addEventListener('click', (event) => {
+                    if (event.target && event.target.classList.contains('sound')) {
+                        if (userPermissions >= 2 && playSounds) {
+                            playSound(`/sfx/${event.target.id}.mp3`);
+                        } else {
+                            alert('You do not have permission to play sounds');
                         }
-                    });
-                }
-            </script>
+                    }
+                });
+            }
+        </script>
 
 </body>
 
