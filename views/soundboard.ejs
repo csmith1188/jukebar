@@ -45,7 +45,6 @@
                         <button class="sound" id="epicsaxguy">Epic sax guy</button>
                     </div>
                     <!-- Page 3 -->
-                    <!-- Page 3 -->
                     <div class="button-page" id="page-3" style="display: none;">
                         <button class="sound" id="every60seconds">Every 60 seconds</button>
                         <button class="sound" id="fbi">FBI open up</button>
@@ -123,7 +122,6 @@
                         <button class="sound" id="dipper">Dippers song</button>
                         <button class="sound" id="yippee">Yippee!</button>
                     </div>
-           =
                 </div>
                 <div id="pagination-controls">
 
@@ -169,6 +167,10 @@
             }
         });
 
+        // Initialize the page on load
+        window.onload = () => {
+            updatePage();
+    
 
         function playSound(src) {
             const audio = new Audio(src);
@@ -177,9 +179,6 @@
             });
         }
 
-        window.onload = () => {
-            updatePage();
-        
             document.querySelectorAll('.sound').forEach(button => {
                 button.addEventListener('click', (event) => {
                     if (userPermissions >= 2 && playSounds) {
