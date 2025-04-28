@@ -293,7 +293,7 @@ app.post('/addToQueue', async (req, res) => {
         }
 
         const trackData = await spotifyApi.getTrack(match[1]);
-        
+
         await spotifyApi.addToQueue(uri);
 
         res.json({
@@ -357,35 +357,23 @@ app.get('/', (req, res) => {
 });
 
 app.post('/preview', async (req, res) => {
-    const { uri } = req.body;
-
-    if (!uri) {
+    const { PreviewUri } = req.body;
+    
+    if (!PreviewUri) {
         return res.status(400).json({ error: "Missing track URI" });
     }
 
     try {
-        const trackId = uri.split(':')[2];  // Get ID from spotify:track:ID format
-        const response = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
-            headers: {
-                'Authorization': `Bearer ${spotifyApi.getAccessToken()}`
-            }
-        });
+        const trackId = PreviewUri.split(':')[2]; // Extract ID from spotify:track:ID
         
-        const trackData = await response.json();
-        const previewUrl = trackData.preview_url;
-        
-        if (!previewUrl) {
-            return res.status(404).json({ error: "No preview available for this track" });
-        }
-
+        // Send back just the track ID for the iframe
         res.json({
             success: true,
-            previewUrl: previewUrl,
-            name: trackData.name
+            previewUrl: trackId
         });
     } catch (err) {
-        console.error('Error getting preview:', err);
-        res.status(500).json({ error: "Failed to get track preview" });
+        console.error('Preview Error:', err);
+        res.status(500).json({ error: "Failed to process preview request" });
     }
 });
 

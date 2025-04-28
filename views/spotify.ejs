@@ -19,7 +19,8 @@
                         <p>Search for a song to play:</p>
                         <div class="search-container">
                             <input type="text" id="searchBar" placeholder="Search for a song">
-                            <button type="submit" class="searchButton" onclick="search()">Search</button>
+                            <button type="submit" class="searchButton" id="searchButton">Search</button>
+
                         </div>
                     </div>
                     <div id="searchResults"></div>
@@ -28,6 +29,15 @@
                     <div id="current">
                         <h3>Current Song: </h3>
                         <p>No currently playing songs.</p>
+                    </div>
+                    <div id="preview">
+                        <h3>Preview:</h3>
+                        <iframe style="border-radius:12px"
+                            src="https://open.spotify.com/embed/track/2X485T9Z5Ly0xyaghN73ed?utm_source=generator&t=30s"
+                            width="100%" height="152" frameBorder="0" allowfullscreen=""
+                            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                            loading="lazy">
+                        </iframe>
                     </div>
                 </div>
                 <div class="column">
@@ -41,6 +51,7 @@
             const current = document.getElementById("current");
             const searchResults = document.getElementById("searchResults");
             const searchBar = document.getElementById("searchBar");
+            const previewDiv = document.getElementById("preview");
 
             // Add enter key support for search
             searchBar.addEventListener("keypress", function (event) {
@@ -57,28 +68,30 @@
                 fetch(`/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(data => {
-                        console.log('Search results:', data); // Add this debug log
                         if (data.error === 'explicit') {
                             alert('Only explicit versions of this song were found. Try searching for a clean version.');
                             searchResults.innerHTML = '';
                         } else if (data.error) {
                             searchResults.innerHTML = `<p>Error: ${data.error}</p>`;
                         } else {
-                            // Make sure we're getting the correct URI here
-                            console.log('Track URI for preview:', data.uri);
+                            const trackId = data.uri.split(':')[2];
                             searchResults.innerHTML = `
                                 <h3>${data.name}</h3>
                                 <img src="${data.album.largestImage}" alt="${data.album.name}" style="max-width: 200px; margin: 10px 0;">
                                 <p>Artist: ${data.artist}</p>
                                 <button onclick="playSong('${data.uri}')" class='playback'>Play</button> <br>
                                 <button onclick="addToQueue('${data.uri}')" class='playback'>Add to Queue</button> <br>
-                                <button onclick="preview('${data.uri}')" class='playback'>Preview</button>
+                                <button onclick="preview('${trackId}')" class='playback'>Preview</button>
                             `;
                         }
                     })
                     .catch(err => {
                         console.error('Search Error:', err);
                     });
+            }
+
+            function buttonClick(){
+                console.log("Button clicked!");
             }
 
             function playSong(uri) {
@@ -129,64 +142,36 @@
                     });
             }
 
-            let currentPreview = null;
-
-            function preview(uri) {
-                // Stop any currently playing preview
-                if (currentPreview) {
-                    currentPreview.pause();
-                    currentPreview = null;
-                    const buttons = document.querySelectorAll('button[onclick^="preview"]');
-                    buttons.forEach(btn => btn.textContent = "Preview");
-                    return;
-                }
-
-                fetch('/preview', {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ uri: uri })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.previewUrl) {
-                        currentPreview = new Audio(data.previewUrl);
-                        currentPreview.play()
-                            .then(() => {
-                                const previewButton = document.querySelector(`button[onclick="preview('${uri}')"]`);
-                                if (previewButton) {
-                                    previewButton.textContent = "◼ Stop Preview";
-                                }
-                            })
-                            .catch(err => {
-                                console.error('Preview playback error:', err);
-                                alert("Failed to play preview");
-                            });
-
-                        currentPreview.onended = () => {
-                            const previewButton = document.querySelector(`button[onclick="preview('${uri}')"]`);
-                            if (previewButton) {
-                                previewButton.textContent = "Preview";
-                            }
-                            currentPreview = null;
-                        };
-                    } else {
-                        alert("No preview available for this track");
-                    }
-                })
-                .catch(err => {
-                    console.error('Preview Error:', err);
-                    alert("Failed to get preview");
-                });
+            function preview(trackId) {
+                previewDiv.innerHTML = `
+                    <h3>Preview:</h3>
+                    <iframe style="border-radius:12px"
+                        src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&t=30"
+                        width="100%" 
+                        height="152" 
+                        frameBorder="0" 
+                        allowfullscreen=""
+                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                        loading="lazy">
+                    </iframe>
+                `;
             }
 
-            // Remove the updateQueue function and interval since we're not managing our own queue anymore
-
             document.addEventListener("DOMContentLoaded", function () {
+                const searchButton = document.getElementById('searchButton');
+                const searchBar = document.getElementById('searchBar');
+
+                searchButton.addEventListener('click', search);
+                searchBar.addEventListener('keypress', function (event) {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        search();
+                    }
+                });
+
                 let currentUri = null;
 
-                function fectchCurrent() {
+                function fetchCurrent() {
                     fetch('/currentSong')
                         .then(response => response.json())
                         .then(data => {
@@ -210,12 +195,8 @@
                         });
                 }
 
-                fectchCurrent();
-                setInterval(fectchCurrent, 500);
-
-                // Update queue initially and every 5 seconds
-                updateQueue();
-                setInterval(updateQueue, 5000);
+                fetchCurrent();
+                setInterval(fetchCurrent, 500);
             });
         </script>
 </body>
