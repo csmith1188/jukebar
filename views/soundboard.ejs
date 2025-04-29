@@ -126,7 +126,7 @@
     ];
 
     //user permissions variables, permissions back to the 2 defaults
-    const userPermissions = 5;
+    const userPermissions = 2;
     const playSounds = true;
 
     //soundboard variables
@@ -167,7 +167,8 @@
             button.id = sound.id;
             button.dataset.soundSrc = `../sfx/${sound.id}.mp3`;
 
-            currentPage.appendChild(button); //append button to the current page
+             //append button to the current page
+            currentPage.appendChild(button);
         });
 
         //update page visibility and controls
@@ -178,6 +179,9 @@
         pageCounter.innerText = `Page ${userPage + 1} of ${totalPages}`;
         document.getElementById("prevPage").disabled = userPage === 0;
         document.getElementById("nextPage").disabled = userPage === totalPages - 1;
+
+        // Add event listeners to sound buttons
+        addSoundButtonListeners();
     }
 
     function searchSounds() {
@@ -197,12 +201,25 @@
         }
     }
 
-    function playSound(src) {
-        const audio = new Audio(src);
-        audio.play().catch(error => {
-            console.error("Error playing sound:", error);
+function playSound(src) {
+    const audio = new Audio(src);
+    audio.play().catch(error => {
+        console.error("Error playing sound:", error);
+    });
+}
+
+//checks for the users permissions and decides if the sound can be played or not
+function addSoundButtonListeners() {
+    document.querySelectorAll('.sound').forEach(button => {
+        button.addEventListener('click', (event) => {
+            if (userPermissions >= 2) {
+                playSound(`/sfx/${event.target.id}.mp3`);
+            } else {
+                alert('You do not have permission to play sounds');
+            }
         });
-    }
+    });
+}
 
     //initialize the soundboard on page load
     window.onload = () => {
@@ -212,13 +229,6 @@
         //event listeners for pagination buttons
         document.getElementById('prevPage').addEventListener('click', () => changePage('prev'));
         document.getElementById('nextPage').addEventListener('click', () => changePage('next'));
-
-        //event listener for sound buttons
-        pagesContainer.addEventListener("click", (event) => {
-            if (event.target.classList.contains("sound")) {
-                playSound(event.target.dataset.soundSrc);
-            }
-        });
 
         //event listener for search input
         searchInput.addEventListener("input", searchSounds);
