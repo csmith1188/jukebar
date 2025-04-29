@@ -62,6 +62,13 @@ a {
     text-decoration: none;
 }
 
+a.tab {
+    padding: 12px 16px;
+    font-size: 21px;
+    cursor: pointer;
+    color: white;
+}
+
 p {
     margin: 8px 0;
 }
@@ -80,7 +87,7 @@ select {
     font-family: inherit;
 }
 
-#header button {
+button {
     padding: 3px 6px;
     border-radius: 8px;
     font-size: inherit;
@@ -106,13 +113,14 @@ select {
 }
 
 #content {
-	width: 1200px;
+    width: 1200px;
     margin: auto;
     margin-top: 100px;
-	padding: 100px 10px 10px;
-	background: white;
-	overflow: auto;
-	position: relative;
+    padding: 100px 10px 10px;
+    background: white;
+    overflow: auto;
+    position: relative;
+    color: black;
 }
 
 #pageTitle {
@@ -120,6 +128,23 @@ select {
     color: var(--theme-color);
     margin: 0 auto;
     text-align: center;
+}
+
+#lmdmBtn {
+    position: fixed;
+    right: 20px;
+    margin-top: 0.75vh;
+    border-radius: 100%;
+    width: 45px;
+    height: 45px;
+}
+
+#lmdmIcon {
+    position: absolute;
+    left: 20%;
+    top: 22%;
+    width: 25px;
+    height: 25px;
 }
 
 #header {
@@ -170,16 +195,17 @@ select {
     cursor: pointer;
 }
 
-#header .tab:hover, #header .tab:focus {
+#header .tab:hover,
+#header .tab:focus {
     background-color: #00000055;
     color: white;
 }
 
 .contentBox {
-	border: solid 2px black;
-	border-radius: 10px;
-	padding: 20px !important;
-	font-size: 20px;
+    border: solid 2px black;
+    border-radius: 10px;
+    padding: 20px !important;
+    font-size: 20px;
 }
 
 .icon {
@@ -192,3 +218,21 @@ select {
     float: right;
 }
 
+/*Pop-out effect*/
+:is(button):where(:hover, :focus-visible):not(.sound, .arrow){
+	transform: translate(3px, -3px);
+	box-shadow: -1.5px 1.5px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%);
+}
+
+:is(button):active:not(.sound, .arrow) {
+	background: var(--theme-color);
+	color: white;
+	transform: none !important;
+	box-shadow: none !important;
+}
+
+/*Shows that the button is currently active*/
+button.pressed {
+	background-color: var(--theme-color);
+	color: white;
+}

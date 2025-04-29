@@ -3,15 +3,17 @@ body {
 	color: #ffffff;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
 	color: var(--color-white);
 }
 
-h1.headertext, h2.headertext {
-	color: var(--light-cyan);
-}
-
-h1#noPoll.textColorContent {
+h1.headertext,
+h2.headertext {
 	color: var(--light-cyan);
 }
 
@@ -24,22 +26,25 @@ input {
 	color: #ffffff;
 }
 
-#select {
-	background-color: #323232;
-	color: #ffffff;
-}
-
 #colorContent {
 	background-color: #323232;
 	color: #ffffff;
 }
+
 
 #content {
 	background-color: var(#ffffff);
 	color: #000000;
 }
 
-#usernameBox, #passwordBox, #displayNameBox, #joinKey {
+#content .tab {
+	background-color: #323232;
+}
+
+#usernameBox,
+#passwordBox,
+#displayNameBox,
+#joinKey {
 	background-color: #ffffff;
 	color: #000000;
 }

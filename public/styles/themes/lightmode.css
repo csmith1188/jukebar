@@ -3,10 +3,35 @@ body {
 	color: #000;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
 	color: var(--color-black);
 }
 
 p {
 	color: var(--color-black);
+}
+
+input {
+	background-color: var(--bg-light);
+	color: #000000;
+}
+
+#colorContent {
+	background-color: var(--bg-light);
+	;
+	color: #000000;
+}
+
+#content .tab {
+	background-color: var(--bg-light);
+	color: #000000;
+}
+
+select {
+	color: #000000;
 }
