@@ -44,13 +44,14 @@
 </body>
 
 <script type="text/javascript">
-    const buttons = document.getElementsByTagName("button")
+    const links = document.getElementsByTagName("a");
 
-    for (let button of buttons) {
-        button.onclick = function () {
-            window.location.href = button.getAttribute("href");
+    for (let link of links) {
+        link.onclick = function (event) {
+            event.preventDefault(); // Prevent default navigation if needed
+            window.location.href = link.getAttribute("href");
         };
-    };
+    }
 </script>
 
 </html>
