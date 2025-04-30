@@ -30,7 +30,7 @@
                             <button id="nextPage" class="arrow"></button>
                         </div>
                         <div id="pageCounter">
-                            Page <span id="currentPage">1</span>/<span id="totalPages">1</span>
+                             <span id="currentPage">1</span>/<span id="totalPages">1</span>
                         </div>
                         <div id="buttonPages"></div>
                     </div>
@@ -135,7 +135,7 @@
     ];
 
     //user permissions variables, permissions back to the 2 default
-    const userPermissions = 2;
+    const userPermissions = 5;
     const playSounds = true;
 
     //soundboard variables
@@ -143,11 +143,15 @@
     const pageCounter = document.getElementById("pageCounter");
     const searchInput = document.getElementById("searchInput");
 
-    let userPage = 0; //page displayed to the user
-    const maxButtons = 8; //default sound buttons per page
-    const pages = []; //array to keep track of page elements
 
-    let filteredSoundList = soundList; //cache the filtered list
+    //page displayed to the user
+    let userPage = 0;
+     //default sound buttons per page
+    const maxButtons = 8;
+    const pages = [];
+
+    //cache the filtered list
+    let filteredSoundList = soundList; 
 
     function renderSounds(filteredSoundList) {
         //clear previous buttons and pages
