@@ -61,6 +61,7 @@
                 fetch(`/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(data => {
+                        console.log("Search Results:", data, query);
                         if (data.error === 'explicit') {
                             alert('Only explicit versions of this song were found. Try searching for a clean version.');
                             searchResults.innerHTML = '';
@@ -81,10 +82,6 @@
                     .catch(err => {
                         console.error('Search Error:', err);
                     });
-            }
-
-            function buttonClick(){
-                console.log("Button clicked!");
             }
 
             function playSong(uri) {

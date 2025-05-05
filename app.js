@@ -169,17 +169,19 @@ app.get('/search', async (req, res) => {
 
         if (tracks.length > 0) {
             // Map the tracks to include relevant details
-            const results = tracks.slice(0, 5).map(track => ({
-                name: track.name,
-                artist: track.artists[0].name,
-                uri: track.uri,
-                album: {
-                    name: track.album.name,
-                    images: track.album.images,
-                    smallestImage: track.album.images[track.album.images.length - 1]?.url,
-                    largestImage: track.album.images[0]?.url
-                }
-            }));
+            const results = tracks.slice(0, 5).map(track => {
+                return {
+                    name: track.name,
+                    artist: track.artists[0].name,
+                    uri: track.uri,
+                    album: {
+                        name: track.album.name,
+                        images: track.album.images,
+                        smallestImage: track.album.images[track.album.images.length - 1]?.url,
+                        largestImage: track.album.images[0]?.url
+                    }
+                };
+            });
 
             res.json(results);
         } else {
