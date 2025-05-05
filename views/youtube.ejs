@@ -5,79 +5,87 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Youtube Ripper</title>
+    <link rel="stylesheet" href="../styles/yt.css">
 </head>
 
-<body>
-    <h1>Youtube Ripper</h1>
+<body id="colorContent">
+    <%- include("partials/header.ejs") %>
+        <div id="content" class="contentBox">
+            <h1 id="pageTitle">Youtube Ripper</h1>
 
-    <form id="youtube-form">
-        <label for="url">Enter a youtube URL:</label>
-        <input type="text" id="url" name="url">
-        <button type="submit">Submit</button>
-    </form>
+            <form id="youtube-form">
+                <label for="url">Enter a youtube URL:</label>
+                <input type="text" id="url" name="url">
+                <button type="submit">Submit</button>
+            </form>
 
-    <div id="video"></div>
-    <div id="history">
-        <h2>Last 10 Videos Played (most recent at the top)</h2>
-        <ul id="video-list"></ul>
-    </div>
-    <button onclick="window.location.href='/'">Go back to home</button>
-    <script>
+            <div id="border">
+                <div id="video"></div>
+            </div>
+            <div id="history">
+                <h2>Last 10 Videos Played (most recent at the top)</h2>
+                <ul id="video-list"></ul>
+            </div>
+        </div>
+        <script>
 
-        //submits the form and loads the video, checks if video has a youtube url
-        const form = document.getElementById('youtube-form');
-        form.addEventListener('submit', function (event) {
-            event.preventDefault();
-            const urlInput = document.getElementById('url').value;
-            const videoId = new URL(urlInput).searchParams.get('v');
-            if (urlInput.includes
-                ('youtube.com')) {
+            //submits the form and loads the video, checks if video has a youtube url
+            const form = document.getElementById('youtube-form');
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                const urlInput = document.getElementById('url').value;
                 const videoId = new URL(urlInput).searchParams.get('v');
-                if (videoId) {
-                    saveVideoId(videoId);
-                    window.location.href = `?v=${videoId}`;
+                if (urlInput.includes
+                    ('youtube.com')) {
+                    const videoId = new URL(urlInput).searchParams.get('v');
+                    if (videoId) {
+                        saveVideoId(videoId);
+                        window.location.href = `?v=${videoId}`;
+                    }
+                } else {
+                    alert('Please enter a valid youtube URL');
                 }
-            } else {
-                alert('Please enter a valid youtube URL');
-            }
-        });
-
-        //loads the video if the video id is in the url
-        const video = document.getElementById('video');
-        const url = new URL(window.location.href);
-        const videoId = url.searchParams.get('v');
-        if (videoId) {
-            video.innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-            saveVideoId(videoId);
-        }
-
-        //saves the video id to local storage
-        function saveVideoId(videoId) {
-            let videos = JSON.parse(localStorage.getItem('videos')) || [];
-            if (!videos.includes(videoId)) {
-                videos.unshift(videoId);
-                if (videos.length > 10) {
-                    videos.pop();
-                }
-                localStorage.setItem('videos', JSON.stringify(videos));
-                updateVideoList();
-            }
-        }
-
-        //updates the list of videos so it gets deleted when the limit is reached
-        function updateVideoList() {
-            const videoList = document.getElementById('video-list');
-            videoList.innerHTML = '';
-            const videos = JSON.parse(localStorage.getItem('videos')) || [];
-            videos.forEach(id => {
-                const li = document.createElement('li');
-                li.innerHTML = `<a href="?v=${id}">https://www.youtube.com/watch?v=${id}</a>`;
-                videoList.appendChild(li);
             });
-        }
 
-        updateVideoList();
-    </script>
+            //loads the video if the video id is in the url
+            const video = document.getElementById('video');
+            const url = new URL(window.location.href);
+            const videoId = url.searchParams.get('v');
+
+            if (videoId) {
+                video.innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+                saveVideoId(videoId);
+            } else {
+                video.innerHTML = `<div class="video-placeholder">Please enter a youtube URL to watch a video.</div>`;
+            }
+
+            //saves the video id to local storage
+            function saveVideoId(videoId) {
+                let videos = JSON.parse(localStorage.getItem('videos')) || [];
+                if (!videos.includes(videoId)) {
+                    videos.unshift(videoId);
+                    if (videos.length > 10) {
+                        videos.pop();
+                    }
+                    localStorage.setItem('videos', JSON.stringify(videos));
+                    updateVideoList();
+                }
+            }
+
+            //updates the list of videos so it gets deleted when the limit is reached
+            function updateVideoList() {
+                const videoList = document.getElementById('video-list');
+                videoList.innerHTML = '';
+                const videos = JSON.parse(localStorage.getItem('videos')) || [];
+                videos.forEach(id => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<a href="?v=${id}">https://www.youtube.com/watch?v=${id}</a>`;
+                    videoList.appendChild(li);
+                });
+            }
+
+            updateVideoList();
+        </script>
 </body>
 
 </html>

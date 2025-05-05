@@ -15,6 +15,7 @@
     --color-pink: #ff4080;
     --color-gray: #555;
     --color-silver: #b3b2ac;
+    --color-white: #fff;
 
     --light-red: #ff6860;
     --light-brown: #bf6040;
@@ -51,30 +52,34 @@ body {
 
 h1 {
     text-align: center;
-    margin-top: 12px;
+    margin: 10px auto;
+    color: var(--theme-color);
 }
 
 h2 {
     margin-top: 32px;
+    color: var(--theme-color);
+}
+
+h3 {
+    font-weight: normal;
+    color: var(--bg-dark-green);
 }
 
 a {
     text-decoration: none;
+    color: var(--color-purple);
 }
 
 a.tab {
     padding: 12px 16px;
     font-size: 21px;
     cursor: pointer;
-    color: white;
+    color: var(--color-white);
 }
 
 p {
     margin: 8px 0;
-}
-
-* {
-    accent-color: var(--theme-color);
 }
 
 input {
@@ -92,13 +97,17 @@ button {
     border-radius: 8px;
     font-size: inherit;
     font-family: inherit;
+    border: 2px solid var(--theme-color);
     background-color: var(--bg-light-green);
     color: var(--theme-color);
-    border: 2px solid var(--theme-color);
     margin: 2px 1px;
     cursor: pointer;
     transition-duration: 0.2s;
     transition-property: transform, box-shadow;
+}
+
+* {
+    accent-color: var(--theme-color);
 }
 
 /* IDs */
@@ -108,25 +117,18 @@ button {
     padding-left: 10px;
 }
 
-#colorContent {
-    background-color: var(--bg-light);
-}
-
 #content {
     width: 1200px;
     margin: auto;
     margin-top: 100px;
     padding: 100px 10px 10px;
-    background: white;
     overflow: auto;
     position: relative;
-    color: black;
 }
 
 #pageTitle {
     display: block;
     color: var(--theme-color);
-    margin: 0 auto;
     text-align: center;
 }
 
@@ -155,7 +157,7 @@ button {
     left: -5%;
     display: flex;
     justify-content: center;
-    box-shadow: 0 3px 10px black;
+    box-shadow: 0 3px 10px var(--bg-dark-highlight);
     user-select: none;
     animation: gradient 5s ease infinite;
     transition: filter 0.5s;
@@ -182,7 +184,7 @@ button {
     padding: 8px 16px 10px;
     font-size: 24px;
     font-family: 'Arial Black';
-    color: white;
+    color: var(--color-white);
     text-decoration: underline dotted;
     cursor: pointer;
 }
@@ -198,14 +200,21 @@ button {
 #header .tab:hover,
 #header .tab:focus {
     background-color: #00000055;
-    color: white;
+    color: var(--color-white);
 }
 
 .contentBox {
-    border: solid 2px black;
+    border: solid 2px var(--color-black);
     border-radius: 10px;
     padding: 20px !important;
     font-size: 20px;
+}
+
+.column {
+    font-size: inherit;
+    font-family: inherit;
+	border: 5px inset var(--color-silver);
+	border-radius: 8px;
 }
 
 .icon {
@@ -219,20 +228,20 @@ button {
 }
 
 /*Pop-out effect*/
-:is(button):where(:hover, :focus-visible):not(.sound, .arrow){
-	transform: translate(3px, -3px);
-	box-shadow: -1.5px 1.5px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%);
+:is(button):where(:hover, :focus-visible):not(.sound, .arrow) {
+    transform: translate(3px, -3px);
+    box-shadow: -1.5px 1.5px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%);
 }
 
 :is(button):active:not(.sound, .arrow) {
-	background: var(--theme-color);
-	color: white;
-	transform: none !important;
-	box-shadow: none !important;
+    background: var(--theme-color);
+    color: white;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 /*Shows that the button is currently active*/
 button.pressed {
-	background-color: var(--theme-color);
-	color: white;
+    background-color: var(--theme-color);
+    color: white;
 }
