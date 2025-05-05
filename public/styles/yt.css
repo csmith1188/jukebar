@@ -1,0 +1,22 @@
+#border {
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    margin: 20px auto;
+    animation: gradient 30s infinite;
+    background: linear-gradient(45deg, var(--color-cyan), var(--color-yellow), var(--color-pink), var(--color-cyan), var(--color-yellow), var(--color-pink), var(--color-cyan), var(--color-yellow), var(--color-pink));
+    background-size: 300% 300%;
+    border-radius: 50px 50px;
+    border: 5px inset var(--color-silver);
+}
+
+#video {
+    display: flex;
+    width: 560px;
+    height: 315px;
+    margin: 25px;
+    border: 5px inset var(--color-silver);
+    background-color: var(--light-gray);
+    justify-content: center;
+    align-items: center;
+}
