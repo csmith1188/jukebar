@@ -151,3 +151,8 @@
     transform: translate(3px, -3px);
     box-shadow: -1.5px 1.5px color-mix(in hsl, var(--color-red) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--color-red) 70%, hsl(0, 0%, 0%) 30%);
 }
+
+.highlight {
+    background-color: var(--color-red);
+    color: var(--bg-light-yellow);
+}
