@@ -12,23 +12,28 @@
     <%- include("partials/header.ejs") %>
 
         <div id="content" class="contentBox">
-            <h1 id="pageTitle">Spotify Player</h1>
-            <div id="player">
-                <div id="search" class="column">
-                    <h3>Search for a song to play:</h3>
-                    <div class="search-container">
-                        <input type="text" id="searchBar" placeholder="Enter a song name...">
-                        <button type="submit" class="searchButton" id="searchButton">Search</button>
+            <h1>Spotify Player</h1>
+            <div class="container">
+                <div class="column">
+                    <div id="search">
+                        <p>Search for a song to play:</p>
+                        <div class="search-container">
+                            <input type="text" id="searchBar" placeholder="Search for a song">
+                            <button type="submit" class="searchButton" id="searchButton">Search</button>
+
+                        </div>
                     </div>
                     <div id="searchResults"></div>
                 </div>
-                <div id="current" class="column">
-                    <h3>Currently Playing:</h3>
-                    <p id="currentInfo">Not currently playing a song.</p>
+                <div class="column">
+                    <div id="current">
+                        <h3>Current Song: </h3>
+                        <p>No currently playing songs.</p>
+                    </div>
                     <div id="preview">
                     </div>
                 </div>
-                <div id="queue" class="column">
+                <div class="column">
                     <h3>Queue</h3>
                     <div id="queueList"></div>
                 </div>
@@ -36,7 +41,7 @@
         </div>
 
         <script>
-            const currentInfo = document.getElementById("currentInfo");
+            const current = document.getElementById("current");
             const searchResults = document.getElementById("searchResults");
             const searchBar = document.getElementById("searchBar");
             const previewDiv = document.getElementById("preview");
@@ -78,7 +83,7 @@
                     });
             }
 
-            function buttonClick() {
+            function buttonClick(){
                 console.log("Button clicked!");
             }
 
@@ -167,12 +172,13 @@
                                 currentUri = data.uri;
                                 if (data.name) {
                                     current.innerHTML = `
+                                <h3>Currently Playing: </h3>
                                 <p>${data.name}</p>
                                 <p>By ${data.artist}</p>
                                 <img src="${data.cover}" alt="Album Cover" width="200">
                             `;
                                 } else {
-                                    currentInfo.innerHTML = "<p>Not currently playing a song.</p>";
+                                    current.innerHTML = "<p>No song currently playing</p>";
                                 }
                             }
                         })

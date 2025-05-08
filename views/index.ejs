@@ -21,16 +21,16 @@
                     you
                     can use it:</p>
                 <div id="methodList">
-                    <a class="column" href="/soundboard">
+                    <a class="tab" href="/soundboard">
                         <h3>Soundboard</h3>
                         <p>Allows you to select sounds from a pre-approved list.</p>
                     </a>
-                    <a class="column" href="/youtube">
+                    <a class="tab" href="/youtube">
                         <img class="icon" src="/images/youtube-logos/yt_icon_white.png" alt="Youtube Logo" />
                         <h3>YouTube</h3>
                         <p>Allows you to play audio from a provided YouTube link.</p>
                     </a>
-                    <a class="column" href="/spotifyLogin">
+                    <a class="tab" href="/spotifyLogin">
                         <img class="icon" src="/images/spotify-logos/sp_primary_logo_green.png" alt="Spotify Logo" />
                         <h3>Spotify</h3>
                         <p>Allows you to search for and play songs off of Spotify.</p>
@@ -44,14 +44,13 @@
 </body>
 
 <script type="text/javascript">
-    const links = document.getElementsByTagName("a");
+    const buttons = document.getElementsByTagName("button")
 
-    for (let link of links) {
-        link.onclick = function (event) {
-            event.preventDefault(); // Prevent default navigation if needed
-            window.location.href = link.getAttribute("href");
+    for (let button of buttons) {
+        button.onclick = function () {
+            window.location.href = button.getAttribute("href");
         };
-    }
+    };
 </script>
 
 </html>
