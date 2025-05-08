@@ -15,8 +15,6 @@
     --color-pink: #ff4080;
     --color-gray: #555;
     --color-silver: #b3b2ac;
-    --color-white: #fff;
-    --color-black: #000;
 
     --light-red: #ff6860;
     --light-brown: #bf6040;
@@ -53,34 +51,30 @@ body {
 
 h1 {
     text-align: center;
-    margin: 10px auto;
-    color: var(--theme-color);
+    margin-top: 12px;
 }
 
 h2 {
     margin-top: 32px;
-    color: var(--theme-color);
-}
-
-h3 {
-    font-weight: normal;
-    color: var(--bg-dark-green);
 }
 
 a {
     text-decoration: none;
-    color: var(--color-purple);
 }
 
 a.tab {
     padding: 12px 16px;
     font-size: 21px;
     cursor: pointer;
-    color: var(--color-white);
+    color: white;
 }
 
 p {
     margin: 8px 0;
+}
+
+* {
+    accent-color: var(--theme-color);
 }
 
 input {
@@ -98,17 +92,13 @@ button {
     border-radius: 8px;
     font-size: inherit;
     font-family: inherit;
-    border: 2px solid var(--theme-color);
     background-color: var(--bg-light-green);
     color: var(--theme-color);
+    border: 2px solid var(--theme-color);
     margin: 2px 1px;
     cursor: pointer;
     transition-duration: 0.2s;
     transition-property: transform, box-shadow;
-}
-
-* {
-    accent-color: var(--theme-color);
 }
 
 /* IDs */
@@ -118,18 +108,25 @@ button {
     padding-left: 10px;
 }
 
+#colorContent {
+    background-color: var(--bg-light);
+}
+
 #content {
     width: 1200px;
     margin: auto;
     margin-top: 100px;
     padding: 100px 10px 10px;
+    background: white;
     overflow: auto;
     position: relative;
+    color: black;
 }
 
 #pageTitle {
     display: block;
     color: var(--theme-color);
+    margin: 0 auto;
     text-align: center;
 }
 
@@ -153,12 +150,12 @@ button {
 #header {
     position: fixed;
     width: 110%;
-    z-index: 2;
+    z-index: 1;
     top: 0;
     left: -5%;
     display: flex;
     justify-content: center;
-    box-shadow: 0 3px 10px var(--bg-dark-highlight);
+    box-shadow: 0 3px 10px black;
     user-select: none;
     animation: gradient 5s ease infinite;
     transition: filter 0.5s;
@@ -185,7 +182,7 @@ button {
     padding: 8px 16px 10px;
     font-size: 24px;
     font-family: 'Arial Black';
-    color: var(--color-white);
+    color: white;
     text-decoration: underline dotted;
     cursor: pointer;
 }
@@ -201,63 +198,14 @@ button {
 #header .tab:hover,
 #header .tab:focus {
     background-color: #00000055;
-    color: var(--color-white);
-}
-
-#playPartial {
-    z-index: 1;
-    position: absolute;
-    right: 40px;
-    top: 150px;
-    width: 270px;
-    padding: 20px;
-    background-color: var(--color-white);
-    border-radius: 8px;
-    border: solid 2px var(--color-silver);
-}
-
-#storedAudio p {
-    color: var(--color-red);
-    font-weight: bold;
-    text-transform: uppercase;;
-}
-
-#playButton {
-    display: inline-flex;
-    float: right;
-    border-radius: 100%;
-    width: 45px;
-    height: 45px;
-}
-
-#playIcon {
-    margin: auto;
-    width: 0;
-    height: 0;
-    border-top: 10px solid transparent;
-    border-bottom: 10px solid transparent;
-    border-left: 20px solid var(--theme-color);
+    color: white;
 }
 
 .contentBox {
-    border: solid 2px var(--color-silver);
+    border: solid 2px black;
     border-radius: 10px;
     padding: 20px !important;
     font-size: 20px;
-}
-
-.caption {
-    width: 150px;
-    display: inline-flex;
-    font-size: 12px;
-    color: var(--color-gray);
-}
-
-.column {
-    font-size: inherit;
-    font-family: inherit;
-    border: 5px inset var(--color-silver);
-    border-radius: 8px;
 }
 
 .icon {
@@ -271,20 +219,20 @@ button {
 }
 
 /*Pop-out effect*/
-:is(button):where(:hover, :focus-visible):not(.sound, .arrow) {
-    transform: translate(3px, -3px);
-    box-shadow: -1.5px 1.5px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%);
+:is(button):where(:hover, :focus-visible):not(.sound, .arrow){
+	transform: translate(3px, -3px);
+	box-shadow: -1.5px 1.5px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--theme-color) 70%, hsl(0, 0%, 0%) 30%);
 }
 
 :is(button):active:not(.sound, .arrow) {
-    background: var(--theme-color);
-    color: white;
-    transform: none !important;
-    box-shadow: none !important;
+	background: var(--theme-color);
+	color: white;
+	transform: none !important;
+	box-shadow: none !important;
 }
 
 /*Shows that the button is currently active*/
 button.pressed {
-    background-color: var(--theme-color);
-    color: white;
+	background-color: var(--theme-color);
+	color: white;
 }

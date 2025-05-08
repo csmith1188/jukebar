@@ -1,37 +1,59 @@
 body {
-	background-color: var(--bg-dark);
+	background-color: #323232;
+	color: #ffffff;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
 	color: var(--color-white);
 }
 
-input{
-	background-color: var(--bg-dark);
+h1.headertext,
+h2.headertext {
+	color: var(--light-cyan);
+}
+
+p {
 	color: var(--color-white);
 }
 
-select {
-	color: var(--color-white);
+input {
+	background-color: #323232;
+	color: #ffffff;
 }
 
 #colorContent {
-	background-color: var(--bg-darker);
-	color: var(--color-black);
+	background-color: #323232;
+	color: #ffffff;
 }
+
 
 #content {
-	background-color: var(--color-white);
-	color: var(--color-black);
+	background-color: var(#ffffff);
+	color: #000000;
 }
 
-#video {
-	background-color: var(--bg-dark);
-	color: var(--color-white);
+#content .tab {
+	background-color: #323232;
 }
 
-.column {
-	background-color: var(--bg-dark);
-	color: var(--color-white);
+#usernameBox,
+#passwordBox,
+#displayNameBox,
+#joinKey {
+	background-color: #ffffff;
+	color: #000000;
 }
 
-.column h3 {
-	color: var(--bg-light-green);
+#resTextBox {
+	background-color: #ffffff;
+	color: #000000;
+}
+
+select {
+	color: #ffffff;
 }

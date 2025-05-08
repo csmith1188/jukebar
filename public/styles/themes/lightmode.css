@@ -1,5 +1,14 @@
 body {
-	background-color: var(--color-white);
+	background-color: white;
+	color: #000;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
 	color: var(--color-black);
 }
 
@@ -8,30 +17,21 @@ p {
 }
 
 input {
-	background-color: var(--light-gray);
-	color: var(--color-black);
-}
-
-select {
-	color: var(--color-black);
+	background-color: var(--bg-light);
+	color: #000000;
 }
 
 #colorContent {
 	background-color: var(--bg-light);
-	color: var(--color-black);
+	;
+	color: #000000;
 }
 
-#content {
-	background-color: var(--color-white);
-	color: var(--color-black);
+#content .tab {
+	background-color: var(--bg-light);
+	color: #000000;
 }
 
-#video {
-	background-color: var(--light-gray);
-	color: var(--color-black);
-}
-
-.column {
-	background-color: var(--light-gray);
-	color: var(--color-black);
+select {
+	color: #000000;
 }
