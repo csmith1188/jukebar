@@ -1,0 +1,49 @@
+<div id="playPartial" onload="updateSelectedSound()">
+    <h3>Currently Selected:</h3>
+    <div id="storedAudio"></div>
+
+    <button id="playButton" onclick="playSound()">
+        <div id="playIcon"></div>
+    </button>
+    <p class="caption">Click this button to play your sound with formbar!</p>
+</div>
+
+<script>
+    const playButton = document.getElementById("playButton");
+    let storedAudio = document.getElementById("storedAudio");
+
+    //event listener to update the selected audio file
+    function updateSelectedSound() {
+        const soundboardInput = JSON.parse(localStorage.getItem("selectedSound"));
+        if (soundboardInput) {
+            storedAudio.innerHTML = `<p>${soundboardInput.name}</p>`;
+        } else {
+            storedAudio.innerHTML = "<p>No audio file selected</p>";
+        }
+    };
+
+    function playSound() {
+        const soundboardInput = JSON.parse(localStorage.getItem("selectedSound"));
+        if (soundboardInput) {
+            const audio = new Audio(`../sfx/${soundboardInput.id}.mp3`);
+            audio.play();
+        } else {
+            alert("No audio file selected");
+        }
+    };
+
+    //listen for changes in localStorage across tabs
+    window.addEventListener("storage", (event) => {
+        if (event.key === "selectedSound") {
+            updateSelectedSound();
+        }
+    });
+
+    setInterval(updateSelectedSound, 1000); // update every second
+
+    //clear local storage automatically
+    setInterval(() => {
+        localStorage.clear();
+        console.log("Local storage cleared.");
+    }, 3600000); //update every hour
+</script>

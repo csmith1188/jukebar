@@ -1,9 +1,5 @@
 /* Tags */
 
-* {
-    box-sizing: border-box;
-}
-
 @keyframes gradient {
     0% {
         background-position: 0% 0%;
@@ -112,6 +108,7 @@
     border: 5px inset var(--color-silver);
     justify-content: center;
     align-items: center;
+    box-sizing: border-box;
 }
 
 .reflective {
@@ -150,4 +147,9 @@
 :is(.sound):where(:hover, :focus-visible) {
     transform: translate(3px, -3px);
     box-shadow: -1.5px 1.5px color-mix(in hsl, var(--color-red) 70%, hsl(0, 0%, 0%) 30%), -3px 3px color-mix(in hsl, var(--color-red) 70%, hsl(0, 0%, 0%) 30%);
+}
+
+.highlight {
+    background-color: var(--color-red);
+    color: var(--bg-light-yellow);
 }
