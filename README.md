@@ -29,7 +29,7 @@ Use the Node Package Manager (npm) to install the following external libraries t
 
 ***
 
-## Acknowledgements:
+## Acknowledgements
 - Mr. Smith (csmith1181) - Instructor
 - The Formbar team and its contributers
 
