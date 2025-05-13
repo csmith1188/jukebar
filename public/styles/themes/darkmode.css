@@ -3,10 +3,6 @@ body {
 	color: var(--color-white);
 }
 
-p {
-	color: var(--color-black);
-}
-
 input{
 	background-color: var(--bg-dark);
 	color: var(--color-white);

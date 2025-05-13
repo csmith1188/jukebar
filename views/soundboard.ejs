@@ -12,34 +12,36 @@
 
 <body id="colorContent">
     <%- include("partials/header.ejs") %>
-        <div id="content" class="contentBox">
-            <h1 id="pageTitle">Soundboard</h1>
-            <div id="border" class="jukebox">
-                <div id="wood" class="jukebox">
-                    <div id="halfScreen" class="jukebox">
-                        <div id="search">
-                            <input type="text" id="searchInput" class="reflective" placeholder="Search for a sound...">
-                            <button id="searchButton" class="reflective" onclick="searchSounds()">
-                                <img src="../images/search.webp" alt="Search">
-                            </button>
+        <%- include("partials/playButton.ejs") %>
+            <div id="content" class="contentBox">
+                <h1 id="pageTitle">Soundboard</h1>
+                <div id="border" class="jukebox">
+                    <div id="wood" class="jukebox">
+                        <div id="halfScreen" class="jukebox">
+                            <div id="search">
+                                <input type="text" id="searchInput" class="reflective"
+                                    placeholder="Search for a sound...">
+                                <button id="searchButton" class="reflective" onclick="searchSounds()">
+                                    <img src="../images/search.webp" alt="Search">
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div id="buttonFrame" class="jukebox">
-                        <div id="pagination-controls">
-                            <button id="prevPage" class="arrow" disabled></button>
-                            <button id="nextPage" class="arrow"></button>
+                        <div id="buttonFrame" class="jukebox">
+                            <div id="pagination-controls">
+                                <button id="prevPage" class="arrow" disabled></button>
+                                <button id="nextPage" class="arrow"></button>
+                            </div>
+                            <div id="pageCounter">
+                                Page <span id="currentPage">1</span>/<span id="totalPages">1</span>
+                            </div>
+                            <div id="buttonPages"></div>
                         </div>
-                        <div id="pageCounter">
-                             <span id="currentPage">1</span>/<span id="totalPages">1</span>
+                        <div id="border2" class="jukebox">
+                            <div id="speaker" class="jukebox"></div>
                         </div>
-                        <div id="buttonPages"></div>
-                    </div>
-                    <div id="border2" class="jukebox">
-                        <div id="speaker" class="jukebox"></div>
                     </div>
                 </div>
             </div>
-        </div>
 </body>
 
 <script>
@@ -136,7 +138,7 @@
 
     //user permissions variables, permissions back to the 2 default
     const userPermissions = 5;
-    const playSounds = true;
+    const previewSounds = true;
 
     //soundboard variables
     const pagesContainer = document.getElementById("buttonPages");
@@ -180,8 +182,26 @@
             button.id = sound.id;
             button.dataset.soundSrc = `../sfx/${sound.id}.mp3`;
 
-             //append button to the current page
-            currentPage.appendChild(button);
+            // Check if the button matches the selected sound in local storage
+            const selectedSound = localStorage.getItem("selectedSound");
+            if (selectedSound === sound.name) {
+                highlightButton(button); // Highlight the button if it matches
+            }
+
+            button.addEventListener('click', () => {
+                highlightButton(button);
+
+                localStorage.clear(); //clear last selected sound from storage
+                localStorage.setItem(
+                    "selectedSound",
+                    JSON.stringify({ name: sound.name, id: sound.id }) //store both name and id as an object
+                ); //store new selected sound in local storage
+
+                const storedSound = JSON.parse(localStorage.getItem("selectedSound"));
+                console.log("Selected sound:", localStorage.getItem('selectedSound', storedSound.name, storedSound.id));
+            });
+
+            currentPage.appendChild(button); //append button to the current page
         });
 
         //update page visibility and controls
@@ -192,9 +212,15 @@
         pageCounter.innerText = `Page ${userPage + 1} of ${totalPages}`;
         document.getElementById("prevPage").disabled = userPage === 0;
         document.getElementById("nextPage").disabled = userPage === totalPages - 1;
+    }
 
-        // Add event listeners to sound buttons
-        addSoundButtonListeners();
+    function highlightButton(button) {
+        // Remove highlight class from all buttons
+        const buttons = document.querySelectorAll(".sound");
+        buttons.forEach(btn => btn.classList.remove('highlight'));
+
+        // Add highlight class to the clicked button
+        button.classList.add('highlight');
     }
 
     function searchSounds() {
@@ -214,25 +240,12 @@
         }
     }
 
-function playSound(src) {
-    const audio = new Audio(src);
-    audio.play().catch(error => {
-        console.error("Error playing sound:", error);
-    });
-}
-
-//checks for the users permissions and decides if the sound can be played or not
-function addSoundButtonListeners() {
-    document.querySelectorAll('.sound').forEach(button => {
-        button.addEventListener('click', (event) => {
-            if (userPermissions >= 2) {
-                playSound(`/sfx/${event.target.id}.mp3`);
-            } else {
-                alert('You do not have permission to play sounds');
-            }
+    /* function previewSound(src) {
+        const audio = new Audio(src);
+        audio.play().catch(error => {
+            console.error("Error playing sound:", error);
         });
-    });
-}
+    } */
 
     //initialize the soundboard on page load
     window.onload = () => {
@@ -242,6 +255,13 @@ function addSoundButtonListeners() {
         //event listeners for pagination buttons
         document.getElementById('prevPage').addEventListener('click', () => changePage('prev'));
         document.getElementById('nextPage').addEventListener('click', () => changePage('next'));
+
+        //event listener for sound buttons
+        pagesContainer.addEventListener("click", (event) => {
+            if (event.target.classList.contains("sound")) {
+                //previewSound(event.target.dataset.soundSrc);
+            }
+        });
 
         //event listener for search input
         searchInput.addEventListener("input", searchSounds);
