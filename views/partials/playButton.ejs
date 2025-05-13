@@ -15,8 +15,12 @@
     //event listener to update the selected audio file
     function updateSelectedSound() {
         const soundboardInput = JSON.parse(localStorage.getItem("selectedSound"));
+        const youtubeInput = JSON.parse(localStorage.getItem("selectedVideo"));
+        
         if (soundboardInput) {
             storedAudio.innerHTML = `<p>${soundboardInput.name}</p>`;
+        } else if (youtubeInput) {
+            storedAudio.innerHTML = `<p>YouTube Video: ${youtubeInput}</p>`;
         } else {
             storedAudio.innerHTML = "<p>No audio file selected</p>";
         }
@@ -24,8 +28,15 @@
 
     function playSound() {
         const soundboardInput = JSON.parse(localStorage.getItem("selectedSound"));
+        const youtubeInput = JSON.parse(localStorage.getItem("selectedVideo"));
+
         if (soundboardInput) {
             const audio = new Audio(`../sfx/${soundboardInput.id}.mp3`);
+            audio.play();
+        } else if (youtubeInput) {
+            const videoId = youtubeInput;
+            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            const audio = new Audio(videoUrl);
             audio.play();
         } else {
             alert("No audio file selected");

@@ -33,6 +33,48 @@ app.use(session({
     cookie: { secure: false }
 }));
 
+const downloadsDir = path.join(__dirname, 'downloads');
+if (!fs.existsSync(downloadsDir)) {
+    fs.mkdirSync(downloadsDir);
+}
+
+// Route to handle audio download and processing
+app.post('/download-audio', async (req, res) => {
+    const { videoUrl } = req.body;
+
+    // Validate the YouTube URL
+    if (!ytdl.validateURL(videoUrl)) {
+        return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+
+    // Generate a unique file name for the audio
+    const outputFilePath = path.join(downloadsDir, `${Date.now()}.mp3`);
+
+    try {
+        // Fetch the audio stream and process it with ffmpeg
+        const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
+
+        ffmpeg(audioStream)
+            .audioCodec('libmp3lame')
+            .save(outputFilePath)
+            .on('end', () => {
+                console.log(`Audio file saved: ${outputFilePath}`);
+                res.json({ audioFilePath: `/downloads/${path.basename(outputFilePath)}` });
+            })
+            .on('error', (err) => {
+                console.error('Error processing audio:', err);
+                res.status(500).json({ error: 'Failed to process audio' });
+            });
+    } catch (error) {
+        console.error('Error downloading audio:', error);
+        res.status(500).json({ error: 'Failed to download audio' });
+    }
+});
+
+// Serve the downloads directory
+app.use('/downloads', express.static(downloadsDir));
+
+
 // Main routes
 app.use('/', routes);
 
