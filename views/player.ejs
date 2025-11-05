@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jukebar - Player</title>
+    <link rel="icon" href="/img/favicon.png">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+
+</head>
+
+<body>
+    <div id="notification" class="notification">
+        <span class="close-btn" id="close-notification">&times;</span>
+        <p id="notification-text"></p>
+    </div>
+    <%- include('partials/header', { page: 'player' }) %>
+    <div class="main-content">
+        <p class="user-greeting">Logged in as: <strong>
+            <%= user %>
+        </strong></p>
+        <div class="container">
+                <div id="spotifyPlayer">
+                    <form id="searchForm">
+                        <div class="search-container">
+                            <input type="text" id="searchInput" placeholder="Search for a song, artist, or album"
+                                required>
+                            <button type="submit" id="searchButton">
+                                <img src="/img/search.png" alt="Search" class="search-icon">
+                            </button>
+                        </div>
+                    </form>
+                    <div id="searchResults"></div>
+                </div>
+                <div id="songStats">
+                    <h2>Now Playing:</h2>
+                    <hr>
+                    <div id="currentlyPlaying">
+                    </div>
+                    <div>
+                        <button id="skip-button" class="skip-button">Skip</button>
+                    </div>
+                    <h2>Up Next:</h2>
+                    <hr>
+                    <div id="queue">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="paymentModal" class="payment-modal">
+            <div class="payment-content">
+                <button id="hide-payment">&times;</button>
+                <%- include('partials/pay') %>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                'use strict';
+
+                let useJukebar = true;
+
+                const socket = io();
+
+                socket.on('auxiliaryPermission', (permission) => {
+                    console.log('Auxiliary permission:', permission);
+                    console.log('User permission:', userPermission);
+                    if (permission <= userPermission) {
+                        useJukebar = true;
+                    } else {
+                        useJukebar = false;
+                    }
+                });
+
+                // Global payment status flag
+                let hasPaid = <%= JSON.stringify(hasPaid || false) %>;
+                let currentID = <%= JSON.stringify(userID || null) %>;
+                let userPermission = <%= JSON.stringify(userPermission) %>;
+                let pendingTrackUri = null;
+                let pendingAction = null;
+                let currentlyPlayingUri = null;
+                const ownerID = <%= JSON.stringify(ownerID) %>;
+
+                function handleSearchSubmit(event) {
+                    event.preventDefault();
+                    searchSpotify();
+                }
+
+                async function checkPaymentAndPlay(uri) {
+                    // Check if Jukebar is enabled
+                    if (!useJukebar) {
+                        Notify('Jukebar is currently disabled by your teacher.');
+                        return;
+                    }
+
+                    if (currentID === ownerID) {
+                        addToQueue(uri);
+                        return;
+                    }
+
+                    if (!hasPaid) {
+                        pendingTrackUri = uri;
+                        pendingAction = 'play';
+                        showPayment();
+                        return;
+                    }
+
+                    // Reset payment flag after using it
+                    hasPaid = false;
+                    addToQueue(uri);
+                }
+
+                async function checkPaymentAndSkip() {
+                    // Check if Jukebar is enabled
+                    if (!useJukebar) {
+                        alert('Jukebar is currently disabled by your teacher.');
+                        return;
+                    }
+
+                    currentlyPlayingUri = `spotify:track:${currentlyPlayingUri}`;
+                    if (currentID === ownerID) {
+                        skip(currentlyPlayingUri);
+                        return;
+                    }
+
+                    if (!hasPaid) {
+                        pendingTrackUri = currentlyPlayingUri;
+                        pendingAction = 'skip';
+                        showPayment();
+                        return;
+                    }
+
+                    // Reset payment flag after using it
+                    hasPaid = false;
+                    skip(currentlyPlayingUri);
+                }
+
+                async function skip(uri) {
+                    try {
+                        const response = await fetch('/skip', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ uri })
+                        });
+                        if (!response.ok) {
+                            refund();
+                        } else {
+                            Notify('Track skipped!');
+                        }
+                    } catch (error) {
+                        console.error('Error skipping track:', error);
+                        Notify('Network error');
+                    }
+                }
+
+                function addToQueue(uri) {
+                    fetch('/addToQueue', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ uri })
+                    })
+                        .then(response => {
+                            if (response.ok) {
+                                Notify('Track added to queue!');
+                            } else {
+                                return response.json().then(data => {
+                                    refund();
+                                });
+                            }
+                        })
+                        .catch(error => {
+                            console.log('oopsies!')
+                            console.error('Error adding track to queue:', error);
+                            Notify('Network error');
+                        });
+                }
+
+                async function searchSpotify() {
+                    const query = document.getElementById('searchInput').value;
+                    if (!query) return;
+
+                    try {
+                        const response = await fetch('/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query })
+                        });
+                        const data = await response.json();
+                        const resultsDiv = document.getElementById('searchResults');
+                        resultsDiv.innerHTML = '';
+
+                        if (data.tracks && data.tracks.items.length > 0) {
+                            data.tracks.items.forEach(track => {
+                                const trackDiv = document.createElement('div');
+                                trackDiv.className = 'search-result-item';
+                                trackDiv.innerHTML = `
+                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
+                        <div class="search-result-content">
+                            <div class="search-result-title">${track.name}</div>
+                            <div class="search-result-artist">${track.artist}</div>
+                        </div>
+                        <button class="play-button" data-uri="${track.uri}">Play</button>
+                    `;
+                                resultsDiv.appendChild(trackDiv);
+                            });
+                        } else {
+                            resultsDiv.innerHTML = '<p>No results found.</p>';
+                        }
+                    } catch (error) {
+                        console.error('Error searching Spotify:', error);
+                    }
+                }
+
+                async function getQueue() {
+                    try {
+                        const response = await fetch('/getQueue', {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        const data = await response.json();
+                        if (data.ok) {
+                            //console.log('Queue data:', data.tracks.items);
+                            const queueDiv = document.getElementById('queue');
+                            queueDiv.innerHTML = '';
+                            if (data.tracks.items.length == 0) {
+                                const queueDiv = document.getElementById('queue');
+                                queueDiv.innerHTML = '<p>No tracks in queue.</p>';
+                            } else {
+                                data.tracks.items.forEach((item, index) => {
+                                    const itemDiv = document.createElement('div');
+                                    itemDiv.className = 'queue-item';
+                                    itemDiv.innerHTML = `
+                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                        <div class="queue-item-content">
+                            <div class="queue-item-title">${item.name}</div>
+                            <div class="queue-item-artist">${item.artist}</div>
+                        </div>
+                    `;
+                                    queueDiv.appendChild(itemDiv);
+                                });
+                            }
+                        } else {
+                            console.error('Failed to get queue:', data.error);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching queue:', error);
+                    }
+                }
+
+                async function currentlyPlaying() {
+                    try {
+                        const response = await fetch('/currentlyPlaying', {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        const data = await response.json();
+                        if (data.ok) {
+                            //console.log('Currently Playing:', data.tracks.items);
+                            const CurrentDiv = document.getElementById('currentlyPlaying');
+                            CurrentDiv.innerHTML = '';
+                            if (data.tracks.items.length == 0) {
+                                const CurrentDiv = document.getElementById('currentlyPlaying');
+                                CurrentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
+                                currentlyPlayingUri = null;
+                            }
+                            else {
+                                data.tracks.items.forEach((item, index) => {
+                                    const itemDiv = document.createElement('div');
+                                    itemDiv.className = 'current-item';
+                                    itemDiv.innerHTML = `
+                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                        <div class="current-item-content">
+                            <div class="current-item-title">${item.name}</div>
+                            <div class="current-item-artist">${item.artist}</div>
+                        </div>
+                    `;
+                                    CurrentDiv.appendChild(itemDiv);
+                                    currentlyPlayingUri = item.id
+                                });
+                            }
+                        } else {
+                            console.error('Failed to get current track:', data.error);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching current track:', error);
+                    }
+                }
+
+                function showPayment() {
+                    document.getElementById('paymentModal').style.display = 'block';
+                    document.querySelector('.main-content').classList.add('blurred');
+                    // Trigger getPrice via custom event
+                    window.dispatchEvent(new CustomEvent('updatePrice', { detail: { pendingAction } }));
+                }
+
+                function hidePayment() {
+                    document.getElementById('paymentModal').style.display = 'none';
+                    document.querySelector('.main-content').classList.remove('blurred');
+
+                    // Handle pending actions after payment
+                    if (hasPaid && pendingAction) {
+                        // Add a small delay to ensure session is saved on server
+                        setTimeout(() => {
+                            if (pendingAction === 'play' && pendingTrackUri) {
+                                const uri = pendingTrackUri;
+                                pendingTrackUri = null;
+                                pendingAction = null;
+                                checkPaymentAndPlay(uri);
+                            } else if (pendingAction === 'skip') {
+                                pendingAction = null;
+                                checkPaymentAndSkip();
+                            }
+                        }, 100); // 100ms delay
+                    }
+                }
+
+                function onPaymentSuccess() {
+                    hasPaid = true;
+                    hidePayment();
+                }
+
+                function refund() {
+                    fetch('/refund', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reason: "Jukebar refund" })
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.ok) {
+                                Notify('Spotify error occurred. Your digipogs have been refunded.');
+                                //console.log('Refund successful:', data);
+                            } else {
+                                Notify('Refund failed: ' + (data.error || 'Unknown error'));
+                                console.error('Refund failed:', data.error);
+                            }
+                        })
+                        .catch(error => {
+                            Notify('Network error during refund. Please contact support.');
+                            console.error('Error during refund:', error);
+                        });
+                }
+
+                // custom notifications taken from my other project
+                let notificationTimeout;
+
+                function Notify(message) {
+                    let notification = document.getElementById("notification");
+                    document.getElementById("notification-text").textContent = message;
+
+                    notification.style.display = "block";
+                    setTimeout(() => notification.style.opacity = "1", 100);
+
+                    notificationTimeout = setTimeout(closeNotification, 5000);
+                }
+
+                function closeNotification() {
+                    let notification = document.getElementById("notification");
+                    clearTimeout(notificationTimeout);
+
+                    notification.style.opacity = "0";
+                    setTimeout(() => notification.style.display = "none", 500);
+                }
+
+
+                // Wire up event listeners
+                document.getElementById('searchForm')?.addEventListener('submit', handleSearchSubmit);
+                document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
+                document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
+                document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+
+                // Event delegation for dynamically created play buttons
+                document.getElementById('searchResults')?.addEventListener('click', (e) => {
+                    if (e.target.matches('.play-button') || e.target.closest('.play-button')) {
+                        const button = e.target.matches('.play-button') ? e.target : e.target.closest('.play-button');
+                        const uri = button.dataset.uri;
+                        if (uri) checkPaymentAndPlay(uri);
+                    }
+                });
+
+                // Expose minimal API via custom events for pay.ejs communication
+                window.addEventListener('paymentSuccess', () => {
+                    onPaymentSuccess();
+                });
+
+                window.addEventListener('hidePaymentModal', () => {
+                    hidePayment();
+                });
+
+                // Expose read-only state for pay.ejs (cannot be directly manipulated from console)
+                window.getPlayerState = function() {
+                    return {
+                        hasPaid: hasPaid,
+                        pendingAction: pendingAction,
+                        currentID: currentID
+                    };
+                };
+
+                window.setPlayerState = function(updates) {
+                    if (updates.hasPaid !== undefined) hasPaid = updates.hasPaid;
+                    if (updates.pendingAction !== undefined) pendingAction = updates.pendingAction;
+                };
+
+                getQueue();
+                currentlyPlaying();
+                setInterval(getQueue, 7000);
+                setInterval(currentlyPlaying, 7000);
+            })();
+        </script>
+</body>
+
+</html>
