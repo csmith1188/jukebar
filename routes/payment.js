@@ -15,10 +15,10 @@ router.post('/transfer', async (req, res) => {
             db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
                 // if it gets the owner ID skip it
                 if (rows) {
-                    rows = rows.filter(r => r.id != process.env.OWNER_ID);
+                    rows = rows.filter(r => Number(r.id) !== Number(process.env.OWNER_ID));
                 }
                 if (err) return reject(err);
-                resolve(rows.map(r => r.id));
+                resolve(rows.map(r => Number(r.id)));
             });
         });
 
@@ -40,11 +40,12 @@ router.post('/transfer', async (req, res) => {
         } else {
             amount = Number(process.env.TRANSFER_AMOUNT) || 50;
             if (userRow && userRow.id) {
-                if (topUsers[0] === userRow.id) {
+                const userIdNum = Number(userRow.id);
+                if (topUsers[0] === userIdNum) {
                     amount = Math.max(0, amount - 10);
-                } else if (topUsers[1] === userRow.id) {
+                } else if (topUsers[1] === userIdNum) {
                     amount = Math.max(0, amount - 5);
-                } else if (topUsers[2] === userRow.id) {
+                } else if (topUsers[2] === userIdNum) {
                     amount = Math.max(0, amount - 3);
                 }
             }
@@ -342,18 +343,21 @@ router.post('/getAmount', async (req, res) => {
             const topUsers = await new Promise((resolve, reject) => {
                 db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
                     if (err) return reject(err);
-                    resolve(rows.map(r => r.id));
+                    // Filter out owner ID and ensure we have numbers for comparison
+                    const filteredRows = rows.filter(r => Number(r.id) !== Number(process.env.OWNER_ID));
+                    resolve(filteredRows.map(r => Number(r.id)));
                 });
             });
             // discount
             if (userId) {
-                if (topUsers[0] === userId) {
+                const userIdNum = Number(userId);
+                if (topUsers[0] === userIdNum) {
                     amount = Math.max(0, amount - 10); //10 pogs off
                     discountApplied = true;
-                } else if (topUsers[1] === userId) { 
+                } else if (topUsers[1] === userIdNum) { 
                     amount = Math.max(0, amount - 5);  //5 pogs off
                     discountApplied = true;
-                } else if (topUsers[2] === userId) {
+                } else if (topUsers[2] === userIdNum) {
                     amount = Math.max(0, amount - 3);  //3 pogs off
                     discountApplied = true;
                 }
