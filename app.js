@@ -1,425 +1,132 @@
-const express = require("express");
-const ejs = require("ejs");
-const path = require("path");
-const jwt = require('jsonwebtoken');
+// Initialize leaderboardLastReset on server start if not set
+const express = require('express');
 const session = require('express-session');
-const fs = require('fs');
-const https = require('https');
+const dotenv = require('dotenv');
 const http = require('http');
-const ytdl = require('ytdl-core');
-const ffmpeg = require('fluent-ffmpeg');
-require('dotenv').config();
+const { Server } = require('socket.io');
+const { io: ioClient } = require('socket.io-client');
 
+dotenv.config();
 
-// Import modules
-const { db } = require('./modules/db/database');
-const { spotifyApi } = require('./modules/spotify/config');
-const routes = require("./modules/routes");
-const { addToSpotifyQueue, getQueuedSongs, removeSongFromQueue } = require('./modules/spotify/queue');
-
-// Initialize express app
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
-// Middleware configuration
-app.set("view engine", "ejs");
-app.use(express.urlencoded({ extended: true }));
+const server = http.createServer(app);
+const io = new Server(server);
+
+app.set('view engine', 'ejs');
+app.set('leaderboardLastReset', Date.now());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
+
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'ThisIsTheSuperSigmerSecretKeyThatIsUsedToSignTheSessionIDNobodyWillEverGuessThisCauseItsSoLongAndImSigmaNowHeresARandomStringOfNumbersToMakeItEvenLonger123456789093784983749837498374987234987264928734629874629837612893746219873461298476123847962348976123487965213489762348972314875234987123648923714698123468231746198472364981723649812734698127346981723649',
+    secret: 'thisisasupersecretsigmaskibidikeyandihavethekeytotheuniversebutnobodywillknowabcdefghijklmnopqrstuvwxyz',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    cookie: {
+        secure: process.env.NODE_ENV === 'production', // true on HTTPS in production
+        httpOnly: true,
+        sameSite: 'lax', // helps mitigate CSRF for top-level navigations
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
 }));
 
-const downloadsDir = path.join(__dirname, 'downloads');
-if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir);
-}
+const { isAuthenticated } = require('./middleware/auth');
 
-// Route to handle audio download and processing
-app.post('/download-audio', async (req, res) => {
-    const { videoUrl } = req.body;
+const { router: authRoutes } = require('./routes/auth');
+const spotifyRoutes = require('./routes/spotify');
+const paymentRoutes = require('./routes/payment');
+const { router: leaderboardRoutes, checkAndResetLeaderboard } = require('./routes/leaderboard');
+// const { setupFormbarSocket } = require('./routes/socket');
 
-    // Validate the YouTube URL
-    if (!ytdl.validateURL(videoUrl)) {
-        return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
+// Formbar Socket.IO connection
+const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const API_KEY = process.env.API_KEY || '';
 
-    // Generate a unique file name for the audio
-    const outputFilePath = path.join(downloadsDir, `${Date.now()}.mp3`);
+console.log('=== Formbar Configuration ===');
+console.log('FORMBAR_ADDRESS:', FORMBAR_ADDRESS);
+console.log('API_KEY present:', !!API_KEY);
+console.log('=============================');
 
-    try {
-        // Fetch the audio stream and process it with ffmpeg
-        const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-
-        ffmpeg(audioStream)
-            .audioCodec('libmp3lame')
-            .save(outputFilePath)
-            .on('end', () => {
-                console.log(`Audio file saved: ${outputFilePath}`);
-                res.json({ audioFilePath: `/downloads/${path.basename(outputFilePath)}` });
-            })
-            .on('error', (err) => {
-                console.error('Error processing audio:', err);
-                res.status(500).json({ error: 'Failed to process audio' });
-            });
-    } catch (error) {
-        console.error('Error downloading audio:', error);
-        res.status(500).json({ error: 'Failed to download audio' });
-    }
+const formbarSocket = ioClient(FORMBAR_ADDRESS, {
+    extraHeaders: { api: API_KEY }
 });
 
-// Serve the downloads directory
-app.use('/downloads', express.static(downloadsDir));
+console.log('Formbar socket client created, attempting connection...');
 
+// setupFormbarSocket(io, formbarSocket);
 
 // Main routes
-app.use('/', routes);
-
-// Authentication routes
-app.get('/login', async (req, res) => {
-    if (req.query.token) {
-        try {
-            console.log("Received token:", req.query.token);
-
-            // Decode the token
-            const tokenData = jwt.decode(req.query.token);
-            if (!tokenData) {
-                throw new Error("Invalid or malformed token");
-            }
-            console.log("Decoded Token Data:", tokenData);
-
-            const { username, permissions, classID, className, classPermissions } = tokenData;
-
-            // Check if the user exists in the database
-            console.log("Checking user in database...");
-            const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
-            console.log("User query result:", user);
-
-            if (!user) {
-                // Insert new user into the database
-                console.log("Inserting new user into database...");
-                await db.run('INSERT INTO users (username) VALUES (?)', [username]);
-                await db.run('INSERT INTO classusers (permissions) VALUES (?)', [permissions]);
-                console.log("New user inserted successfully");
-
-                req.session.user = username;
-                req.session.permissions = permissions;
-            } else {
-                // Assign session data for existing user
-                console.log("Updating session for existing user...");
-                Object.assign(req.session, {
-                    user: username,
-                    permissions,
-                    classID,
-                    className
-                });
-            }
-
-            // Redirect to the home page
-            console.log("Redirecting to home page...");
-            res.redirect('/');
-        } catch (error) {
-            console.error("Error during login process:", error.message);
-
-            // Handle specific errors
-            if (error.message.includes("Invalid or malformed token")) {
-                return res.status(400).send("Invalid or malformed token. Please try logging in again.");
-            }
-
-            // Generic error response
-            res.status(500).send("An error occurred during the login process. Please try again later.");
-        }
-    } else {
-        // Redirect to the OAuth URL if no token is provided
-        const redirectURL = 'http://localhost:3000/login';
-        console.log("No token provided. Redirecting to OAuth URL:", redirectURL);
-        res.redirect(`https://formbar.yorktechapps.com/oauth?redirectURL=${redirectURL}`);
-    }
-});
-
-
-// Spotify authentication routes
-app.get('/spotifyLogin', (req, res) => {
-    const scopes = [
-        'user-read-private',
-        'user-read-email',
-        'playlist-modify-public',
-        'playlist-modify-private',
-        'playlist-read-private',
-        'playlist-read-collaborative',
-        'user-read-playback-state',
-        'user-modify-playback-state',
-        'user-read-currently-playing',
-        'streaming',
-        'app-remote-control'
-    ];
-    res.redirect(spotifyApi.createAuthorizeURL(scopes));
-});
-
-app.get('/callback', async (req, res) => {
-    const { error, code } = req.query;
-
-    if (error) {
-        console.error('Spotify Auth Error:', error);
-        return res.send(`Error: ${error}`);
-    }
-
+app.get('/', isAuthenticated, (req, res) => {
     try {
-        const data = await spotifyApi.authorizationCodeGrant(code);
-        const { access_token, refresh_token, expires_in } = data.body;
-
-        spotifyApi.setAccessToken(access_token);
-        spotifyApi.setRefreshToken(refresh_token);
-
-        // handles the token refresh in the background
-        setInterval(async () => {
-            try {
-                const refreshData = await spotifyApi.refreshAccessToken();
-                spotifyApi.setAccessToken(refreshData.body.access_token);
-                console.log('Token refreshed successfully');
-            } catch (err) {
-                console.error('Error refreshing access token:', err);
-            }
-        }, (expires_in / 2) * 1000);
-
-        res.redirect('/spotify');
+        res.render('player.ejs', {
+            user: req.session.user,
+            userID: req.session.token?.id,
+            hasPaid: !!req.session.hasPaid,
+            payment: req.session.payment || null,
+            userPermission: req.session.permission || null,
+            ownerID: Number(process.env.OWNER_ID) || 4
+        });
     } catch (error) {
-        console.error('Error during Spotify authorization:', error);
-        res.status(500).send(`Error during authorization: ${error.message}`);
+        res.send(error.message);
     }
 });
 
-// Spotify API routes
-app.get('/search', async (req, res) => {
-    const { q } = req.query;
-
-    if (!q?.trim()) {
-        return res.status(400).send('Bad Request: Missing or invalid query parameter');
-    }
-
-    if (!spotifyApi.getAccessToken()) {
-        return res.status(401).send('Unauthorized: Access token missing or invalid');
-    }
-
+app.get('/spotify', isAuthenticated, (req, res) => {
     try {
-        // Search for tracks with the query
-        const searchData = await spotifyApi.searchTracks(q, { limit: 50 });
-        const tracks = searchData.body.tracks.items;
+        res.render('player.ejs', {
+            user: req.session.user,
+            userID: req.session.token?.id,
+            hasPaid: !!req.session.hasPaid,
+            payment: req.session.payment || null,
+            userPermission: req.session.permission || null,
+            ownerID: Number(process.env.OWNER_ID) || 4
+        });
+    } catch (error) {
+        res.send(error.message);
+    }
+});
 
-        if (tracks.length > 0) {
-            // Map the tracks to include relevant details
-            const results = tracks.slice(0, 5).map(track => ({
-                name: track.name,
-                artist: track.artists[0].name,
-                uri: track.uri,
-                album: {
-                    name: track.album.name,
-                    images: track.album.images,
-                    smallestImage: track.album.images[track.album.images.length - 1]?.url,
-                    largestImage: track.album.images[0]?.url
-                }
-            }));
+app.get('/leaderboard', isAuthenticated, (req, res) => {
+    try {
+        res.render('leaderboard.ejs', {
+            user: req.session.user,
+            userID: req.session.token?.id,
+            userPermission: req.session.permission || null,
+            resetDate: req.app.get('leaderboardLastReset'),
+            ownerID: Number(process.env.OWNER_ID) || 4
+        });
+    }
+    catch (error) {
+        res.send(error.message);
+    }
+});
 
-            res.json(results);
+app.get('/teacher', isAuthenticated, (req, res) => {
+    try {
+        if (req.session.permission >= 4 || req.session.token?.id === Number(process.env.OWNER_ID)) {
+            res.render('teacher.ejs', {
+                user: req.session.user,
+                userID: req.session.token?.id,
+                userPermission: req.session.permission || null,
+                ownerID: Number(process.env.OWNER_ID) || 4
+            });
         } else {
-            res.json({
-                error: 'not_found',
-                message: 'No tracks were found for the given query'
-            });
+            res.redirect('/');
         }
-    } catch (err) {
-        console.error('Error searching tracks:', err);
-        res.status(500).send(`Error: ${err.message}`);
+    } catch (error) {
+        res.send(error.message);
     }
 });
 
-app.get('/currentSong', (req, res) => {
-    spotifyApi.getMyCurrentPlayingTrack()
-        .then(data => {
-            if (data.body.item) {
-                const track = data.body.item;
-                const trackInfo = {
-                    name: track.name,
-                    artist: track.artists[0].name,
-                    uri: track.uri,
-                    cover: track.album.images[0].url,
-                };
-                res.json(trackInfo);
-            } else {
-                res.status(404).json({ error: 'No tracks found' });
-            }
-        })
-        .catch(err => {
-            console.error('Error getting current track:', err);
-            res.status(500).send(`Error: ${err.message}`);
-        });
+app.use('/', authRoutes);
+app.use('/', spotifyRoutes);
+app.use('/', paymentRoutes);
+app.use('/', leaderboardRoutes);
+
+server.listen(port, async () => {
+    console.log(`Server listening at http://localhost:${port}`);
 });
 
-app.post('/play', async (req, res) => {
-    const { uri } = req.body;
-
-    if (!uri) {
-        return res.status(400).json({ error: "Missing track URI" });
-    }
-
-    if (!spotifyApi.getAccessToken()) {
-        return res.status(401).json({ error: "Unauthorized: Access token missing or invalid" });
-    }
-
-    const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
-    const match = uri.match(trackIdPattern);
-    if (!match) {
-        return res.status(400).json({ error: 'Invalid track URI format' });
-    }
-
-    try {
-        // Get track details first to check if it's explicit
-        const trackData = await spotifyApi.getTrack(match[1]);
-
-        // Check if the track is explicit
-        if (trackData.body.explicit) {
-            return res.status(403).json({
-                error: "explicit",
-                message: "Cannot play explicit content"
-            });
-        }
-
-        const devicesData = await spotifyApi.getMyDevices();
-        const devices = devicesData.body.devices;
-
-        if (devices.length === 0) {
-            return res.status(400).json({ error: "No available devices found" });
-        }
-
-        await spotifyApi.play({
-            uris: [uri],
-            device_id: devices[0].id
-        });
-
-        await removeSongFromQueue(uri);
-
-        res.json({
-            success: true,
-            message: "Playing track!",
-            trackInfo: {
-                name: trackData.body.name,
-                artist: trackData.body.artists[0].name,
-                uri: trackData.body.uri,
-            }
-        });
-    } catch (err) {
-        console.error('Error:', err);
-        res.status(500).json({ error: "Playback failed, make sure Spotify is open" });
-    }
-});
-
-app.post('/addToQueue', async (req, res) => {
-    const { uri } = req.body;
-
-    if (!uri) {
-        return res.status(400).json({ error: "Missing track URI" });
-    }
-
-    if (!spotifyApi.getAccessToken()) {
-        return res.status(401).json({ error: "Unauthorized: Access token missing or invalid" });
-    }
-
-    try {
-        const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
-        const match = uri.match(trackIdPattern);
-        if (!match) {
-            return res.status(400).json({ error: 'Invalid track URI format' });
-        }
-
-        const trackData = await spotifyApi.getTrack(match[1]);
-
-        await spotifyApi.addToQueue(uri);
-
-        res.json({
-            success: true,
-            message: "Track added to queue!",
-            name: trackData.body.name,
-            artist: trackData.body.artists[0].name
-        });
-    } catch (err) {
-        console.error('Error:', err);
-        res.status(500).json({ error: "Failed to add track to queue" });
-    }
-});
-
-app.get('/queue', async (req, res) => {
-    if (!spotifyApi.getAccessToken()) {
-        return res.status(401).json({ error: "Unauthorized: Access token missing or invalid" });
-    }
-
-    try {
-        const queuedSongs = await getQueuedSongs(100);
-
-        // If the queue is empty, return an empty array
-        if (!queuedSongs || queuedSongs.length === 0) {
-            return res.json([]); // Return an empty array to indicate no songs in the queue
-        }
-
-        const trackInfoPromises = queuedSongs.map(async (song) => {
-            const trackId = song.uri.split(':')[2]; // Extract ID from spotify:track:ID
-            const trackData = await spotifyApi.getTrack(trackId);
-            return {
-                name: trackData.body.name,
-                artist: trackData.body.artists[0].name,
-                uri: trackData.body.uri,
-                albumImage: trackData.body.album.images[trackData.body.album.images.length - 1]?.url
-            };
-        });
-
-        const queueItems = await Promise.all(trackInfoPromises);
-        res.json(queueItems);
-    } catch (err) {
-        console.error('Error fetching queue:', err);
-        res.status(500).json({ error: "Failed to fetch queue" });
-    }
-});
-
-app.post('/youtube', async (req, res) => {
-    const url = req.body.url;
-    if (ytdl.validateURL(url)) {
-        const info = await ytdl.getInfo(url);
-        const format = ytdl.chooseFormat(info.formats, { quality: 'highest' });
-        res.header('Content-Disposition', `attachment; filename="${info.videoDetails.title}.mp4"`);
-        ytdl(url, { format: format }).pipe(res);
-    } else {
-        res.status(400).send('Invalid URL');
-    }
-});
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'youtube.ejs'));
-});
-
-app.post('/preview', async (req, res) => {
-    const { PreviewUri } = req.body;
-    
-    if (!PreviewUri) {
-        return res.status(400).json({ error: "Missing track URI" });
-    }
-
-    try {
-        const trackId = PreviewUri.split(':')[2]; // Extract ID from spotify:track:ID
-        
-        // Send back just the track ID for the iframe
-        res.json({
-            success: true,
-            previewUrl: trackId
-        });
-    } catch (err) {
-        console.error('Preview Error:', err);
-        res.status(500).json({ error: "Failed to process preview request" });
-    }
-});
-
-// Start server
-app.listen(port, () => {
-    console.log(`Server running on port http://localhost:${port}`);
-});
+module.exports = { app, io, formbarSocket };

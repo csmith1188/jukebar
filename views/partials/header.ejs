@@ -1,63 +1,41 @@
-<link rel="stylesheet" href="../styles/main.css">
-<link id="lmdm" rel="stylesheet" href="styles/themes/lightmode.css">
+<!DOCTYPE html>
+<html lang="en">
 
-<header id="header">
-    <a href="/" id="logo">Jukebar</a>
-    <a class="tab" href="/soundboard">Soundboard</a>
-    <a class="tab" href="/youtube">Youtube</a>
-    <a class="tab" href="/spotify">Spotify</a>
-    <button id="logout" class="tab" onclick="logout()">Logout</button>
-    <p id="version">Alpha v 0.1</p>
-    <button onclick="toggleTheme()" id="lmdmBtn">
-        <img id="lmdmIcon" src="images/sun.svg">
-    </button>
-</header>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jukebar</title>
+    <link rel="icon" href="/img/favicon.png">
+    <link rel="stylesheet" href="/styles.css">
+</head>
 
-<script>
-    //imported from formbar.js, edited to work with jukebar
-
-    const lmdmIcon = document.getElementById('lmdmIcon'); // Define the lmdmIcon variable
-
-    // Check the theme cookie and update the stylesheet and icon accordingly
-    var theme = getCookie("theme");
-    if (theme === "light" || theme === null) {
-        document.getElementById('lmdm').href = 'styles/themes/lightmode.css';
-        lmdmIcon.src = "images/moon.svg";
-    } else if (theme === "dark") {
-        document.getElementById('lmdm').href = 'styles/themes/darkmode.css';
-        lmdmIcon.src = "images/sun.svg";
-    }
-
-    function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) {
-            return parts.pop().split(';').shift();
-        }
-        return null; // Return null if the cookie is not found
-    }
-
-    var nextYear = new Date().getFullYear() + 1;
-
-    function toggleTheme() {
-        var theme = getCookie("theme");
-        if (theme == "light" || theme == null) {
-            document.cookie = "theme=dark;expires=Fri, 1 Jul " + nextYear + " 23:59:59 GMT";
-            document.getElementById('lmdm').href = 'styles/themes/darkmode.css';
-            lmdmIcon.src = "images/sun.svg"
-        } else if (getCookie("theme") === "dark") {
-            document.cookie = "theme=light;expires=Fri, 1 Jul " + nextYear + " 23:59:59 GMT";
-            document.getElementById('lmdm').href = 'styles/themes/lightmode.css';
-            lmdmIcon.src = "images/moon.svg"
-        }
-        console.log("Current theme:", theme);
-        console.log("Cookie set to:", document.cookie);
-    }
-
-    function logout() {
-        document.cookie = "session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-        document.cookie = "theme=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-        window.location.href = 'http://formbeta.yorktechapps.com/oauth?redirectURL=http://localhost:3000/login';
-    }
-
-</script>
+<body>
+    <header>
+        <div class="logo">
+            <a href="/" id="jubnbark">Jukebar</a>
+        </div>
+        <ul class="nav-links">
+            <% 
+                const permVal = Number(typeof userPermission !== 'undefined' ? userPermission : (user && user.permission));
+                const uid = String(typeof userID !== 'undefined' ? userID : (user && user.id ? user.id : ''));
+                const owner = String(typeof ownerID !== 'undefined' ? ownerID : '');
+            %>
+            <li>
+                <% if (permVal >= 4 || (owner && uid === owner)) { %>
+                    <a href="/teacher" class="<%= typeof page !== 'undefined' && page === 'teacher' ? 'active' : '' %>">Teacher</a>
+                <% } %>
+            </li>
+            <li><a href="/" class="<%= typeof page !== 'undefined' && page === 'player' ? 'active' : '' %>">Player</a>
+            </li>
+            <li><a href="/leaderboard"
+                    class="<%= typeof page !== 'undefined' && page === 'leaderboard' ? 'active' : '' %>">Leaderboard</a>
+            </li>
+            <li class="logout-link"><a href="/logout"
+                    class="<%= typeof page !== 'undefined' && page === 'logout' ? 'active' : '' %>"
+                    onclick="if(!confirm('Do you want to log out?')) return false;">Logout</a></li>
+        </ul>
+    </header>
+    <script>
+        const chance = Math.floor(Math.random() * 100);
+        if (chance == 67) document.getElementById('jubnbark').innerText = "Jubekar";
+    </script>

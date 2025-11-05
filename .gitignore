@@ -1,4 +1,3 @@
-node_modules/
-database.db
+/node_modules
 .env
-sessions
+db/database.db
