@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jukebar - Leaderboard</title>
+    <link rel="icon" href="/img/favicon.png">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <%- include('partials/header', { page: 'leaderboard' }) %>
+    <div class="leaderboard-reset-timer">
+        Next leaderboard reset in: <span id="countdown">7d 00h 00m 00s</span> 
+    </div>
+    <div class="main-content">
+        <h1 class="leaderboard-title">Weekly Leaderboard</h1>
+    <div class="leaderboard-container">
+        <div id="leaderboard"></div>
+    </div>
+    <script>
+        async function loadLeaderboard() {
+            try {
+                const res = await fetch('/api/leaderboard');
+                const data = await res.json();
+                
+                if (!data.ok) {
+                    console.error('Failed to load leaderboard');
+                    console.log(data.error);
+                    return;
+                }
+                
+                const container = document.getElementById('leaderboard');
+                container.innerHTML = '';
+                
+                data.leaderboard.forEach((user, index) => {
+                    const rank = index + 1;
+                    let rankClass = '';
+                    if (rank === 1) rankClass = 'first';
+                    else if (rank === 2) rankClass = 'second';
+                    else if (rank === 3) rankClass = 'third';
+                    
+                    const item = document.createElement('div');
+                    item.className = 'leaderboard-item';
+                    item.innerHTML = `
+                        <div class="rank ${rankClass}">#${rank}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.displayName}</div>
+                        </div>
+                        `;
+                        if (user.songsPlayed === 1) {
+                            item.innerHTML += `<div class="play-count">1 play</div>`;
+                        } else {
+                            item.innerHTML += `<div class="play-count">${user.songsPlayed} plays</div>`;
+                        }
+
+                    container.appendChild(item);
+                });
+            } catch (error) {
+                console.error('Error loading leaderboard:', error);
+            }
+        }
+
+        async function resetLeaderboard() {
+            try {
+                await fetch('/api/leaderboard/update');
+                loadLeaderboard();
+                console.log('Leaderboard has been reset.');
+            } catch (error) {
+                console.error('Error resetting leaderboard:', error);
+            }
+        }
+
+        async function getLastReset() {
+            try {
+                const res = await fetch('/api/leaderboard/last-reset');
+                const data = await res.json();
+                if (data && data.lastReset) {
+                    return data.lastReset;
+                }
+            } catch (error) {
+                console.error('Error fetching last reset time:', error);
+            }
+            return Date.now();
+        }
+
+        let lastReset = Date.now();
+
+        function getNextMonday() {
+            const now = new Date();
+            const nextMonday = new Date(now);
+            
+            // Calculate days until next Monday
+            const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+            const daysUntilMonday = currentDay === 0 ? 1 : (8 - currentDay) % 7 || 7;
+            
+            nextMonday.setDate(now.getDate() + daysUntilMonday);
+            nextMonday.setHours(0, 0, 0, 0); // Set to start of day
+            
+            return nextMonday;
+        }
+
+        function updateCountdown() {
+            const now = new Date();
+            const nextMonday = getNextMonday();
+            const msLeft = Math.max(0, nextMonday.getTime() - now.getTime());
+            
+            const days = Math.floor(msLeft / (24 * 60 * 60 * 1000));
+            const hours = Math.floor((msLeft % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+            const minutes = Math.floor((msLeft % (60 * 60 * 1000)) / (60 * 1000));
+            const seconds = Math.floor((msLeft % (60 * 1000)) / 1000);
+            
+            document.getElementById('countdown').textContent =
+                `${days.toString().padStart(2, '0')}d ` +
+                `${hours.toString().padStart(2, '0')}h ` +
+                `${minutes.toString().padStart(2, '0')}m ` +
+                `${seconds.toString().padStart(2, '0')}s`;
+        }
+
+        async function startCountdown() {
+            // Still fetch lastReset for other purposes, but countdown is based on next Monday
+            lastReset = await getLastReset();
+            updateCountdown();
+            setInterval(updateCountdown, 1000);
+        }
+
+        loadLeaderboard();
+        setInterval(loadLeaderboard, 30000);
+        setInterval(resetLeaderboard, 30000);
+        startCountdown();
+    </script>
+</body>
+</html>
