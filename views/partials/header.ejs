@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jukebar</title>
+    <link rel="icon" href="/img/favicon.png">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <header>
+        <div class="logo">
+            <a href="/" id="jubnbark">Jukebar</a>
+        </div>
+        <ul class="nav-links">
+            <% 
+                const permVal = Number(typeof userPermission !== 'undefined' ? userPermission : (user && user.permission));
+                const uid = String(typeof userID !== 'undefined' ? userID : (user && user.id ? user.id : ''));
+                const owner = String(typeof ownerID !== 'undefined' ? ownerID : '');
+            %>
+            <li>
+                <% if (permVal >= 4 || (owner && uid === owner)) { %>
+                    <a href="/teacher" class="<%= typeof page !== 'undefined' && page === 'teacher' ? 'active' : '' %>">Teacher</a>
+                <% } %>
+            </li>
+            <li><a href="/" class="<%= typeof page !== 'undefined' && page === 'player' ? 'active' : '' %>">Player</a>
+            </li>
+            <li><a href="/leaderboard"
+                    class="<%= typeof page !== 'undefined' && page === 'leaderboard' ? 'active' : '' %>">Leaderboard</a>
+            </li>
+            <li class="logout-link"><a href="/logout"
+                    class="<%= typeof page !== 'undefined' && page === 'logout' ? 'active' : '' %>"
+                    onclick="if(!confirm('Do you want to log out?')) return false;">Logout</a></li>
+        </ul>
+    </header>
+    <script>
+        const chance = Math.floor(Math.random() * 100);
+        if (chance == 67) document.getElementById('jubnbark').innerText = "Jubekar";
+    </script>

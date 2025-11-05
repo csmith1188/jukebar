@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jukebar - Teacher Panel</title>
+    <link rel="icon" href="/img/favicon.png">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <%- include('partials/header', { page: 'teacher' }) %>
+        <div class="main-content">
+            <div id="spotifyPlayer">
+                <form id="searchForm">
+                    <div class="search-container">
+                        <input type="text" id="searchInput" placeholder="Search for a song, artist, or album" required>
+                        <button type="submit" id="searchButton">
+                            <img src="/img/search.png" alt="Search" class="search-icon">
+                        </button>
+                    </div>
+                </form>
+                <div id="searchResults"></div>
+            </div>
+        </div>
+        <div>
+
+        </div>
+</body>
+<script>
+    function handleSearchSubmit(event) {
+        event.preventDefault();
+        searchSpotify();
+    }
+
+    async function searchSpotify() {
+        const query = document.getElementById('searchInput').value;
+        if (!query) return;
+
+        try {
+            const response = await fetch('/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            const data = await response.json();
+            const resultsDiv = document.getElementById('searchResults');
+            resultsDiv.innerHTML = '';
+
+            if (data.tracks && data.tracks.items.length > 0) {
+                data.tracks.items.forEach(track => {
+                    const trackDiv = document.createElement('div');
+                    trackDiv.className = 'search-result-item';
+                    trackDiv.innerHTML = `
+                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
+                        <div class="search-result-content">
+                            <div class="search-result-title">${track.name}</div>
+                            <div class="search-result-artist">${track.artist}</div>
+                        </div>
+                        <button class="play-button" data-uri="${track.uri}">Play</button>
+                    `;
+                    resultsDiv.appendChild(trackDiv);
+                });
+            } else {
+                resultsDiv.innerHTML = '<p>No results found.</p>';
+            }
+        } catch (error) {
+            console.error('Error searching Spotify:', error);
+        }
+    }
+</script>
+
+</html>
