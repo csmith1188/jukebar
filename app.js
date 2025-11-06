@@ -38,6 +38,7 @@ const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
 const { router: leaderboardRoutes, checkAndResetLeaderboard } = require('./routes/leaderboard');
+const userRoutes = require('./routes/users');
 // const { setupFormbarSocket } = require('./routes/socket');
 
 // Formbar Socket.IO connection
@@ -124,6 +125,7 @@ app.use('/', authRoutes);
 app.use('/', spotifyRoutes);
 app.use('/', paymentRoutes);
 app.use('/', leaderboardRoutes);
+app.use('/', userRoutes);
 
 server.listen(port, async () => {
     console.log(`Server listening at http://localhost:${port}`);

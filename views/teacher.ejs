@@ -11,8 +11,14 @@
 
 <body>
     <%- include('partials/header', { page: 'teacher' }) %>
-        <!-- <div class="main-content">
+    <div class="main-content">
+        <p class="user-greeting">Teacher Panel - Logged in as: <strong><%= user %></strong></p>
+        <div class="container">
             <div id="spotifyPlayer">
+                <div class="section-header">
+                    <h2>Music Control</h2>
+                    <p class="section-subtitle">Search and manage the music queue</p>
+                </div>
                 <form id="searchForm">
                     <div class="search-container">
                         <input type="text" id="searchInput" placeholder="Search for a song, artist, or album" required>
@@ -23,12 +29,174 @@
                 </form>
                 <div id="searchResults"></div>
             </div>
-        </div> -->
-        <div id="comingSoon">
-            COMING SOON!
+            <div id="userManagement">
+                <div class="section-header">
+                    <h2>User Management</h2>
+                    <p class="section-subtitle">Manage user access and permissions</p>
+                </div>
+                <div class="table-container">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
+    </div>
 </body>
 <script>
+    async function fetchUsers() {
+        try {
+            const res = await fetch('/api/users');
+            if (!res.ok) throw new Error('Failed to fetch users');
+            const users = await res.json();
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = '';
+
+            users.forEach(user => {
+                const tr = document.createElement('tr');
+
+                const nameTd = document.createElement('td');
+                nameTd.textContent = user.displayName || user.username || '';
+
+                const statusTd = document.createElement('td');
+                statusTd.textContent = user.isBanned ? 'Banned' : 'Active';
+
+                const actionsTd = document.createElement('td');
+                const btn = document.createElement('button');
+                btn.textContent = 'View Transactions';
+                btn.className = 'view-transactions-button';
+                btn.addEventListener('click', async () => {
+                    try {
+                        await showUserTransactions(user.displayName);
+                    } catch (err) {
+                        console.error(err);
+                        alert('Failed to load transactions');
+                    }
+                });
+
+                actionsTd.appendChild(btn);
+                tr.appendChild(nameTd);
+                tr.appendChild(statusTd);
+                tr.appendChild(actionsTd);
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error('Error loading users:', err);
+            document.getElementById('userTableBody').innerHTML = '<tr><td colspan="3">Unable to load users.</td></tr>';
+        }
+    }
+
+    async function showUserTransactions(username, page = 1) {
+        try {
+            const res = await fetch('/api/users/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, page, limit: 10 })
+            });
+            
+            if (!res.ok) throw new Error('Failed to fetch transactions');
+            const data = await res.json();
+            
+            // Create modal to show transactions
+            const modal = createTransactionModal(username, data.transactions, data.pagination);
+            document.body.appendChild(modal);
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+            alert('Failed to load user transactions');
+        }
+    }
+
+    function createTransactionModal(username, transactions, pagination) {
+        const modal = document.createElement('div');
+        modal.className = 'transaction-modal';
+        modal.innerHTML = `
+            <div class="transaction-modal-content">
+                <div class="transaction-modal-header">
+                    <h3>Transactions for ${username}</h3>
+                    <div class="pagination-info">
+                        <span>Page ${pagination.currentPage} of ${pagination.totalPages} (${pagination.totalCount} total)</span>
+                    </div>
+                    <button class="close-modal" onclick="this.closest('.transaction-modal').remove()">×</button>
+                </div>
+                <div class="transaction-modal-body">
+                    ${transactions.length > 0 ? `
+                        <table class="transaction-table">
+                            <thead>
+                                <tr>
+                                    <th>Track</th>
+                                    <th>Artist</th>
+                                    <th>Action</th>
+                                    <th>Cost</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${transactions.map(t => `
+                                    <tr>
+                                        <td>${t.track_name || 'Unknown'}</td>
+                                        <td>${t.artist_name || 'Unknown'}</td>
+                                        <td><span class="action-badge ${t.action.toLowerCase()}">${t.action}</span></td>
+                                        <td><span class="cost-badge">${t.cost} pogs</span></td>
+                                        <td>${t.formatted_time}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    ` : '<p class="no-transactions">No transactions found for this user.</p>'}
+                </div>
+                <div class="transaction-modal-footer">
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" id="prevBtn" ${!pagination.hasPrevPage ? 'disabled' : ''}>
+                            ← Previous
+                        </button>
+                        <span class="page-indicator">
+                            ${pagination.currentPage} / ${pagination.totalPages}
+                        </span>
+                        <button class="pagination-btn" id="nextBtn" ${!pagination.hasNextPage ? 'disabled' : ''}>
+                            Next →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add event listeners for pagination buttons
+        const prevBtn = modal.querySelector('#prevBtn');
+        const nextBtn = modal.querySelector('#nextBtn');
+        
+        if (prevBtn && !prevBtn.disabled) {
+            prevBtn.addEventListener('click', async () => {
+                modal.remove();
+                await showUserTransactions(username, pagination.currentPage - 1);
+            });
+        }
+        
+        if (nextBtn && !nextBtn.disabled) {
+            nextBtn.addEventListener('click', async () => {
+                modal.remove();
+                await showUserTransactions(username, pagination.currentPage + 1);
+            });
+        }
+        
+        // Close modal when clicking outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+        
+        return modal;
+    }
+
+    document.addEventListener('DOMContentLoaded', fetchUsers);
     function handleSearchSubmit(event) {
         event.preventDefault();
         searchSpotify();
@@ -59,7 +227,8 @@
                             <div class="search-result-artist">${track.artist}</div>
                         </div>
                         <button class="play-button" data-uri="${track.uri}">Play</button>
-                    `;
+                        <button class="ban-button" data-uri="${track.uri}">Ban</button>
+                        `;
                     resultsDiv.appendChild(trackDiv);
                 });
             } else {

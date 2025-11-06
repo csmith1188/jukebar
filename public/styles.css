@@ -861,3 +861,481 @@ p {
         margin: 5px 0;
     }
 }
+
+/* Teacher Panel Styles */
+#userManagement {
+    background: #181818;
+    border-radius: 20px;
+    flex: 1;
+    padding: 30px 40px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    order: 2;
+    height: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.section-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--inbetween1);
+    flex-shrink: 0;
+}
+
+.section-header h2 {
+    color: var(--text);
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.section-subtitle {
+    color: var(--inbetween3);
+    font-size: 14px;
+    font-weight: 400;
+    text-align: center;
+}
+
+.table-container {
+    background: var(--inbetween1);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* Custom scrollbar for table container */
+.table-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: var(--background);
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: var(--inbetween2);
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: var(--inbetween3);
+}
+
+.user-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent;
+}
+
+.user-table thead {
+    background: var(--background);
+    border-radius: 8px;
+}
+
+.user-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--inbetween2);
+}
+
+.user-table th:first-child {
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+}
+
+.user-table th:last-child {
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.user-table td {
+    padding: 16px 20px;
+    color: var(--text);
+    font-size: 15px;
+    border-bottom: 1px solid var(--inbetween2);
+}
+
+.user-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.user-table tbody tr:hover {
+    background: rgba(29, 185, 84, 0.1);
+}
+
+.user-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Status indicators */
+.user-table td:nth-child(2) {
+    font-weight: 500;
+}
+
+.user-table tbody tr td:nth-child(2) {
+    position: relative;
+}
+
+.user-table tbody tr td:nth-child(2)::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background: var(--accent);
+}
+
+.user-table tbody tr:has(button.unban-button) td:nth-child(2)::before {
+    background: #ff4444;
+}
+
+/* Action buttons */
+.ban-button, .unban-button, .view-transactions-button {
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    font-size: 13px !important;
+    border: none !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+.ban-button {
+    background: #ff4444 !important;
+    color: white !important;
+}
+
+.ban-button:hover {
+    background: #cc3333 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3) !important;
+}
+
+.unban-button {
+    background: var(--accent) !important;
+    color: white !important;
+}
+
+.unban-button:hover {
+    background: var(--accent-dark) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3) !important;
+}
+
+.view-transactions-button {
+    background: #4285f4 !important;
+    color: white !important;
+}
+
+.view-transactions-button:hover {
+    background: #3367d6 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3) !important;
+}
+
+/* Empty state */
+.user-table tbody tr td[colspan="3"] {
+    text-align: center;
+    color: var(--inbetween3);
+    font-style: italic;
+    padding: 40px 20px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    #userManagement {
+        padding: 20px;
+    }
+    
+    .table-container {
+        padding: 16px;
+        border-radius: 8px;
+    }
+    
+    .user-table th,
+    .user-table td {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+    
+    .section-header h2 {
+        font-size: 20px;
+    }
+    
+    .section-subtitle {
+        font-size: 12px;
+    }
+}
+
+/* Transaction Modal Styles */
+.transaction-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease;
+}
+
+.transaction-modal-content {
+    background: var(--inbetween1);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    animation: slideIn 0.3s ease;
+}
+
+.transaction-modal-header {
+    background: var(--background);
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--inbetween2);
+}
+
+.pagination-info {
+    color: var(--inbetween3);
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.transaction-modal-header h3 {
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.close-modal {
+    background: none !important;
+    border: none !important;
+    color: var(--inbetween3) !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    transition: all 0.2s ease !important;
+}
+
+.close-modal:hover {
+    background: var(--inbetween2) !important;
+    color: var(--text) !important;
+}
+
+.transaction-modal-body {
+    padding: 24px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.transaction-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.transaction-table th {
+    background: var(--background);
+    color: var(--text);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--inbetween2);
+}
+
+.transaction-table td {
+    padding: 12px 16px;
+    color: var(--text);
+    border-bottom: 1px solid var(--inbetween2);
+    font-size: 14px;
+}
+
+.transaction-table tbody tr:hover {
+    background: rgba(29, 185, 84, 0.1);
+}
+
+.action-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.action-badge.play {
+    background: var(--accent);
+    color: white;
+}
+
+.action-badge.skip {
+    background: #ff9800;
+    color: white;
+}
+
+.action-badge.queue {
+    background: #2196f3;
+    color: white;
+}
+
+.action-badge.ban {
+    background: #f44336;
+    color: white;
+}
+
+.cost-badge {
+    background: var(--inbetween2);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.no-transactions {
+    text-align: center;
+    color: var(--inbetween3);
+    font-style: italic;
+    padding: 40px 20px;
+    margin: 0;
+}
+
+/* Transaction Modal Footer */
+.transaction-modal-footer {
+    background: var(--background);
+    padding: 16px 24px;
+    border-top: 2px solid var(--inbetween2);
+    display: flex;
+    justify-content: center;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.pagination-btn {
+    background: var(--accent) !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: var(--accent-dark) !important;
+    transform: translateY(-1px) !important;
+}
+
+.pagination-btn:disabled {
+    background: var(--inbetween2) !important;
+    color: var(--inbetween3) !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.page-indicator {
+    color: var(--text);
+    font-weight: 500;
+    font-size: 14px;
+    min-width: 60px;
+    text-align: center;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { 
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Mobile responsive for modal */
+@media (max-width: 768px) {
+    .transaction-modal-content {
+        width: 95%;
+        max-height: 95vh;
+    }
+    
+    .transaction-modal-header {
+        padding: 16px 20px;
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+    }
+    
+    .pagination-info {
+        font-size: 12px;
+    }
+    
+    .transaction-modal-body {
+        padding: 20px;
+    }
+    
+    .transaction-modal-footer {
+        padding: 12px 20px;
+    }
+    
+    .pagination-controls {
+        gap: 12px;
+    }
+    
+    .pagination-btn {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+    }
+    
+    .page-indicator {
+        font-size: 12px;
+        min-width: 50px;
+    }
+    
+    .transaction-table th,
+    .transaction-table td {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+}
