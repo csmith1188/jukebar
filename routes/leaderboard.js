@@ -21,7 +21,7 @@ async function checkAndResetLeaderboard(app) {
         if (isMonday && needsReset) {
             const resetTime = Date.now();
             app.set('leaderboardLastReset', resetTime);
-            console.log('Auto-resetting leaderboard for new week...');
+            //console.log('Auto-resetting leaderboard for new week...');
 
             const db = require('../utils/database');
             await new Promise((resolve, reject) => {
@@ -87,7 +87,7 @@ router.get('/api/leaderboard/update', async (req, res) => {
         if (isMonday && needsReset) {
             const resetTime = Date.now();
             req.app.set('leaderboardLastReset', resetTime);
-            console.log('Resetting leaderboard for new week...');
+            //console.log('Resetting leaderboard for new week...');
 
             const db = require('../utils/database');
             await new Promise((resolve, reject) => {
@@ -121,7 +121,7 @@ router.post('/api/leaderboard/force-reset', async (req, res) => {
     try {
         const resetTime = Date.now();
         req.app.set('leaderboardLastReset', resetTime);
-        console.log('🔄 Force resetting leaderboard...');
+        //console.log('🔄 Force resetting leaderboard...');
 
         const db = require('../utils/database');
         await new Promise((resolve, reject) => {
@@ -134,7 +134,7 @@ router.post('/api/leaderboard/force-reset', async (req, res) => {
         });
 
         res.json({ ok: true, message: "Leaderboard has been force reset." });
-        console.log('✅ Leaderboard force reset completed!');
+        //console.log('✅ Leaderboard force reset completed!');
     } catch (error) {
         res.status(500).json({ ok: false, message: error.message });
     }
