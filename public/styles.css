@@ -364,14 +364,7 @@ h1 {
     gap: 8px;
 }
 
-#currentlyPlaying .queue-item {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-}
 
-#currentlyPlaying .queue-item:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
 
 .current-item {
     display: flex;
@@ -545,6 +538,15 @@ p {
     border-radius: 8px;
     vertical-align: middle;
     margin-right: 15px;
+    flex-shrink: 0;
+}
+
+.album-cover-small {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    margin-right: 12px;
+    object-fit: cover;
     flex-shrink: 0;
 }
 
@@ -909,6 +911,63 @@ p {
     min-height: 0;
 }
 
+/* User Search Styles */
+.user-search-container {
+    margin-bottom: 20px;
+    flex-shrink: 0;
+}
+
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--inbetween1);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.user-search-input {
+    flex: 1;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    font-family: 'Outfit', sans-serif;
+    outline: none;
+}
+
+.user-search-input::placeholder {
+    color: var(--inbetween3);
+    font-style: italic;
+}
+
+.user-search-input:focus {
+    background: rgba(29, 185, 84, 0.1);
+}
+
+.user-search-button {
+    background: var(--accent) !important;
+    border: none !important;
+    padding: 12px 16px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.user-search-button:hover {
+    background: var(--accent-dark) !important;
+}
+
+.user-search-button .search-icon {
+    width: 16px;
+    height: 16px;
+    filter: brightness(0) invert(1);
+}
+
 /* Custom scrollbar for table container */
 .table-container::-webkit-scrollbar {
     width: 8px;
@@ -988,20 +1047,6 @@ p {
     position: relative;
 }
 
-.user-table tbody tr td:nth-child(2)::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 8px;
-    background: var(--accent);
-}
-
-.user-table tbody tr:has(button.unban-button) td:nth-child(2)::before {
-    background: #ff4444;
-}
-
 /* Action buttons */
 .ban-button, .unban-button, .view-transactions-button {
     padding: 8px 16px !important;
@@ -1062,6 +1107,24 @@ p {
         padding: 20px;
     }
     
+    .user-search-container {
+        margin-bottom: 16px;
+    }
+    
+    .user-search-input {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+    
+    .user-search-button {
+        padding: 10px 14px !important;
+    }
+    
+    .user-search-button .search-icon {
+        width: 14px;
+        height: 14px;
+    }
+    
     .table-container {
         padding: 16px;
         border-radius: 8px;
@@ -1115,6 +1178,15 @@ p {
     justify-content: space-between;
     align-items: center;
     border-bottom: 2px solid var(--inbetween2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 }
 
 .pagination-info {
@@ -1152,14 +1224,26 @@ p {
 }
 
 .transaction-modal-body {
-    padding: 24px;
+    padding: 0;
     max-height: 60vh;
     overflow-y: auto;
+    position: relative;
+}
+
+.table-wrapper {
+    padding: 24px;
 }
 
 .transaction-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.transaction-table thead.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
 }
 
 .transaction-table th {
@@ -1174,11 +1258,29 @@ p {
     border-bottom: 2px solid var(--inbetween2);
 }
 
+/* Set fixed column widths */
+.transaction-table th:nth-child(1) { width: 28%; } /* Track */
+.transaction-table th:nth-child(2) { width: 23%; } /* Artist */
+.transaction-table th:nth-child(3) { width: 15%; } /* Action */
+.transaction-table th:nth-child(4) { width: 20%; } /* Cost - increased for "Digipogs" */
+.transaction-table th:nth-child(5) { width: 30%; } /* Time */
+
 .transaction-table td {
     padding: 12px 16px;
     color: var(--text);
     border-bottom: 1px solid var(--inbetween2);
     font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Specific styling for cost column */
+.transaction-table td:nth-child(4) {
+    text-align: center;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: unset;
 }
 
 .transaction-table tbody tr:hover {
@@ -1216,10 +1318,14 @@ p {
 .cost-badge {
     background: var(--inbetween2);
     color: var(--text);
-    padding: 4px 8px;
+    padding: 4px 10px;
     border-radius: 4px;
     font-size: 12px;
     font-weight: 500;
+    white-space: nowrap;
+    display: inline-block;
+    min-width: 85px;
+    text-align: center;
 }
 
 .no-transactions {
@@ -1307,12 +1413,21 @@ p {
         text-align: center;
     }
     
+    .header-right {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
     .pagination-info {
         font-size: 12px;
     }
     
     .transaction-modal-body {
-        padding: 20px;
+        padding: 0;
+    }
+    
+    .table-wrapper {
+        padding: 16px 20px;
     }
     
     .transaction-modal-footer {
@@ -1333,9 +1448,86 @@ p {
         min-width: 50px;
     }
     
+    .transaction-table {
+        table-layout: auto;
+    }
+    
     .transaction-table th,
     .transaction-table td {
         padding: 8px 12px;
         font-size: 12px;
+    }
+    
+    /* Reset column widths for mobile */
+    .transaction-table th:nth-child(1) { width: auto; }
+    .transaction-table th:nth-child(2) { width: auto; }
+    .transaction-table th:nth-child(3) { width: auto; }
+    .transaction-table th:nth-child(4) { width: auto; }
+    .transaction-table th:nth-child(5) { width: auto; }
+    
+    .cost-badge {
+        min-width: 70px;
+        font-size: 11px;
+        padding: 3px 8px;
+    }
+}
+
+/* Current Track Display */
+.current-track-display {
+    background: var(--inbetween1);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid var(--inbetween2);
+}
+
+.current-track-info h3 {
+    color: var(--accent);
+    margin-bottom: 15px;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.track-details {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.current-track-image {
+    width: 60px;
+    height: 60px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--inbetween2);
+}
+
+.track-text {
+    flex-grow: 1;
+}
+
+.current-track-name {
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.current-track-artist {
+    color: var(--inbetween3);
+    font-size: 14px;
+}
+
+
+
+/* Notification Animation */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
     }
 }

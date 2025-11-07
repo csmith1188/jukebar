@@ -3,9 +3,47 @@ const router = express.Router();
 const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
 const db = require('../utils/database');
 const { logTransaction } = require('./logging');
+const queueManager = require('../utils/queueManager');
 
-// Store currently playing track info
+// Store currently playing track info (legacy - use queueManager instead)
 let currentTrack = null;
+
+// Helper function to handle Spotify API errors consistently
+function handleSpotifyError(error, res, action = 'operation') {
+    console.error(`Spotify ${action} error:`, error);
+    
+    // Handle network connectivity errors
+    if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        return res.status(503).json({ 
+            ok: false, 
+            error: 'Unable to connect to Spotify. Please check your internet connection and try again.' 
+        });
+    }
+    
+    // Handle authentication errors
+    if (error.statusCode === 401) {
+        return res.status(401).json({ ok: false, error: 'Spotify authentication failed' });
+    }
+    
+    // Handle rate limiting
+    if (error.statusCode === 429) {
+        return res.status(429).json({ 
+            ok: false, 
+            error: 'Too many requests to Spotify. Please wait a moment and try again.' 
+        });
+    }
+    
+    // Handle 404 errors (no active device)
+    if (error.statusCode === 404) {
+        return res.status(400).json({ 
+            ok: false, 
+            error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' 
+        });
+    }
+    
+    // Generic error
+    return res.status(500).json({ ok: false, error: `Failed to ${action}` });
+}
 
 
 router.post('/search', async (req, res) => {
@@ -39,11 +77,7 @@ router.post('/search', async (req, res) => {
             tracks: { items: simplified }
         });
     } catch (err) {
-        console.error('Search error:', err);
-        if (err.statusCode === 401) {
-            return res.status(401).json({ ok: false, error: 'Spotify auth failed' });
-        }
-        res.status(500).json({ ok: false, error: 'Internal search error' });
+        return handleSpotifyError(err, res, 'search');
     }
 });
 
@@ -114,6 +148,17 @@ router.post('/addToQueue', async (req, res) => {
 
             await spotifyApi.addToQueue(uri);
 
+            // Also add to queueManager for WebSocket updates
+            const queueTrack = {
+                uri: track.uri,
+                name: track.name,
+                artist: track.artists.map(a => a.name).join(', '),
+                addedBy: req.session.user,
+                addedAt: Date.now(),
+                image: track.album.images[0]?.url
+            };
+            queueManager.addToQueue(queueTrack);
+
             db.run(
                 "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
                 (err) => {
@@ -158,6 +203,17 @@ router.post('/addToQueue', async (req, res) => {
         };
 
         await spotifyApi.addToQueue(uri);
+
+        // Also add to queueManager for WebSocket updates
+        const queueTrack = {
+            uri: track.uri,
+            name: track.name,
+            artist: track.artists.map(a => a.name).join(', '),
+            addedBy: req.session.user,
+            addedAt: Date.now(),
+            image: track.album.images[0]?.url
+        };
+        queueManager.addToQueue(queueTrack);
 
         db.run(
             "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
@@ -252,11 +308,18 @@ router.post('/skip', async (req, res) => {
         try {
             await ensureSpotifyAccessToken();
             await spotifyApi.skipToNext();
+            
+            // Update queueManager and broadcast to clients
+            const nextTrack = queueManager.skipTrack();
             console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
-            res.json({ ok: true });
+            res.json({ ok: true, currentTrack: nextTrack });
             return;
         } catch (error) {
             console.error('Skip error:', error);
+            // Handle 404 errors when no active playback device
+            if (error.statusCode === 404) {
+                return res.status(400).json({ ok: false, error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' });
+            }
             return res.status(500).json({ ok: false, error: 'Failed to skip', details: error.message });
         }
     }
@@ -270,6 +333,10 @@ router.post('/skip', async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
         await spotifyApi.skipToNext();
+        
+        // Update queueManager and broadcast to clients
+        const nextTrack = queueManager.skipTrack();
+        
         if (currentTrack) {
             await logTransaction({
                 userID: req.session.token.id,
@@ -284,13 +351,88 @@ router.post('/skip', async (req, res) => {
         // Clear payment flag after successful skip
         req.session.hasPaid = false;
         req.session.save(() => {
-            res.json({ ok: true, message: 'Track skipped and logged' });
+            res.json({ ok: true, message: 'Track skipped and logged', currentTrack: nextTrack });
         });
 
 
     } catch (error) {
         console.error('Skip error:', error);
+        // Handle 404 errors when no active playback device
+        if (error.statusCode === 404) {
+            return res.status(400).json({ ok: false, error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' });
+        }
         res.status(500).json({ ok: false, error: 'Failed to skip', details: error.message });
+    }
+});
+
+// Get current queue state
+router.get('/queue/state', (req, res) => {
+    try {
+        const state = queueManager.getCurrentState();
+        res.json({ ok: true, ...state });
+    } catch (error) {
+        console.error('Queue state error:', error);
+        res.status(500).json({ ok: false, error: 'Failed to get queue state' });
+    }
+});
+
+// Add track to queue (instead of playing immediately)
+router.post('/queue/add', async (req, res) => {
+    try {
+        const { uri, trackName, artist } = req.body;
+        
+        if (!uri) {
+            return res.status(400).json({ ok: false, error: 'Missing track URI' });
+        }
+
+        const track = {
+            uri,
+            name: trackName,
+            artist,
+            addedBy: req.session.user,
+            addedAt: Date.now()
+        };
+
+        queueManager.addToQueue(track);
+        
+        // Log the transaction
+        if (req.session.token?.id) {
+            await logTransaction(req.session.token.id, req.session.user, 'QUEUE', uri, trackName, artist, 50);
+        }
+
+        res.json({ ok: true, message: 'Track added to queue', queue: queueManager.queue });
+    } catch (error) {
+        console.error('Queue add error:', error);
+        res.status(500).json({ ok: false, error: 'Failed to add to queue' });
+    }
+});
+
+// Skip current track (for teachers/admins)
+router.post('/queue/skip', async (req, res) => {
+    try {
+        // Check permissions
+        if (req.session.permission < 4 && req.session.token?.id !== Number(process.env.OWNER_ID)) {
+            return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
+        }
+
+        const nextTrack = queueManager.skipTrack();
+        
+        if (nextTrack) {
+            // Actually skip on Spotify
+            await ensureSpotifyAccessToken();
+            await spotifyApi.skipToNext();
+            
+            res.json({ ok: true, message: 'Track skipped', currentTrack: nextTrack });
+        } else {
+            res.json({ ok: true, message: 'No tracks in queue to skip to' });
+        }
+    } catch (error) {
+        console.error('Queue skip error:', error);
+        // Handle 404 errors when no active playback device
+        if (error.statusCode === 404) {
+            return res.status(400).json({ ok: false, error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' });
+        }
+        res.status(500).json({ ok: false, error: 'Failed to skip track' });
     }
 });
 

@@ -403,11 +403,147 @@
                     if (updates.pendingAction !== undefined) pendingAction = updates.pendingAction;
                 };
 
+                // Initialize WebSocket-based queue sync
+                initializeQueueSync();
+                
+                // Fallback: Still call original functions as backup (less frequently)
                 getQueue();
                 currentlyPlaying();
-                setInterval(getQueue, 7000);
-                setInterval(currentlyPlaying, 7000);
+                setInterval(getQueue, 60000); // Every minute as fallback
+                setInterval(currentlyPlaying, 60000);
             })();
+
+            // WebSocket-based queue synchronization
+            function initializeQueueSync() {
+                const socket = io();
+                
+                socket.on('connect', () => {
+                    console.log('Connected to queue sync');
+                    socket.emit('requestQueueUpdate');
+                });
+
+                socket.on('disconnect', () => {
+                    console.log('Disconnected from queue sync');
+                });
+
+                // Handle initial state
+                socket.on('initialState', (data) => {
+                    console.log('🔵 initialState event received:', data);
+                    updateQueueDisplay(data.data);
+                    updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
+                });
+
+                // Handle queue updates (when queue changes)
+                socket.on('queueUpdate', (data) => {
+                    console.log('🟢 queueUpdate event received:', data);
+                    updateQueueDisplay(data);
+                    // Only update currently playing if we have valid current track data
+                    if (data.currentTrack) {
+                        updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
+                    }
+                });
+
+                // Handle playback state updates (playing/paused status)
+                socket.on('playbackState', (data) => {
+                    console.log('🟠 playbackState event received:', data);
+                    updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
+                });
+
+                // Handle current track updates (from periodic sync)
+                socket.on('currentTrack', (data) => {
+                    console.log('🟡 currentTrack event received:', data);
+                    updateCurrentlyPlaying(data, true);
+                });
+
+                // Handle notifications only
+                socket.on('queueAdd', (data) => {
+                    console.log('🟣 queueAdd event received:', data);
+                    showNotification(`"${data.track.name}" added to queue`, 'success');
+                });
+
+                socket.on('skip', (data) => {
+                    console.log('🔴 skip event received:', data);
+                    showNotification('Track skipped', 'info');
+                });
+            }
+
+            // Update queue display with WebSocket data
+            function updateQueueDisplay(data) {
+                const queueDiv = document.getElementById('queue');
+                if (!queueDiv) return;
+
+                // Handle different data structures
+                let queue = data.queue || data.data?.queue || [];
+                
+                console.log('========== updateQueueDisplay DEBUG ==========');
+                console.log('Full data object:', JSON.stringify(data, null, 2));
+                console.log('data.queue:', data.queue);
+                console.log('data.data?.queue:', data.data?.queue);
+                console.log('Extracted queue:', queue);
+                console.log('Queue length:', queue ? queue.length : 'undefined');
+                console.log('Stack trace:', new Error().stack);
+                console.log('===============================================');
+                
+                if (queue && queue.length > 0) {
+                    console.log('✅ Displaying', queue.length, 'tracks');
+                    queueDiv.innerHTML = queue.map((track, index) => `
+                        <div class="queue-item">
+                            <img src="${track.image || '/img/default-album.png'}" alt="Album Cover" class="album-cover" />
+                            <div class="queue-item-content">
+                                <div class="queue-item-title">${track.name}</div>
+                                <div class="queue-item-artist">${track.artist}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    console.log('❌ QUEUE CLEARED - No tracks in queue, showing empty message');
+                    queueDiv.innerHTML = '<p class="no-queue">No tracks in queue</p>';
+                }
+            }
+
+            // Update currently playing with WebSocket data
+            function updateCurrentlyPlaying(track, isPlaying) {
+                const currentDiv = document.getElementById('currentlyPlaying');
+                if (!currentDiv) return;
+
+                if (track) {
+                    currentDiv.innerHTML = `
+                        <div class="current-item">
+                            ${track.image ? `<img src="${track.image}" alt="Album Cover" class="album-cover">` : ''}
+                            <div class="current-item-content">
+                                <div class="current-item-title">${track.name}</div>
+                                <div class="current-item-artist">${track.artist}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    currentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
+                }
+            }
+
+            function showNotification(message, type = 'info') {
+                // Simple notification system
+                const notification = document.createElement('div');
+                notification.className = `notification notification-${type}`;
+                notification.textContent = message;
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 10px 20px;
+                    background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+                    color: white;
+                    border-radius: 4px;
+                    z-index: 1000;
+                    animation: slideIn 0.3s ease-out;
+                `;
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+            }
         </script>
 </body>
 

@@ -7,12 +7,13 @@
     <title>Jukebar - Teacher Panel</title>
     <link rel="icon" href="/img/favicon.png">
     <link rel="stylesheet" href="/styles.css">
+    <script src="/socket.io/socket.io.js"></script>
 </head>
 
 <body>
     <%- include('partials/header', { page: 'teacher' }) %>
     <div class="main-content">
-        <p class="user-greeting">Teacher Panel - Logged in as: <strong><%= user %></strong></p>
+        <p class="user-greeting">Logged in as: <strong><%= user %></strong></p>
         <div class="container">
             <div id="spotifyPlayer">
                 <div class="section-header">
@@ -34,12 +35,19 @@
                     <h2>User Management</h2>
                     <p class="section-subtitle">Manage user access and permissions</p>
                 </div>
+                <div class="user-search-container">
+                    <div class="search-wrapper">
+                        <input type="text" id="userSearchInput" placeholder="Search users..." class="user-search-input">
+                        <button type="button" class="user-search-button">
+                            <img src="/img/search.png" alt="Search" class="search-icon">
+                        </button>
+                    </div>
+                </div>
                 <div class="table-container">
                     <table class="user-table">
                         <thead>
                             <tr>
                                 <th>Username</th>
-                                <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -66,9 +74,6 @@
                 const nameTd = document.createElement('td');
                 nameTd.textContent = user.displayName || user.username || '';
 
-                const statusTd = document.createElement('td');
-                statusTd.textContent = user.isBanned ? 'Banned' : 'Active';
-
                 const actionsTd = document.createElement('td');
                 const btn = document.createElement('button');
                 btn.textContent = 'View Transactions';
@@ -84,7 +89,6 @@
 
                 actionsTd.appendChild(btn);
                 tr.appendChild(nameTd);
-                tr.appendChild(statusTd);
                 tr.appendChild(actionsTd);
                 tbody.appendChild(tr);
             });
@@ -96,7 +100,7 @@
 
     async function showUserTransactions(username, page = 1) {
         try {
-            const res = await fetch('/api/users/transactions', {
+            const res = await fetch('/api/users/transactions/modal', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, page, limit: 10 })
@@ -105,8 +109,14 @@
             if (!res.ok) throw new Error('Failed to fetch transactions');
             const data = await res.json();
             
-            // Create modal to show transactions
-            const modal = createTransactionModal(username, data.transactions, data.pagination);
+            // Create modal with the rendered HTML from partial
+            const modal = document.createElement('div');
+            modal.className = 'transaction-modal';
+            modal.innerHTML = data.html;
+            
+            // Add pagination event listeners
+            addTransactionModalEventListeners(modal, username);
+            
             document.body.appendChild(modal);
         } catch (error) {
             console.error('Error loading transactions:', error);
@@ -114,75 +124,26 @@
         }
     }
 
-    function createTransactionModal(username, transactions, pagination) {
-        const modal = document.createElement('div');
-        modal.className = 'transaction-modal';
-        modal.innerHTML = `
-            <div class="transaction-modal-content">
-                <div class="transaction-modal-header">
-                    <h3>Transactions for ${username}</h3>
-                    <div class="pagination-info">
-                        <span>Page ${pagination.currentPage} of ${pagination.totalPages} (${pagination.totalCount} total)</span>
-                    </div>
-                    <button class="close-modal" onclick="this.closest('.transaction-modal').remove()">×</button>
-                </div>
-                <div class="transaction-modal-body">
-                    ${transactions.length > 0 ? `
-                        <table class="transaction-table">
-                            <thead>
-                                <tr>
-                                    <th>Track</th>
-                                    <th>Artist</th>
-                                    <th>Action</th>
-                                    <th>Cost</th>
-                                    <th>Time</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${transactions.map(t => `
-                                    <tr>
-                                        <td>${t.track_name || 'Unknown'}</td>
-                                        <td>${t.artist_name || 'Unknown'}</td>
-                                        <td><span class="action-badge ${t.action.toLowerCase()}">${t.action}</span></td>
-                                        <td><span class="cost-badge">${t.cost} pogs</span></td>
-                                        <td>${t.formatted_time}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    ` : '<p class="no-transactions">No transactions found for this user.</p>'}
-                </div>
-                <div class="transaction-modal-footer">
-                    <div class="pagination-controls">
-                        <button class="pagination-btn" id="prevBtn" ${!pagination.hasPrevPage ? 'disabled' : ''}>
-                            ← Previous
-                        </button>
-                        <span class="page-indicator">
-                            ${pagination.currentPage} / ${pagination.totalPages}
-                        </span>
-                        <button class="pagination-btn" id="nextBtn" ${!pagination.hasNextPage ? 'disabled' : ''}>
-                            Next →
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Add event listeners for pagination buttons
+    function addTransactionModalEventListeners(modal, username) {
         const prevBtn = modal.querySelector('#prevBtn');
         const nextBtn = modal.querySelector('#nextBtn');
+        
+        // Get current page from the pagination info in the modal
+        const paginationInfo = modal.querySelector('.pagination-info span').textContent;
+        const currentPageMatch = paginationInfo.match(/Page (\d+) of/);
+        const currentPage = currentPageMatch ? parseInt(currentPageMatch[1]) : 1;
         
         if (prevBtn && !prevBtn.disabled) {
             prevBtn.addEventListener('click', async () => {
                 modal.remove();
-                await showUserTransactions(username, pagination.currentPage - 1);
+                await showUserTransactions(username, currentPage - 1);
             });
         }
         
         if (nextBtn && !nextBtn.disabled) {
             nextBtn.addEventListener('click', async () => {
                 modal.remove();
-                await showUserTransactions(username, pagination.currentPage + 1);
+                await showUserTransactions(username, currentPage + 1);
             });
         }
         
@@ -192,8 +153,6 @@
                 modal.remove();
             }
         });
-        
-        return modal;
     }
 
     document.addEventListener('DOMContentLoaded', fetchUsers);
@@ -237,6 +196,98 @@
         } catch (error) {
             console.error('Error searching Spotify:', error);
         }
+    }
+
+    // WebSocket integration for real-time updates
+    const socket = io();
+    
+    socket.on('connect', () => {
+        console.log('Connected to server for queue updates');
+        socket.emit('requestQueueUpdate');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+    });
+
+    // Handle queue updates
+    socket.on('queueUpdate', (data) => {
+        updateQueueDisplay(data);
+    });
+
+    socket.on('skip', (data) => {
+        updateQueueDisplay(data);
+        showNotification('Track skipped', 'info');
+    });
+
+    socket.on('currentTrack', (data) => {
+        updateCurrentTrackDisplay(data);
+    });
+
+    function updateQueueDisplay(data) {
+        // Update the current playing track if displayed
+        if (data.currentTrack) {
+            updateCurrentTrackDisplay(data.currentTrack);
+        }
+    }
+
+    function updateCurrentTrackDisplay(track) {
+        // Add or update a current track display section
+        const playerDiv = document.getElementById('spotifyPlayer');
+        let currentTrackDiv = document.getElementById('currentTrack');
+        
+        if (!currentTrackDiv) {
+            currentTrackDiv = document.createElement('div');
+            currentTrackDiv.id = 'currentTrack';
+            currentTrackDiv.className = 'current-track-display';
+            playerDiv.insertBefore(currentTrackDiv, playerDiv.firstChild);
+        }
+
+        if (track) {
+            currentTrackDiv.innerHTML = `
+                <div class="current-track-info">
+                    <h3>Currently Playing</h3>
+                    <div class="track-details">
+                        <img src="${track.image || '/img/default-album.png'}" alt="${track.name}" class="current-track-image" />
+                        <div class="track-text">
+                            <div class="current-track-name">${track.name}</div>
+                            <div class="current-track-artist">${track.artist}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            currentTrackDiv.innerHTML = `
+                <div class="current-track-info">
+                    <h3>Currently Playing</h3>
+                    <p>No track playing</p>
+                </div>
+            `;
+        }
+    }
+
+    function showNotification(message, type = 'info') {
+        // Simple notification system
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+            color: white;
+            border-radius: 4px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
     }
 </script>
 
