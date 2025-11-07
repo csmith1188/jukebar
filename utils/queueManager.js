@@ -18,9 +18,9 @@ class QueueManager {
 
     // Add track to queue
     addToQueue(track) {
-        console.log('🔵 addToQueue called with track:', track);
+        // console.log('🔵 addToQueue called with track:', track);
         this.queue.push(track);
-        console.log('🔵 Queue after adding:', this.queue.length, 'tracks');
+        // console.log('🔵 Queue after adding:', this.queue.length, 'tracks');
         
         // Send queue update - but don't force currentTrack update (let Spotify sync handle that)
         this.broadcastUpdate('queueUpdate', {
@@ -48,7 +48,7 @@ class QueueManager {
             const nextTrack = this.queue.shift();
             this.currentTrack = nextTrack; // Update current track when skipping
             this.lastUpdate = Date.now();
-            console.log('🔴 Skipped to next track:', nextTrack?.name);
+            // console.log('🔴 Skipped to next track:', nextTrack?.name);
             
             // Send queue update with updated current track
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
@@ -86,7 +86,7 @@ class QueueManager {
 
     // Broadcast updates to all connected clients
     broadcastUpdate(type, data) {
-        console.log(`🟡 Broadcasting ${type} event to ${this.clients.size} clients with data:`, data);
+        // console.log(`🟡 Broadcasting ${type} event to ${this.clients.size} clients with data:`, data);
         
         let successCount = 0;
         let failCount = 0;
@@ -110,7 +110,7 @@ class QueueManager {
             }
         });
         
-        console.log(`🟡 Broadcast complete: ${successCount} sent, ${failCount} failed`);
+        // console.log(`🟡 Broadcast complete: ${successCount} sent, ${failCount} failed`);
     }
 
     // Add WebSocket client
@@ -142,7 +142,7 @@ class QueueManager {
     // Initialize queue from Spotify on startup
     async initializeFromSpotify(spotifyApi) {
         try {
-            console.log('🔵 Fetching current Spotify queue...');
+            // console.log('🔵 Fetching current Spotify queue...');
             
             // Ensure we have a valid access token
             const { ensureSpotifyAccessToken } = require('./spotify');
@@ -160,7 +160,7 @@ class QueueManager {
                 };
                 this.isPlaying = currentPlayback.body.is_playing;
                 this.progress = currentPlayback.body.progress_ms;
-                console.log('🔵 Current track set:', this.currentTrack.name);
+                // console.log('🔵 Current track set:', this.currentTrack.name);
             }
             
             // Try to get the user's queue using available methods
@@ -175,8 +175,8 @@ class QueueManager {
                 } else if (typeof spotifyApi.getUserQueue === 'function') {
                     queueData = await spotifyApi.getUserQueue();
                 } else {
-                    console.log('🔵 Queue API method not available in this Spotify library version');
-                    console.log('🔵 Starting with empty queue - tracks will be added as they are queued');
+                    // console.log('🔵 Queue API method not available in this Spotify library version');
+                    // console.log('🔵 Starting with empty queue - tracks will be added as they are queued');
                     this.queue = [];
                     return;
                 }
@@ -193,14 +193,14 @@ class QueueManager {
                         addedAt: Date.now()
                     }));
                     
-                    console.log(`🔵 Initialized queue with ${this.queue.length} tracks from Spotify`);
+                    // console.log(`🔵 Initialized queue with ${this.queue.length} tracks from Spotify`);
                 } else {
-                    console.log('🔵 No queue data found or queue is empty');
+                    // console.log('🔵 No queue data found or queue is empty');
                     this.queue = [];
                 }
             } catch (queueError) {
-                console.log('🔵 Could not fetch Spotify queue:', queueError.message);
-                console.log('🔵 Starting with empty queue - tracks will be added as they are queued');
+                // console.log('🔵 Could not fetch Spotify queue:', queueError.message);
+                // console.log('🔵 Starting with empty queue - tracks will be added as they are queued');
                 this.queue = [];
             }
             
@@ -233,10 +233,10 @@ class QueueManager {
 
                 // Only broadcast if track changed
                 if (!this.currentTrack || this.currentTrack.uri !== track.uri) {
-                    console.log('🟢 Track changed during sync, updating current track:', track.name);
+                    // console.log('🟢 Track changed during sync, updating current track:', track.name);
                     this.updateCurrentTrack(track);
                 } else {
-                    console.log('🟢 Track unchanged during sync:', track.name);
+                    // console.log('🟢 Track unchanged during sync:', track.name);
                 }
 
                 this.updatePlaybackState(
@@ -267,12 +267,12 @@ class QueueManager {
 
                         // Update our internal queue with Spotify's queue
                         this.queue = spotifyQueue;
-                        console.log(`🟢 Synced queue with Spotify: ${this.queue.length} tracks`);
+                        // console.log(`🟢 Synced queue with Spotify: ${this.queue.length} tracks`);
                     }
                 }
             } catch (queueError) {
                 // Don't fail the whole sync if queue fetch fails
-                console.log('🟡 Could not sync queue from Spotify:', queueError.message);
+                // console.log('🟡 Could not sync queue from Spotify:', queueError.message);
             }
         } catch (error) {
             // Handle network errors more gracefully

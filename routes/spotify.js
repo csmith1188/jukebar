@@ -4,43 +4,77 @@ const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
 const db = require('../utils/database');
 const { logTransaction } = require('./logging');
 const queueManager = require('../utils/queueManager');
+const { isAuthenticated } = require('../middleware/auth');
 
+// Middleware to check if user has teacher permissions (owner or permission >= 4)
+const requireTeacherAccess = (req, res, next) => {
+    if (req.session?.permission >= 4 || req.session?.token?.id === Number(process.env.OWNER_ID)) {
+        return next();
+    }
+    return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
+};
+
+// Helpers for banned songs
+function getBannedSongs() {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT track_name, artist_name FROM banned_songs', (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows || []);
+        });
+    });
+}
+
+async function isTrackBannedByNameArtist(name, artist) {
+    try {
+        const banned = await getBannedSongs();
+        const n = (name || '').trim().toLowerCase();
+        const a = (artist || '').trim().toLowerCase();
+        return banned.some(b => {
+            const bannedName = (b.track_name || '').trim().toLowerCase();
+            const bannedArtist = (b.artist_name || '').trim().toLowerCase();
+            return n.startsWith(bannedName) && bannedArtist === a;
+        });
+    } catch (e) {
+        console.error('Error checking banned songs:', e);
+        return false;
+    }
+}
 // Store currently playing track info (legacy - use queueManager instead)
 let currentTrack = null;
 
 // Helper function to handle Spotify API errors consistently
 function handleSpotifyError(error, res, action = 'operation') {
     console.error(`Spotify ${action} error:`, error);
-    
+
     // Handle network connectivity errors
     if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-        return res.status(503).json({ 
-            ok: false, 
-            error: 'Unable to connect to Spotify. Please check your internet connection and try again.' 
+        return res.status(503).json({
+            ok: false,
+            error: 'Unable to connect to Spotify. Please check your internet connection and try again.'
         });
     }
-    
+
     // Handle authentication errors
     if (error.statusCode === 401) {
         return res.status(401).json({ ok: false, error: 'Spotify authentication failed' });
     }
-    
+
     // Handle rate limiting
     if (error.statusCode === 429) {
-        return res.status(429).json({ 
-            ok: false, 
-            error: 'Too many requests to Spotify. Please wait a moment and try again.' 
+        return res.status(429).json({
+            ok: false,
+            error: 'Too many requests to Spotify. Please wait a moment and try again.'
         });
     }
-    
+
     // Handle 404 errors (no active device)
     if (error.statusCode === 404) {
-        return res.status(400).json({ 
-            ok: false, 
-            error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' 
+        return res.status(400).json({
+            ok: false,
+            error: 'No active Spotify playback found. Please start playing music on a Spotify device first.'
         });
     }
-    
+
     // Generic error
     return res.status(500).json({ ok: false, error: `Failed to ${action}` });
 }
@@ -48,7 +82,7 @@ function handleSpotifyError(error, res, action = 'operation') {
 
 router.post('/search', async (req, res) => {
     try {
-        let { query } = req.body || {};
+        let { query, source } = req.body || {};
         if (!query || !query.trim()) {
             return res.status(400).json({ ok: false, error: 'Missing query' });
         }
@@ -72,12 +106,94 @@ router.post('/search', async (req, res) => {
         }));
         // filter explicit songs and songs longer than 7 minutes
         simplified = simplified.filter(t => t.explicit === false && t.duration_ms < 420000);
+
+        // if the song is banned hide it
+        const isTeacherPanel = source === 'teacher';
+        const isTeacher = (req.session?.permission >= 4 || req.session?.token?.id === Number(process.env.OWNER_ID));
+        try {
+            const banned = await getBannedSongs();
+            // Use function to check if track name starts with banned name and artist matches
+            if (isTeacher && isTeacherPanel) {
+                simplified = simplified.map(t => ({
+                    ...t,
+                    isBanned: banned.some(b => {
+                        const bannedName = (b.track_name || '').trim().toLowerCase();
+                        const bannedArtist = (b.artist_name || '').trim().toLowerCase();
+                        return t.name.trim().toLowerCase().startsWith(bannedName) && t.artist.trim().toLowerCase() === bannedArtist;
+                    })
+                }));
+            } else {
+                simplified = simplified.filter(t => !banned.some(b => {
+                    const bannedName = (b.track_name || '').trim().toLowerCase();
+                    const bannedArtist = (b.artist_name || '').trim().toLowerCase();
+                    return t.name.trim().toLowerCase().startsWith(bannedName) && t.artist.trim().toLowerCase() === bannedArtist;
+                }));
+            }
+        } catch (e) {
+            console.warn('Could not load banned songs; proceeding without filter');
+            if (isTeacher && isTeacherPanel) {
+                simplified = simplified.map(t => ({ ...t, isBanned: false }));
+            }
+        }
         return res.json({
             ok: true,
             tracks: { items: simplified }
         });
     } catch (err) {
         return handleSpotifyError(err, res, 'search');
+    }
+});
+
+router.post('/unbanTrack', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    try {
+        const { name, artist } = req.body || {};
+        if (!name || !artist) return res.status(400).json({ ok: false, error: 'Missing track name or artist' });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                'DELETE FROM banned_songs WHERE lower(trim(track_name)) = lower(trim(?)) AND lower(trim(artist_name)) = lower(trim(?))',
+                [name, artist],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve();
+                }
+            );
+        });
+
+        return res.json({ ok: true, message: 'Track unbanned successfully' });
+    } catch (error) {
+        console.error('Unban track error:', error);
+        return res.status(500).json({ ok: false, error: 'Failed to unban track' });
+    }
+});
+
+// Teacher-only: Ban a track by name/artist (optionally record URI)
+router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    try {
+        const { name, artist } = req.body || {};
+        if (!name || !artist) return res.status(400).json({ ok: false, error: 'Missing track name or artist' });
+
+        // Avoid duplicates
+        const alreadyBanned = await isTrackBannedByNameArtist(name, artist);
+        if (alreadyBanned) {
+            return res.json({ ok: true, message: 'Track already banned' });
+        }
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
+                [name, artist],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve();
+                }
+            );
+        });
+
+        return res.json({ ok: true, message: 'Track banned successfully' });
+    } catch (error) {
+        console.error('Ban track error:', error);
+        return res.status(500).json({ ok: false, error: 'Failed to ban track' });
     }
 });
 
@@ -202,6 +318,16 @@ router.post('/addToQueue', async (req, res) => {
             cover: track.album.images[0].url,
         };
 
+        // Check banned songs
+        if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
+            return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
+        }
+
+        // Check banned songs
+        if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
+            return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
+        }
+
         await spotifyApi.addToQueue(uri);
 
         // Also add to queueManager for WebSocket updates
@@ -308,7 +434,7 @@ router.post('/skip', async (req, res) => {
         try {
             await ensureSpotifyAccessToken();
             await spotifyApi.skipToNext();
-            
+
             // Update queueManager and broadcast to clients
             const nextTrack = queueManager.skipTrack();
             console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
@@ -333,10 +459,10 @@ router.post('/skip', async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
         await spotifyApi.skipToNext();
-        
+
         // Update queueManager and broadcast to clients
         const nextTrack = queueManager.skipTrack();
-        
+
         if (currentTrack) {
             await logTransaction({
                 userID: req.session.token.id,
@@ -380,7 +506,7 @@ router.get('/queue/state', (req, res) => {
 router.post('/queue/add', async (req, res) => {
     try {
         const { uri, trackName, artist } = req.body;
-        
+
         if (!uri) {
             return res.status(400).json({ ok: false, error: 'Missing track URI' });
         }
@@ -394,7 +520,7 @@ router.post('/queue/add', async (req, res) => {
         };
 
         queueManager.addToQueue(track);
-        
+
         // Log the transaction
         if (req.session.token?.id) {
             await logTransaction(req.session.token.id, req.session.user, 'QUEUE', uri, trackName, artist, 50);
@@ -416,12 +542,12 @@ router.post('/queue/skip', async (req, res) => {
         }
 
         const nextTrack = queueManager.skipTrack();
-        
+
         if (nextTrack) {
             // Actually skip on Spotify
             await ensureSpotifyAccessToken();
             await spotifyApi.skipToNext();
-            
+
             res.json({ ok: true, message: 'Track skipped', currentTrack: nextTrack });
         } else {
             res.json({ ok: true, message: 'No tracks in queue to skip to' });

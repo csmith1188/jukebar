@@ -38,12 +38,9 @@ db.run(`CREATE TABLE IF NOT EXISTS transactions (
 
 db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
     id INTEGER PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    track_uri TEXT NOT NULL,
     track_name TEXT,
     artist_name TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
 module.exports = db;

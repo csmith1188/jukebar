@@ -170,7 +170,7 @@
             const response = await fetch('/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
+                body: JSON.stringify({ query, source: 'teacher' })
             });
             const data = await response.json();
             const resultsDiv = document.getElementById('searchResults');
@@ -178,17 +178,17 @@
 
             if (data.tracks && data.tracks.items.length > 0) {
                 data.tracks.items.forEach(track => {
+                    const isBanned = !!track.isBanned;
                     const trackDiv = document.createElement('div');
                     trackDiv.className = 'search-result-item';
                     trackDiv.innerHTML = `
-                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
-                        <div class="search-result-content">
-                            <div class="search-result-title">${track.name}</div>
-                            <div class="search-result-artist">${track.artist}</div>
-                        </div>
-                        <button class="play-button" data-uri="${track.uri}">Play</button>
-                        <button class="ban-button" data-uri="${track.uri}">Ban</button>
-                        `;
+                            <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
+                            <div class="search-result-content">
+                                <div class="search-result-title">${track.name}</div>
+                                <div class="search-result-artist">${track.artist}</div>
+                            </div>
+                            <button class="${isBanned ? 'unban-button' : 'ban-button'}" data-uri="${track.uri}" data-name="${track.name}" data-artist="${track.artist}" title="${isBanned ? 'Unban this track' : 'Ban this track'}">${isBanned ? 'Unban' : 'Ban'}</button>
+                            `;
                     resultsDiv.appendChild(trackDiv);
                 });
             } else {
@@ -309,10 +309,60 @@
         });
     });
 
-    const searchForm = document.getElementById('searchForm');
-    searchForm.addEventListener('submit', (e) => {
+    document.getElementById('searchForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        searchInput.dispatchEvent(new Event('input'));
+        searchSpotify();
+    });
+    // Ban/Unban button handler (event delegation)
+    document.getElementById('searchResults')?.addEventListener('click', async (e) => {
+        const banBtn = e.target.closest('.ban-button');
+        const unbanBtn = e.target.closest('.unban-button');
+        const btn = banBtn || unbanBtn;
+        if (!btn) return;
+        const name = btn.dataset.name;
+        const artist = btn.dataset.artist;
+        if (!name || !artist) return;
+
+        try {
+            if (banBtn) {
+                const res = await fetch('/banTrack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, artist })
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    showNotification(`Banned: ${name} - ${artist}`, 'success');
+                    // Toggle to Unban
+                    btn.classList.remove('ban-button');
+                    btn.classList.add('unban-button');
+                    btn.textContent = 'Unban';
+                    btn.title = 'Unban this track';
+                } else {
+                    showNotification(data.error || 'Failed to ban track', 'error');
+                }
+            } else if (unbanBtn) {
+                const res = await fetch('/unbanTrack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, artist })
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    showNotification(`Unbanned: ${name} - ${artist}`, 'success');
+                    // Toggle to Ban
+                    btn.classList.remove('unban-button');
+                    btn.classList.add('ban-button');
+                    btn.textContent = 'Ban';
+                    btn.title = 'Ban this track';
+                } else {
+                    showNotification(data.error || 'Failed to unban track', 'error');
+                }
+            }
+        } catch (err) {
+            console.error('Ban/Unban track error:', err);
+            showNotification('Network error updating ban', 'error');
+        }
     });
 </script>
 
