@@ -38,24 +38,69 @@ const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
 const { router: leaderboardRoutes, checkAndResetLeaderboard } = require('./routes/leaderboard');
+const userRoutes = require('./routes/users');
+const queueManager = require('./utils/queueManager');
 // const { setupFormbarSocket } = require('./routes/socket');
 
 // Formbar Socket.IO connection
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
 const API_KEY = process.env.API_KEY || '';
 
-console.log('=== Formbar Configuration ===');
-console.log('FORMBAR_ADDRESS:', FORMBAR_ADDRESS);
-console.log('API_KEY present:', !!API_KEY);
-console.log('=============================');
+//console.log('=== Formbar Configuration ===');
+//console.log('FORMBAR_ADDRESS:', FORMBAR_ADDRESS);
+//console.log('API_KEY present:', !!API_KEY);
+//console.log('=============================');
 
 const formbarSocket = ioClient(FORMBAR_ADDRESS, {
     extraHeaders: { api: API_KEY }
 });
 
-console.log('Formbar socket client created, attempting connection...');
+//console.log('Formbar socket client created, attempting connection...');
 
 // setupFormbarSocket(io, formbarSocket);
+
+// WebSocket connection handling for queue sync
+io.on('connection', (socket) => {
+    //console.log('Client connected for queue sync');
+    
+    // Add client to queue manager
+    queueManager.addClient(socket);
+    
+    // Handle client disconnect
+    socket.on('disconnect', () => {
+        //console.log('Client disconnected from queue sync');
+        queueManager.removeClient(socket);
+    });
+    
+    // Handle queue actions from clients
+    socket.on('requestQueueUpdate', () => {
+        socket.emit('queueUpdate', queueManager.getCurrentState());
+    });
+});
+
+// Initialize Spotify queue on startup
+if (process.env.SPOTIFY_CLIENT_ID) {
+    const { spotifyApi } = require('./utils/spotify');
+    
+    // Initialize queue from Spotify on startup
+    async function initializeQueue() {
+        try {
+            //console.log('Initializing queue from Spotify...');
+            await queueManager.initializeFromSpotify(spotifyApi);
+            //console.log('Queue initialization complete');
+        } catch (error) {
+            console.warn('Could not initialize queue from Spotify:', error.message);
+        }
+    }
+    
+    // Call initialization
+    initializeQueue();
+    
+    // Periodic Spotify sync (every 5 seconds)
+    setInterval(() => {
+        queueManager.syncWithSpotify(spotifyApi);
+    }, 5000);
+}
 
 // Main routes
 app.get('/', isAuthenticated, (req, res) => {
@@ -124,9 +169,10 @@ app.use('/', authRoutes);
 app.use('/', spotifyRoutes);
 app.use('/', paymentRoutes);
 app.use('/', leaderboardRoutes);
+app.use('/', userRoutes);
 
 server.listen(port, async () => {
-    console.log(`Server listening at http://localhost:${port}`);
+    //console.log(`Server listening at http://localhost:${port}`);
 });
 
 module.exports = { app, io, formbarSocket };

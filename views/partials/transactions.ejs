@@ -1,0 +1,55 @@
+<div class="transaction-modal-content">
+    <div class="transaction-modal-header">
+        <h3>Transactions for <%= username %></h3>
+        <div class="header-right">
+            <div class="pagination-info">
+                <span>Page <%= pagination.currentPage %> of <%= pagination.totalPages %> (<%= pagination.totalCount %> total)</span>
+            </div>
+            <button class="close-modal" onclick="this.closest('.transaction-modal').remove()">x</button>
+        </div>
+    </div>
+    <div class="transaction-modal-body">
+        <% if (transactions.length > 0) { %>
+            <div class="table-wrapper">
+                <table class="transaction-table">
+                    <thead class="sticky-header">
+                        <tr>
+                            <th>Track</th>
+                            <th>Artist</th>
+                            <th>Action</th>
+                            <th>Cost</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% transactions.forEach(function(transaction) { %>
+                            <tr>
+                                <td><%= transaction.track_name || 'Unknown' %></td>
+                                <td><%= transaction.artist_name || 'Unknown' %></td>
+                                <td><span class="action-badge <%= transaction.action.toLowerCase() %>"><%= transaction.action %></span></td>
+                                <td><span class="cost-badge"><%= transaction.cost %> Digipogs</span></td>
+                                <td><%= transaction.formatted_time %></td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <p class="no-transactions">No transactions found for this user.</p>
+        <% } %>
+    </div>
+    <div class="transaction-modal-footer">
+        <div class="pagination-controls">
+            <button class="pagination-btn" id="prevBtn" <%= !pagination.hasPrevPage ? 'disabled' : '' %>>
+                ← Previous
+            </button>
+            <span class="page-indicator">
+                <%= pagination.currentPage %> / <%= pagination.totalPages %>
+            </span>
+            <button class="pagination-btn" id="nextBtn" <%= !pagination.hasNextPage ? 'disabled' : '' %>>
+                Next →
+            </button>
+        </div>
+    </div>
+</div>
+
