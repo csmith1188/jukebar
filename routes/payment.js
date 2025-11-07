@@ -56,9 +56,9 @@ router.post('/transfer', async (req, res) => {
             }
         }
 
-        console.log('Received PIN:', pin, 'Type:', typeof pin);
-        console.log('User session ID:', req.session.token?.id);
-        console.log('User row from DB:', userRow);
+        //console.log('Received PIN:', pin, 'Type:', typeof pin);
+        //console.log('User session ID:', req.session.token?.id);
+        //console.log('User row from DB:', userRow);
 
         if (!userRow || !userRow.id) {
             console.error('Transfer failed: User not found in database. Session token:', req.session.token);
@@ -76,7 +76,7 @@ router.post('/transfer', async (req, res) => {
             reason: String(reason),
         };
 
-        console.log('Transfer payload being sent to Formbar:', payload);
+        //console.log('Transfer payload being sent to Formbar:', payload);
         const transferResult = await fetch(`${FORMBAR_ADDRESS}/api/digipogs/transfer`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -84,12 +84,12 @@ router.post('/transfer', async (req, res) => {
         });
 
         const responseJson = await transferResult.json();
-        console.log('Formbar response status:', transferResult.status);
-        console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
+        //console.log('Formbar response status:', transferResult.status);
+        //console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
 
         // Check if the transfer was successful based on the response
         if (transferResult.ok && responseJson) {
-            console.log('Setting hasPaid = true for user:', req.session.token?.id);
+            //console.log('Setting hasPaid = true for user:', req.session.token?.id);
             req.session.hasPaid = true;
             req.session.payment = {
                 from: Number(userRow.id),
@@ -97,18 +97,18 @@ router.post('/transfer', async (req, res) => {
                 amount: Number(amount),
                 at: Date.now()
             };
-            console.log('Session before save:', { id: req.session.token?.id, hasPaid: req.session.hasPaid });
+            //console.log('Session before save:', { id: req.session.token?.id, hasPaid: req.session.hasPaid });
             return req.session.save((err) => {
                 if (err) {
                     console.error('Session save error:', err);
                     return res.status(500).json({ ok: false, error: 'Session save failed' });
                 }
-                console.log('Session saved successfully, hasPaid should be true');
+                //console.log('Session saved successfully, hasPaid should be true');
                 res.json({ ok: true, message: 'Transfer successful', response: responseJson });
             });
         } else {
-            console.log('Transfer failed with status:', transferResult.status);
-            console.log('Full Formbar error response:', JSON.stringify(responseJson, null, 2));
+            //console.log('Transfer failed with status:', transferResult.status);
+            //console.log('Full Formbar error response:', JSON.stringify(responseJson, null, 2));
 
             // Extract the specific error message from Formbar response
             let specificError = 'Transfer failed';
@@ -119,7 +119,7 @@ router.post('/transfer', async (req, res) => {
                     // Decode the JWT token to get the actual error message
                     const jwt = require('jsonwebtoken');
                     const decoded = jwt.decode(responseJson.token);
-                    console.log('Decoded JWT:', decoded);
+                    //console.log('Decoded JWT:', decoded);
 
                     if (decoded && decoded.message) {
                         specificError = decoded.message;
@@ -142,7 +142,7 @@ router.post('/transfer', async (req, res) => {
                 }
             }
 
-            console.log('Extracted error message:', specificError);
+            //console.log('Extracted error message:', specificError);
 
             res.status(transferResult.status || 400).json({
                 ok: false,
@@ -214,7 +214,7 @@ router.post('/refund', async (req, res) => {
             reason: String(reason),
         };
 
-        console.log('Refund payload being sent to Formbar:', payload);
+        //console.log('Refund payload being sent to Formbar:', payload);
         const transferResult = await fetch(`${FORMBAR_ADDRESS}/api/digipogs/transfer`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -222,8 +222,8 @@ router.post('/refund', async (req, res) => {
         });
 
         const responseJson = await transferResult.json();
-        console.log('Formbar response status:', transferResult.status);
-        console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
+        //console.log('Formbar response status:', transferResult.status);
+        //console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
 
         // Check if the transfer was successful based on the response
         if (transferResult.ok && responseJson) {
@@ -234,8 +234,8 @@ router.post('/refund', async (req, res) => {
                 res.json({ ok: true, message: 'Refund successful', response: responseJson });
             });
         } else {
-            console.log('Refund failed with status:', transferResult.status);
-            console.log('Full Formbar error response:', JSON.stringify(responseJson, null, 2));
+            //console.log('Refund failed with status:', transferResult.status);
+            //console.log('Full Formbar error response:', JSON.stringify(responseJson, null, 2));
 
             // Extract the specific error message from Formbar response
             let specificError = 'Refund failed';
@@ -253,7 +253,7 @@ router.post('/refund', async (req, res) => {
                 }
             }
 
-            console.log('Extracted error message:', specificError);
+            //console.log('Extracted error message:', specificError);
 
             res.status(transferResult.status || 400).json({
                 ok: false,
@@ -278,13 +278,13 @@ router.post('/savePin', (req, res) => {
         return res.status(401).json({ ok: false, error: 'Not authenticated' });
     }
 
-    console.log('Saving PIN for user', req.session.token.id);
+    //console.log('Saving PIN for user', req.session.token.id);
     db.run("UPDATE users SET pin = ? WHERE id = ?", [pin, req.session.token.id], function (err) {
         if (err) {
             console.error('Database error:', err.message);
             return res.status(500).json({ ok: false, error: 'Database error' });
         } else {
-            console.log('PIN saved for user', req.session.token.id);
+            //console.log('PIN saved for user', req.session.token.id);
             res.json({ ok: true });
         }
     });

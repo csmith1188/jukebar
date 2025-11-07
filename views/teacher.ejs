@@ -12,52 +12,53 @@
 
 <body>
     <%- include('partials/header', { page: 'teacher' }) %>
-    <div class="main-content">
-        <p class="user-greeting">Logged in as: <strong><%= user %></strong></p>
-        <div class="container">
-            <div id="spotifyPlayer">
-                <div class="section-header">
-                    <h2>Music Control</h2>
-                    <p class="section-subtitle">Search and manage the music queue</p>
-                </div>
-                <form id="searchForm">
-                    <div class="search-container">
-                        <input type="text" id="searchInput" placeholder="Search for a song, artist, or album" required>
-                        <button type="submit" id="searchButton">
-                            <img src="/img/search.png" alt="Search" class="search-icon">
-                        </button>
+        <div class="main-content">
+            <p class="user-greeting">Logged in as: <strong>
+                    <%= user %>
+                </strong></p>
+            <div class="container">
+                <div id="spotifyPlayer">
+                    <div class="section-header">
+                        <h2>Music Control</h2>
+                        <p class="section-subtitle">Search and manage the music queue</p>
                     </div>
-                </form>
-                <div id="searchResults"></div>
-            </div>
-            <div id="userManagement">
-                <div class="section-header">
-                    <h2>User Management</h2>
-                    <p class="section-subtitle">Manage user access and permissions</p>
+                    <form id="searchForm">
+                        <div class="search-container">
+                            <input type="text" id="searchInput" placeholder="Search for a song, artist, or album"
+                                required>
+                            <button type="submit" id="searchButton">
+                                <img src="/img/search.png" alt="Search" class="search-icon">
+                            </button>
+                        </div>
+                    </form>
+                    <div id="searchResults"></div>
                 </div>
-                <div class="user-search-container">
-                    <div class="search-wrapper">
-                        <input type="text" id="userSearchInput" placeholder="Search users..." class="user-search-input">
-                        <button type="button" class="user-search-button">
-                            <img src="/img/search.png" alt="Search" class="search-icon">
-                        </button>
+                <div id="userManagement">
+                    <div class="section-header">
+                        <h2>User Management</h2>
+                        <p class="section-subtitle">Manage user access and permissions</p>
                     </div>
-                </div>
-                <div class="table-container">
-                    <table class="user-table">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="userTableBody">
-                        </tbody>
-                    </table>
+                    <div class="user-search-container">
+                        <div class="search-wrapper">
+                            <input type="text" id="userSearchInput" placeholder="Search users..."
+                                class="user-search-input">
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 </body>
 <script>
     async function fetchUsers() {
@@ -105,18 +106,18 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, page, limit: 10 })
             });
-            
+
             if (!res.ok) throw new Error('Failed to fetch transactions');
             const data = await res.json();
-            
+
             // Create modal with the rendered HTML from partial
             const modal = document.createElement('div');
             modal.className = 'transaction-modal';
             modal.innerHTML = data.html;
-            
+
             // Add pagination event listeners
             addTransactionModalEventListeners(modal, username);
-            
+
             document.body.appendChild(modal);
         } catch (error) {
             console.error('Error loading transactions:', error);
@@ -127,26 +128,26 @@
     function addTransactionModalEventListeners(modal, username) {
         const prevBtn = modal.querySelector('#prevBtn');
         const nextBtn = modal.querySelector('#nextBtn');
-        
+
         // Get current page from the pagination info in the modal
         const paginationInfo = modal.querySelector('.pagination-info span').textContent;
         const currentPageMatch = paginationInfo.match(/Page (\d+) of/);
         const currentPage = currentPageMatch ? parseInt(currentPageMatch[1]) : 1;
-        
+
         if (prevBtn && !prevBtn.disabled) {
             prevBtn.addEventListener('click', async () => {
                 modal.remove();
                 await showUserTransactions(username, currentPage - 1);
             });
         }
-        
+
         if (nextBtn && !nextBtn.disabled) {
             nextBtn.addEventListener('click', async () => {
                 modal.remove();
                 await showUserTransactions(username, currentPage + 1);
             });
         }
-        
+
         // Close modal when clicking outside
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -198,16 +199,15 @@
         }
     }
 
-    // WebSocket integration for real-time updates
     const socket = io();
-    
+
     socket.on('connect', () => {
-        console.log('Connected to server for queue updates');
+        //console.log('Connected to server for queue updates');
         socket.emit('requestQueueUpdate');
     });
 
     socket.on('disconnect', () => {
-        console.log('Disconnected from server');
+        //console.log('Disconnected from server');
     });
 
     // Handle queue updates
@@ -235,7 +235,7 @@
         // Add or update a current track display section
         const playerDiv = document.getElementById('spotifyPlayer');
         let currentTrackDiv = document.getElementById('currentTrack');
-        
+
         if (!currentTrackDiv) {
             currentTrackDiv = document.createElement('div');
             currentTrackDiv.id = 'currentTrack';
@@ -282,13 +282,38 @@
             z-index: 1000;
             animation: slideIn 0.3s ease-out;
         `;
-        
+
         document.body.appendChild(notification);
-        
+
         setTimeout(() => {
             notification.remove();
         }, 3000);
     }
+
+    const searchInput = document.getElementById('userSearchInput');
+    searchInput?.addEventListener('input', () => {
+        const filter = searchInput.value.toLowerCase();
+        const tbody = document.getElementById('userTableBody');
+        const rows = tbody.getElementsByTagName('tr');
+
+        Array.from(rows).forEach(row => {
+            const usernameCell = row.getElementsByTagName('td')[0];
+            if (usernameCell) {
+                const username = usernameCell.textContent || usernameCell.innerText;
+                if (username.toLowerCase().indexOf(filter) > -1) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+    });
+
+    const searchForm = document.getElementById('searchForm');
+    searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        searchInput.dispatchEvent(new Event('input'));
+    });
 </script>
 
 </html>

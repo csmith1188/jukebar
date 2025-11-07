@@ -65,8 +65,8 @@
                 const socket = io();
 
                 socket.on('auxiliaryPermission', (permission) => {
-                    console.log('Auxiliary permission:', permission);
-                    console.log('User permission:', userPermission);
+                    //console.log('Auxiliary permission:', permission);
+                    //console.log('User permission:', userPermission);
                     if (permission <= userPermission) {
                         useJukebar = true;
                     } else {
@@ -171,7 +171,7 @@
                             }
                         })
                         .catch(error => {
-                            console.log('oopsies!')
+                            //console.log('oopsies!')
                             console.error('Error adding track to queue:', error);
                             Notify('Network error');
                         });
@@ -418,24 +418,24 @@
                 const socket = io();
                 
                 socket.on('connect', () => {
-                    console.log('Connected to queue sync');
+                    //console.log('Connected to queue sync');
                     socket.emit('requestQueueUpdate');
                 });
 
                 socket.on('disconnect', () => {
-                    console.log('Disconnected from queue sync');
+                    //console.log('Disconnected from queue sync');
                 });
 
                 // Handle initial state
                 socket.on('initialState', (data) => {
-                    console.log('🔵 initialState event received:', data);
+                    //console.log('🔵 initialState event received:', data);
                     updateQueueDisplay(data.data);
                     updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
                 });
 
                 // Handle queue updates (when queue changes)
                 socket.on('queueUpdate', (data) => {
-                    console.log('🟢 queueUpdate event received:', data);
+                    //console.log('🟢 queueUpdate event received:', data);
                     updateQueueDisplay(data);
                     // Only update currently playing if we have valid current track data
                     if (data.currentTrack) {
@@ -445,24 +445,24 @@
 
                 // Handle playback state updates (playing/paused status)
                 socket.on('playbackState', (data) => {
-                    console.log('🟠 playbackState event received:', data);
+                    //console.log('🟠 playbackState event received:', data);
                     updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
                 });
 
                 // Handle current track updates (from periodic sync)
                 socket.on('currentTrack', (data) => {
-                    console.log('🟡 currentTrack event received:', data);
+                    //console.log('🟡 currentTrack event received:', data);
                     updateCurrentlyPlaying(data, true);
                 });
 
                 // Handle notifications only
                 socket.on('queueAdd', (data) => {
-                    console.log('🟣 queueAdd event received:', data);
+                    //console.log('🟣 queueAdd event received:', data);
                     showNotification(`"${data.track.name}" added to queue`, 'success');
                 });
 
                 socket.on('skip', (data) => {
-                    console.log('🔴 skip event received:', data);
+                    //console.log('🔴 skip event received:', data);
                     showNotification('Track skipped', 'info');
                 });
             }
@@ -475,17 +475,17 @@
                 // Handle different data structures
                 let queue = data.queue || data.data?.queue || [];
                 
-                console.log('========== updateQueueDisplay DEBUG ==========');
-                console.log('Full data object:', JSON.stringify(data, null, 2));
-                console.log('data.queue:', data.queue);
-                console.log('data.data?.queue:', data.data?.queue);
-                console.log('Extracted queue:', queue);
-                console.log('Queue length:', queue ? queue.length : 'undefined');
-                console.log('Stack trace:', new Error().stack);
-                console.log('===============================================');
+                //console.log('========== updateQueueDisplay DEBUG ==========');
+                //console.log('Full data object:', JSON.stringify(data, null, 2));
+                //console.log('data.queue:', data.queue);
+                //console.log('data.data?.queue:', data.data?.queue);
+                //console.log('Extracted queue:', queue);
+                //console.log('Queue length:', queue ? queue.length : 'undefined');
+                //console.log('Stack trace:', new Error().stack);
+                //console.log('===============================================');
                 
                 if (queue && queue.length > 0) {
-                    console.log('✅ Displaying', queue.length, 'tracks');
+                    //console.log('✅ Displaying', queue.length, 'tracks');
                     queueDiv.innerHTML = queue.map((track, index) => `
                         <div class="queue-item">
                             <img src="${track.image || '/img/default-album.png'}" alt="Album Cover" class="album-cover" />
@@ -496,7 +496,7 @@
                         </div>
                     `).join('');
                 } else {
-                    console.log('❌ QUEUE CLEARED - No tracks in queue, showing empty message');
+                    //console.log('❌ QUEUE CLEARED - No tracks in queue, showing empty message');
                     queueDiv.innerHTML = '<p class="no-queue">No tracks in queue</p>';
                 }
             }

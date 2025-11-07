@@ -69,6 +69,8 @@ class QueueManager {
             progress: this.progress,
             currentTrack: this.currentTrack 
         });
+        // Also broadcast queue update when playback state changes
+        this.broadcastUpdate('queueUpdate', { queue: this.queue });
     }
 
     // Get current state
@@ -84,18 +86,31 @@ class QueueManager {
 
     // Broadcast updates to all connected clients
     broadcastUpdate(type, data) {
-        console.log(`🟡 Broadcasting ${type} event with data:`, data);
+        console.log(`🟡 Broadcasting ${type} event to ${this.clients.size} clients with data:`, data);
+        
+        let successCount = 0;
+        let failCount = 0;
+        
         this.clients.forEach(client => {
-            // Handle Socket.IO clients
-            if (client.emit && typeof client.emit === 'function') {
-                client.emit(type, data);
-            }
-            // Handle raw WebSocket clients (fallback)
-            else if (client.readyState === 1) {
-                const message = JSON.stringify({ type, data, timestamp: Date.now() });
-                client.send(message);
+            try {
+                // Handle Socket.IO clients
+                if (client.emit && typeof client.emit === 'function') {
+                    client.emit(type, data);
+                    successCount++;
+                }
+                // Handle raw WebSocket clients (fallback)
+                else if (client.readyState === 1) {
+                    const message = JSON.stringify({ type, data, timestamp: Date.now() });
+                    client.send(message);
+                    successCount++;
+                }
+            } catch (error) {
+                console.error(`Failed to send ${type} to client:`, error.message);
+                failCount++;
             }
         });
+        
+        console.log(`🟡 Broadcast complete: ${successCount} sent, ${failCount} failed`);
     }
 
     // Add WebSocket client
@@ -228,6 +243,36 @@ class QueueManager {
                     currentPlayback.body.is_playing,
                     currentPlayback.body.progress_ms
                 );
+            }
+
+            // Also sync the queue from Spotify to keep it up-to-date
+            try {
+                const queueResponse = await fetch('https://api.spotify.com/v1/me/player/queue', {
+                    headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
+                });
+
+                if (queueResponse.status === 200) {
+                    const queueData = await queueResponse.json();
+                    if (queueData.queue && Array.isArray(queueData.queue)) {
+                        // Only update our queue if Spotify has queue data
+                        const spotifyQueue = queueData.queue.map(item => ({
+                            name: item.name,
+                            artist: item.artists.map(a => a.name).join(', '),
+                            uri: item.uri,
+                            duration: item.duration_ms,
+                            image: item.album.images[0]?.url,
+                            addedBy: 'Spotify',
+                            addedAt: Date.now()
+                        }));
+
+                        // Update our internal queue with Spotify's queue
+                        this.queue = spotifyQueue;
+                        console.log(`🟢 Synced queue with Spotify: ${this.queue.length} tracks`);
+                    }
+                }
+            } catch (queueError) {
+                // Don't fail the whole sync if queue fetch fails
+                console.log('🟡 Could not sync queue from Spotify:', queueError.message);
             }
         } catch (error) {
             // Handle network errors more gracefully
