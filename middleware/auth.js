@@ -13,10 +13,20 @@ function isAuthenticated(req, res, next) {
             next();
         } catch (err) {
             req.session.destroy();
-            res.redirect('/login');
+            // Check if this is an API request (fetch/AJAX)
+            if (req.headers.accept && req.headers.accept.includes('application/json')) {
+                res.status(401).json({ error: 'Unauthorized' });
+            } else {
+                res.redirect('/login');
+            }
         }
     } else {
-        res.redirect('/login');
+        // Check if this is an API request (fetch/AJAX)
+        if (req.headers.accept && req.headers.accept.includes('application/json')) {
+            res.status(401).json({ error: 'Unauthorized' });
+        } else {
+            res.redirect('/login');
+        }
     }
 }
 
