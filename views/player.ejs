@@ -17,11 +17,11 @@
         <p id="notification-text"></p>
     </div>
     <%- include('partials/header', { page: 'player' }) %>
-    <div class="main-content">
-        <p class="user-greeting">Logged in as: <strong>
-            <%= user %>
-        </strong></p>
-        <div class="container">
+        <div class="main-content">
+            <p class="user-greeting">Logged in as: <strong>
+                    <%= user %>
+                </strong></p>
+            <div class="container">
                 <div id="spotifyPlayer">
                     <form id="searchForm">
                         <div class="search-container">
@@ -65,8 +65,8 @@
                 const socket = io();
 
                 socket.on('auxiliaryPermission', (permission) => {
-                    //console.log('Auxiliary permission:', permission);
-                    //console.log('User permission:', userPermission);
+//console.log('Auxiliary permission:', permission);
+//console.log('User permission:', userPermission);
                     if (permission <= userPermission) {
                         useJukebar = true;
                     } else {
@@ -171,7 +171,7 @@
                             }
                         })
                         .catch(error => {
-                            //console.log('oopsies!')
+//console.log('oopsies!')
                             console.error('Error adding track to queue:', error);
                             Notify('Network error');
                         });
@@ -221,7 +221,7 @@
                         });
                         const data = await response.json();
                         if (data.ok) {
-                            //console.log('Queue data:', data.tracks.items);
+//console.log('Queue data:', data.tracks.items);
                             const queueDiv = document.getElementById('queue');
                             queueDiv.innerHTML = '';
                             if (data.tracks.items.length == 0) {
@@ -231,11 +231,17 @@
                                 data.tracks.items.forEach((item, index) => {
                                     const itemDiv = document.createElement('div');
                                     itemDiv.className = 'queue-item';
+                                    // Safely convert addedBy to string, handling [object Object] cases
+                                    let addedByDisplay = item.addedBy;
+                                    if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
+                                        addedByDisplay = 'Spotify';
+                                    }
                                     itemDiv.innerHTML = `
                         <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
                         <div class="queue-item-content">
                             <div class="queue-item-title">${item.name}</div>
                             <div class="queue-item-artist">${item.artist}</div>
+                            <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                         </div>
                     `;
                                     queueDiv.appendChild(itemDiv);
@@ -257,7 +263,7 @@
                         });
                         const data = await response.json();
                         if (data.ok) {
-                            //console.log('Currently Playing:', data.tracks.items);
+//console.log('Currently Playing:', data.tracks.items);
                             const CurrentDiv = document.getElementById('currentlyPlaying');
                             CurrentDiv.innerHTML = '';
                             if (data.tracks.items.length == 0) {
@@ -270,12 +276,11 @@
                                     const itemDiv = document.createElement('div');
                                     itemDiv.className = 'current-item';
                                     itemDiv.innerHTML = `
-                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
-                        <div class="current-item-content">
-                            <div class="current-item-title">${item.name}</div>
-                            <div class="current-item-artist">${item.artist}</div>
-                        </div>
-                    `;
+                                    <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                                    <div class="current-item-content">
+                                        <div class="current-item-title">${item.name}</div>
+                                        <div class="current-item-artist">${item.artist}</div>
+                                    </div>`;
                                     CurrentDiv.appendChild(itemDiv);
                                     currentlyPlayingUri = item.id
                                 });
@@ -331,7 +336,7 @@
                         .then(data => {
                             if (data.ok) {
                                 Notify('Spotify error occurred. Your digipogs have been refunded.');
-                                //console.log('Refund successful:', data);
+//console.log('Refund successful:', data);
                             } else {
                                 Notify('Refund failed: ' + (data.error || 'Unknown error'));
                                 console.error('Refund failed:', data.error);
@@ -390,7 +395,7 @@
                 });
 
                 // Expose read-only state for pay.ejs (cannot be directly manipulated from console)
-                window.getPlayerState = function() {
+                window.getPlayerState = function () {
                     return {
                         hasPaid: hasPaid,
                         pendingAction: pendingAction,
@@ -398,14 +403,14 @@
                     };
                 };
 
-                window.setPlayerState = function(updates) {
+                window.setPlayerState = function (updates) {
                     if (updates.hasPaid !== undefined) hasPaid = updates.hasPaid;
                     if (updates.pendingAction !== undefined) pendingAction = updates.pendingAction;
                 };
 
                 // Initialize WebSocket-based queue sync
                 initializeQueueSync();
-                
+
                 // Fallback: Still call original functions as backup (less frequently)
                 getQueue();
                 currentlyPlaying();
@@ -416,26 +421,26 @@
             // WebSocket-based queue synchronization
             function initializeQueueSync() {
                 const socket = io();
-                
+
                 socket.on('connect', () => {
-                    //console.log('Connected to queue sync');
+//console.log('Connected to queue sync');
                     socket.emit('requestQueueUpdate');
                 });
 
                 socket.on('disconnect', () => {
-                    //console.log('Disconnected from queue sync');
+//console.log('Disconnected from queue sync');
                 });
 
                 // Handle initial state
                 socket.on('initialState', (data) => {
-                    //console.log('🔵 initialState event received:', data);
+//console.log('initialState event received:', data);
                     updateQueueDisplay(data.data);
                     updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
                 });
 
                 // Handle queue updates (when queue changes)
                 socket.on('queueUpdate', (data) => {
-                    //console.log('🟢 queueUpdate event received:', data);
+//console.log('queueUpdate event received:', data);
                     updateQueueDisplay(data);
                     // Only update currently playing if we have valid current track data
                     if (data.currentTrack) {
@@ -445,24 +450,22 @@
 
                 // Handle playback state updates (playing/paused status)
                 socket.on('playbackState', (data) => {
-                    //console.log('🟠 playbackState event received:', data);
+//console.log('playbackState event received:', data);
                     updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
                 });
 
                 // Handle current track updates (from periodic sync)
                 socket.on('currentTrack', (data) => {
-                    //console.log('🟡 currentTrack event received:', data);
+//console.log('currentTrack event received:', data);
                     updateCurrentlyPlaying(data, true);
                 });
 
                 // Handle notifications only
                 socket.on('queueAdd', (data) => {
-                    //console.log('🟣 queueAdd event received:', data);
                     showNotification(`"${data.track.name}" added to queue`, 'success');
                 });
 
                 socket.on('skip', (data) => {
-                    //console.log('🔴 skip event received:', data);
                     showNotification('Track skipped', 'info');
                 });
             }
@@ -474,29 +477,28 @@
 
                 // Handle different data structures
                 let queue = data.queue || data.data?.queue || [];
-                
-                //console.log('========== updateQueueDisplay DEBUG ==========');
-                //console.log('Full data object:', JSON.stringify(data, null, 2));
-                //console.log('data.queue:', data.queue);
-                //console.log('data.data?.queue:', data.data?.queue);
-                //console.log('Extracted queue:', queue);
-                //console.log('Queue length:', queue ? queue.length : 'undefined');
-                //console.log('Stack trace:', new Error().stack);
-                //console.log('===============================================');
-                
+
                 if (queue && queue.length > 0) {
-                    //console.log('✅ Displaying', queue.length, 'tracks');
-                    queueDiv.innerHTML = queue.map((track, index) => `
+//console.log('Displaying', queue.length, 'tracks');
+                    queueDiv.innerHTML = queue.map((track, index) => {
+                        // Safely convert addedBy to string, handling [object Object] cases
+                        let addedByDisplay = track.addedBy;
+                        if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
+                            addedByDisplay = 'Spotify';
+                        }
+                        return `
                         <div class="queue-item">
-                            <img src="${track.image || '/img/default-album.png'}" alt="Album Cover" class="album-cover" />
+                            <img src="${track.image}" alt="${track.name}" class="album-cover">
                             <div class="queue-item-content">
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
+                                <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                             </div>
                         </div>
-                    `).join('');
+                    `;
+                    }).join('');
                 } else {
-                    //console.log('❌ QUEUE CLEARED - No tracks in queue, showing empty message');
+//console.log('QUEUE CLEARED - No tracks in queue, showing empty message');
                     queueDiv.innerHTML = '<p class="no-queue">No tracks in queue</p>';
                 }
             }
@@ -537,9 +539,9 @@
                     z-index: 1000;
                     animation: slideIn 0.3s ease-out;
                 `;
-                
+
                 document.body.appendChild(notification);
-                
+
                 setTimeout(() => {
                     notification.remove();
                 }, 3000);

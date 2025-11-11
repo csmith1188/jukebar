@@ -172,7 +172,7 @@ app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 
 server.listen(port, async () => {
-    //console.log(`Server listening at http://localhost:${port}`);
+    console.log(`Server listening at http://localhost:${port}`);
 });
 
 module.exports = { app, io, formbarSocket };

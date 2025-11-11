@@ -1,4 +1,3 @@
-
 header {
     display: flex;
     align-items: center;
@@ -588,6 +587,30 @@ p {
     text-overflow: ellipsis;
 }
 
+.queue-item-added-by {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.queue-item:hover .queue-item-added-by {
+    opacity: 1;
+    color: var(--accent-color);
+}
+
+.queue-item-added-by-badge {
+    display: inline-block;
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--accent-color);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    margin-top: 4px;
+}
+
+
 .search-result-item {
     display: flex;
     align-items: center;
@@ -1034,7 +1057,9 @@ p {
 }
 
 /* Action buttons */
-.ban-button, .unban-button, .view-transactions-button {
+.ban-button,
+.unban-button,
+.view-transactions-button {
     padding: 8px 16px !important;
     border-radius: 6px !important;
     font-weight: 500 !important;
@@ -1092,40 +1117,40 @@ p {
     #userManagement {
         padding: 20px;
     }
-    
+
     .user-search-container {
         margin-bottom: 16px;
     }
-    
+
     .user-search-input {
         padding: 10px 14px;
         font-size: 14px;
     }
-    
+
     .user-search-button {
         padding: 10px 14px !important;
     }
-    
+
     .user-search-button .search-icon {
         width: 14px;
         height: 14px;
     }
-    
+
     .table-container {
         padding: 16px;
         border-radius: 8px;
     }
-    
+
     .user-table th,
     .user-table td {
         padding: 12px 16px;
         font-size: 14px;
     }
-    
+
     .section-header h2 {
         font-size: 20px;
     }
-    
+
     .section-subtitle {
         font-size: 12px;
     }
@@ -1245,11 +1270,31 @@ p {
 }
 
 /* Set fixed column widths */
-.transaction-table th:nth-child(1) { width: 28%; } /* Track */
-.transaction-table th:nth-child(2) { width: 23%; } /* Artist */
-.transaction-table th:nth-child(3) { width: 15%; } /* Action */
-.transaction-table th:nth-child(4) { width: 20%; } /* Cost - increased for "Digipogs" */
-.transaction-table th:nth-child(5) { width: 30%; } /* Time */
+.transaction-table th:nth-child(1) {
+    width: 28%;
+}
+
+/* Track */
+.transaction-table th:nth-child(2) {
+    width: 23%;
+}
+
+/* Artist */
+.transaction-table th:nth-child(3) {
+    width: 15%;
+}
+
+/* Action */
+.transaction-table th:nth-child(4) {
+    width: 20%;
+}
+
+/* Cost - increased for "Digipogs" */
+.transaction-table th:nth-child(5) {
+    width: 30%;
+}
+
+/* Time */
 
 .transaction-table td {
     padding: 12px 16px;
@@ -1370,16 +1415,22 @@ p {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes slideIn {
-    from { 
+    from {
         opacity: 0;
         transform: translateY(-20px) scale(0.95);
     }
-    to { 
+
+    to {
         opacity: 1;
         transform: translateY(0) scale(1);
     }
@@ -1391,66 +1442,80 @@ p {
         width: 95%;
         max-height: 95vh;
     }
-    
+
     .transaction-modal-header {
         padding: 16px 20px;
         flex-direction: column;
         gap: 8px;
         text-align: center;
     }
-    
+
     .header-right {
         flex-direction: column;
         gap: 8px;
     }
-    
+
     .pagination-info {
         font-size: 12px;
     }
-    
+
     .transaction-modal-body {
         padding: 0;
     }
-    
+
     .table-wrapper {
         padding: 16px 20px;
     }
-    
+
     .transaction-modal-footer {
         padding: 12px 20px;
     }
-    
+
     .pagination-controls {
         gap: 12px;
     }
-    
+
     .pagination-btn {
         padding: 6px 12px !important;
         font-size: 12px !important;
     }
-    
+
     .page-indicator {
         font-size: 12px;
         min-width: 50px;
     }
-    
+
     .transaction-table {
         table-layout: auto;
     }
-    
+
     .transaction-table th,
     .transaction-table td {
         padding: 8px 12px;
         font-size: 12px;
     }
-    
+
     /* Reset column widths for mobile */
-    .transaction-table th:nth-child(1) { width: auto; }
-    .transaction-table th:nth-child(2) { width: auto; }
-    .transaction-table th:nth-child(3) { width: auto; }
-    .transaction-table th:nth-child(4) { width: auto; }
-    .transaction-table th:nth-child(5) { width: auto; }
-    
+    .transaction-table th:nth-child(1) {
+        width: auto;
+    }
+
+    .transaction-table th:nth-child(2) {
+        width: auto;
+    }
+
+    .transaction-table th:nth-child(3) {
+        width: auto;
+    }
+
+    .transaction-table th:nth-child(4) {
+        width: auto;
+    }
+
+    .transaction-table th:nth-child(5) {
+        width: auto;
+    }
+
     .cost-badge {
         min-width: 70px;
         font-size: 11px;
@@ -1512,6 +1577,7 @@ p {
         transform: translateX(100%);
         opacity: 0;
     }
+
     to {
         transform: translateX(0);
         opacity: 1;
