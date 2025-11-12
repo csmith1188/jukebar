@@ -56,6 +56,17 @@
             </div>
         </div>
 
+        <button id="changelog-button" class="changelog-button" title="View Changelog">
+            <img src="/img/changelog.png" alt="Changelog">
+        </button>
+
+        <div id="changelogModal" class="changelog-modal">
+            <div class="changelog-content">
+                <button id="close-changelog" class="close-changelog">&times;</button>
+                <%- include('partials/changelog') %>
+            </div>
+        </div>
+
         <script>
             (function () {
                 'use strict';
@@ -375,6 +386,23 @@
                 document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
                 document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                 document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+
+                // Changelog button event listeners
+                document.getElementById('changelog-button')?.addEventListener('click', () => {
+                    document.getElementById('changelogModal').style.display = 'block';
+                });
+
+                document.getElementById('close-changelog')?.addEventListener('click', () => {
+                    document.getElementById('changelogModal').style.display = 'none';
+                });
+
+                // Close modal when clicking outside of it
+                window.addEventListener('click', (event) => {
+                    const changelogModal = document.getElementById('changelogModal');
+                    if (event.target === changelogModal) {
+                        changelogModal.style.display = 'none';
+                    }
+                });
 
                 // Event delegation for dynamically created play buttons
                 document.getElementById('searchResults')?.addEventListener('click', (e) => {
