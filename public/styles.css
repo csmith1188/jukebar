@@ -1589,9 +1589,9 @@ p {
     position: fixed;
     bottom: 30px;
     left: 30px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    border-radius: 100%;
     background-color: #1db954;
     border: none;
     display: flex;
@@ -1601,6 +1601,7 @@ p {
     z-index: 999;
     box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
     transition: all 0.3s ease;
+    padding: 0;
 }
 
 .changelog-button:hover {
@@ -1614,8 +1615,8 @@ p {
 }
 
 .changelog-button img {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     pointer-events: none;
 }
 
@@ -1630,11 +1631,17 @@ p {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
     animation: fadeIn 0.3s ease;
+    align-items: center;
+    justify-content: center;
+}
+
+.changelog-modal[style*="display: block"] {
+    display: flex !important;
 }
 
 .changelog-content {
     background-color: #1a1a1a;
-    margin: 5% auto;
+    margin: 0;
     padding: 0;
     border-radius: 12px;
     width: 90%;
@@ -1682,36 +1689,38 @@ p {
 }
 
 .changelog-header {
-    padding: 30px 30px;
+    padding: 30px 30px 20px 30px;
     background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
     margin: 0;
     border-radius: 12px 12px 0 0;
     flex-shrink: 0;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
 }
 
 .changelog-header h1 {
     font-size: 36px;
     color: #ffffff;
-    margin-bottom: 8px;
+    margin: 0 0 8px 0;
+    white-space: nowrap;
+    order: 1;
 }
 
 .changelog-header p {
     font-size: 16px;
     color: #ffffff;
     opacity: 0.9;
-}
-
-.changelog-content {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    padding: 20px 30px 30px 30px;
+    margin: 0;
+    white-space: nowrap;
+    order: 2;
 }
 
 .version-block {
     background: linear-gradient(135deg, #1a1a1a 0%, #212121 100%);
     border-left: 4px solid #1db954;
     padding: 15px;
+    margin: 20px 30px 30px 30px;
     border-radius: 8px;
     transition: all 0.3s ease;
 }
@@ -1719,7 +1728,6 @@ p {
 .version-block:hover {
     background: linear-gradient(135deg, #212121 0%, #2a2a2a 100%);
     box-shadow: 0 4px 12px rgba(29, 185, 84, 0.2);
-    transform: translateX(4px);
 }
 
 .version-header {
