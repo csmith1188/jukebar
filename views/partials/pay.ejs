@@ -1,86 +1,82 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-
-<body>
-    <div class="card">
-        <h3 style="margin-top:0">Transfer</h3>
-        <div class="row price-display">
-            <div class="price-content">
-                <span class="price-label">Purchase Cost:</span>
-                <span class="price-amount" id="price">50 Digipogs</span>
-            </div>
-            <span class="discount-display" id="discount"></span>
+<div class="card">
+    <h3>Transfer</h3>
+    <div class="row price-display">
+        <div class="price-content">
+            <span class="price-label">Purchase Cost:</span>
+            <span class="price-amount" id="price">50 Digipogs</span>
         </div>
-        <div class="row"><label class="small">PIN</label>
-            <div><input id="pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
-                    placeholder="Input your PIN" oninput="this.value = this.value.replace(/[^0-9]/g,'');" /></div>
-        </div>
-        <div class="row">
-            <label class="medium label-inline" for="savePIN">
-                Save your PIN for next purchase?
-                <input id="savePIN" type="checkbox" />
-            </label>
-        </div>
-        <div class="row">
-            <label class="small">Please note: If you change your pin you will need to re-enter it for future
-                transactions.</label>
-        </div>
-        <div class="actions"><button class="primary" id="transferBtn">Send Transfer</button></div>
+        <span class="discount-display" id="discount"></span>
     </div>
-</body>
+    <div class="row">
+        <label class="small">PIN</label>
+        <div><input id="pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
+                placeholder="Input your PIN" oninput="this.value = this.value.replace(/[^0-9]/g,'');" /></div>
+    </div>
+    <div class="row">
+        <label class="medium label-inline" for="savePIN">
+            Save PIN for next purchase
+            <input id="savePIN" type="checkbox" />
+        </label>
+        <label class="small checkbox-note">Note: Changing your PIN will require re-entry for future transactions.</label>
+    </div>
+    <% if(typeof amount !== 'undefined' && (amount === '50' || amount === '40' || amount === '45' || amount === '47')) { %>
+    <div class="row">
+        <label class="medium label-inline" for="anonMode">
+            Anonymous Mode
+            <input id="anonMode" type="checkbox" />
+        </label>
+        <label class="small checkbox-note">Hides your name from the public queue display. Teachers can still view who added the song, and it will appear in your transaction history.</label>
+    </div>
+    <% } %>
+    <div class="actions"><button class="primary" id="transferBtn">Send Transfer</button></div>
+</div>
 <script>
-    (function() {
+    (function () {
         'use strict';
-        
+
         const pinInput = document.getElementById('pin');
         const savePIN = document.getElementById('savePIN');
         const transferBtn = document.getElementById('transferBtn');
 
-    // Load saved PIN on page load
-    async function loadSavedPin() {
-        try {
-            const savedPin = await getSavedPin();
-            if (savedPin) {
-                pinInput.value = savedPin;
-                savePIN.checked = true; // Check the save PIN checkbox if we loaded a PIN
+        // Load saved PIN on page load
+        async function loadSavedPin() {
+            try {
+                const savedPin = await getSavedPin();
+                if (savedPin) {
+                    pinInput.value = savedPin;
+                    savePIN.checked = true; // Check the save PIN checkbox if we loaded a PIN
+                }
+            } catch (error) {
+                console.error('Failed to load saved PIN:', error);
             }
-        } catch (error) {
-            console.error('Failed to load saved PIN:', error);
         }
-    }
 
-    async function getSavedPin() {
-        try {
-            const res = await fetch('/getPin', { method: 'POST' });
-            const data = await res.json();
-            if (!data.ok) {
-                console.error('Failed to retrieve saved PIN', data.error);
+        async function getSavedPin() {
+            try {
+                const res = await fetch('/getPin', { method: 'POST' });
+                const data = await res.json();
+                if (!data.ok) {
+                    console.error('Failed to retrieve saved PIN', data.error);
+                    return '';
+                }
+                return data.userPin || '';
+            } catch (error) {
+                console.error('Error fetching saved PIN:', error);
                 return '';
             }
-            return data.userPin || '';
-        } catch (error) {
-            console.error('Error fetching saved PIN:', error);
-            return '';
         }
-    }
 
-    // Load saved PIN when the page loads
-    loadSavedPin();
-    async function post(path, body) {
-        const res = await fetch(path, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const text = await res.text();
-        try { return JSON.parse(text); } catch { return { raw: text }; }
-    }
+        // Load saved PIN when the page loads
+        loadSavedPin();
+        async function post(path, body) {
+            const res = await fetch(path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const text = await res.text();
+            try { return JSON.parse(text); } catch { return { raw: text }; }
+        }
         async function doTransfer() {
             const pin = pinInput.value;
             const state = window.getPlayerState?.() || {};
@@ -152,7 +148,7 @@
 
                 if (data.ok) {
                     document.getElementById('price').innerText = `${data.amount} Digipogs`;
-                    
+
                     if (pendingAction === 'play' && data.discountApplied) {
                         document.getElementsByClassName('row price-display')[0].style.border = '1px solid rgba(255, 215, 0, 0.5)';
                         document.getElementsByClassName('row price-display')[0].style.background = 'rgba(255, 215, 0, 0.15)';
@@ -172,7 +168,7 @@
 
         // Wire up event listeners
         transferBtn?.addEventListener('click', doTransfer);
-        
+
         // Listen for price update requests from player.ejs
         window.addEventListener('updatePrice', (e) => {
             getPrice();

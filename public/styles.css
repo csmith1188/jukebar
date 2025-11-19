@@ -142,6 +142,13 @@ nav {
     box-shadow: 0 2px 16px rgba(29, 185, 84, 0.30);
 }
 
+.card h3 {
+    font-size: 1.4em;
+    font-weight: 600;
+    color: rgb(29, 185, 84);
+    margin: 0 0 24px 0;
+}
+
 h3 {
     font-size: 1.4em;
     font-weight: 600;
@@ -159,6 +166,11 @@ label.small {
     font-size: 0.95em;
     color: #b3b3b3;
     margin-bottom: 6px;
+}
+
+label.checkbox-note {
+    margin-top: 5px;
+    display: block;
 }
 
 
