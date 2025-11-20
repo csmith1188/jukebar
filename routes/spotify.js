@@ -271,7 +271,7 @@ router.post('/addToQueue', async (req, res) => {
         try {
             await ensureSpotifyAccessToken();
 
-            const { uri } = req.body;
+            const { uri, anonMode } = req.body;
             if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
             const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -283,6 +283,7 @@ router.post('/addToQueue', async (req, res) => {
             const trackData = await spotifyApi.getTrack(trackId);
             const track = trackData.body;
             const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+            const isAnon = anonMode ? 1 : 0;
             
             const trackInfo = {
                 name: track.name,
@@ -300,7 +301,8 @@ router.post('/addToQueue', async (req, res) => {
                 artist: track.artists.map(a => a.name).join(', '),
                 addedBy: username,
                 addedAt: Date.now(),
-                image: track.album.images[0]?.url
+                image: track.album.images[0]?.url,
+                isAnon: isAnon
             };
 //console.log('Adding track to queue with addedBy:', username, 'type:', typeof username); // Debug log
             queueManager.addToQueue(queueTrack);
@@ -309,9 +311,9 @@ router.post('/addToQueue', async (req, res) => {
 //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
-                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name) 
-                     VALUES (?, ?, ?, ?)`,
-                    [track.uri, username, Date.now(), username],
+                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon) 
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [track.uri, username, Date.now(), username, isAnon],
                     function(err) {
                         if (err) {
                             console.error('Failed to save queue metadata:', err);
@@ -357,7 +359,7 @@ router.post('/addToQueue', async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
 
-        const { uri } = req.body;
+        const { uri, anonMode } = req.body;
         if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
         const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -368,6 +370,7 @@ router.post('/addToQueue', async (req, res) => {
 
         const trackData = await spotifyApi.getTrack(trackId);
         const track = trackData.body;
+        const isAnon = anonMode ? 1 : 0;
         const trackInfo = {
             name: track.name,
             artist: track.artists.map(a => a.name).join(', '),
@@ -396,7 +399,8 @@ router.post('/addToQueue', async (req, res) => {
             artist: track.artists.map(a => a.name).join(', '),
             addedBy: username2,
             addedAt: Date.now(),
-            image: track.album.images[0]?.url
+            image: track.album.images[0]?.url,
+            isAnon: isAnon
         };
         queueManager.addToQueue(queueTrack);
 
@@ -404,9 +408,9 @@ router.post('/addToQueue', async (req, res) => {
 //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username2, 'type:', typeof username2);
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name) 
-                 VALUES (?, ?, ?, ?)`,
-                [track.uri, username2, Date.now(), username2],
+                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [track.uri, username2, Date.now(), username2, isAnon],
                 function(err) {
                     if (err) {
                         console.error('Failed to save queue metadata:', err);

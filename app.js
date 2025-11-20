@@ -105,12 +105,13 @@ if (process.env.SPOTIFY_CLIENT_ID) {
 // Main routes
 app.get('/', isAuthenticated, (req, res) => {
     try {
+        console.log('Session permission:', req.session.permission);
         res.render('player.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
-            userPermission: req.session.permission || null,
+            userPermission: req.session.permission || 2,
             ownerID: Number(process.env.OWNER_ID) || 4
         });
     } catch (error) {
@@ -120,12 +121,13 @@ app.get('/', isAuthenticated, (req, res) => {
 
 app.get('/spotify', isAuthenticated, (req, res) => {
     try {
+        console.log('Session permission (spotify route):', req.session.permission);
         res.render('player.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
-            userPermission: req.session.permission || null,
+            userPermission: req.session.permission || 2,
             ownerID: Number(process.env.OWNER_ID) || 4
         });
     } catch (error) {

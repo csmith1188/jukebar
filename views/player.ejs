@@ -68,6 +68,9 @@
         </div>
 
         <script>
+            // Global variables accessible to all functions
+            const userPermission = <%= userPermission %>;
+            
             (function () {
                 'use strict';
 
@@ -76,8 +79,8 @@
                 const socket = io();
 
                 socket.on('auxiliaryPermission', (permission) => {
-//console.log('Auxiliary permission:', permission);
-//console.log('User permission:', userPermission);
+                    //console.log('Auxiliary permission:', permission);
+                    //console.log('User permission:', userPermission);
                     if (permission <= userPermission) {
                         useJukebar = true;
                     } else {
@@ -88,7 +91,6 @@
                 // Global payment status flag
                 let hasPaid = <%= JSON.stringify(hasPaid || false) %>;
                 let currentID = <%= JSON.stringify(userID || null) %>;
-                let userPermission = <%= JSON.stringify(userPermission) %>;
                 let pendingTrackUri = null;
                 let pendingAction = null;
                 let currentlyPlayingUri = null;
@@ -167,10 +169,11 @@
                 }
 
                 function addToQueue(uri) {
+                    const anonMode = document.getElementById('anonMode').checked;
                     fetch('/addToQueue', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ uri })
+                        body: JSON.stringify({ uri, anonMode })
                     })
                         .then(response => {
                             if (response.ok) {
@@ -182,7 +185,7 @@
                             }
                         })
                         .catch(error => {
-//console.log('oopsies!')
+                            //console.log('oopsies!')
                             console.error('Error adding track to queue:', error);
                             Notify('Network error');
                         });
@@ -232,7 +235,7 @@
                         });
                         const data = await response.json();
                         if (data.ok) {
-//console.log('Queue data:', data.tracks.items);
+                            //console.log('Queue data:', data.tracks.items);
                             const queueDiv = document.getElementById('queue');
                             queueDiv.innerHTML = '';
                             if (data.tracks.items.length == 0) {
@@ -274,7 +277,7 @@
                         });
                         const data = await response.json();
                         if (data.ok) {
-//console.log('Currently Playing:', data.tracks.items);
+                            //console.log('Currently Playing:', data.tracks.items);
                             const CurrentDiv = document.getElementById('currentlyPlaying');
                             CurrentDiv.innerHTML = '';
                             if (data.tracks.items.length == 0) {
@@ -347,7 +350,7 @@
                         .then(data => {
                             if (data.ok) {
                                 Notify('Spotify error occurred. Your digipogs have been refunded.');
-//console.log('Refund successful:', data);
+                                //console.log('Refund successful:', data);
                             } else {
                                 Notify('Refund failed: ' + (data.error || 'Unknown error'));
                                 console.error('Refund failed:', data.error);
@@ -451,24 +454,24 @@
                 const socket = io();
 
                 socket.on('connect', () => {
-//console.log('Connected to queue sync');
+                    //console.log('Connected to queue sync');
                     socket.emit('requestQueueUpdate');
                 });
 
                 socket.on('disconnect', () => {
-//console.log('Disconnected from queue sync');
+                    //console.log('Disconnected from queue sync');
                 });
 
                 // Handle initial state
                 socket.on('initialState', (data) => {
-//console.log('initialState event received:', data);
+                    //console.log('initialState event received:', data);
                     updateQueueDisplay(data.data);
                     updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
                 });
 
                 // Handle queue updates (when queue changes)
                 socket.on('queueUpdate', (data) => {
-//console.log('queueUpdate event received:', data);
+                    //console.log('queueUpdate event received:', data);
                     updateQueueDisplay(data);
                     // Only update currently playing if we have valid current track data
                     if (data.currentTrack) {
@@ -478,13 +481,13 @@
 
                 // Handle playback state updates (playing/paused status)
                 socket.on('playbackState', (data) => {
-//console.log('playbackState event received:', data);
+                    //console.log('playbackState event received:', data);
                     updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
                 });
 
                 // Handle current track updates (from periodic sync)
                 socket.on('currentTrack', (data) => {
-//console.log('currentTrack event received:', data);
+                    //console.log('currentTrack event received:', data);
                     updateCurrentlyPlaying(data, true);
                 });
 
@@ -507,13 +510,18 @@
                 let queue = data.queue || data.data?.queue || [];
 
                 if (queue && queue.length > 0) {
-//console.log('Displaying', queue.length, 'tracks');
+                    //console.log('Displaying', queue.length, 'tracks');
                     queueDiv.innerHTML = queue.map((track, index) => {
                         // Safely convert addedBy to string, handling [object Object] cases
                         let addedByDisplay = track.addedBy;
                         if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
                             addedByDisplay = 'Spotify';
                         }
+
+                        if ((track.isAnon === 1 || track.isAnon === true) && userPermission < 3) {
+                            addedByDisplay = 'Anonymous';
+                        }
+
                         return `
                         <div class="queue-item">
                             <img src="${track.image}" alt="${track.name}" class="album-cover">
@@ -526,7 +534,7 @@
                     `;
                     }).join('');
                 } else {
-//console.log('QUEUE CLEARED - No tracks in queue, showing empty message');
+                    //console.log('QUEUE CLEARED - No tracks in queue, showing empty message');
                     queueDiv.innerHTML = '<p class="no-queue">No tracks in queue</p>';
                 }
             }

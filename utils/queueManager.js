@@ -207,7 +207,8 @@ class QueueManager {
                             duration: item.duration_ms,
                             image: item.album.images[0]?.url,
                             addedBy: metadata ? metadata.added_by : 'Spotify', // ✨ Use stored data if available
-                            addedAt: metadata ? metadata.added_at : Date.now()
+                            addedAt: metadata ? metadata.added_at : Date.now(),
+                            isAnon: metadata ? metadata.is_anon : 0
                         };
                     });
                     
@@ -280,7 +281,8 @@ class QueueManager {
                         
                         // Only update our queue if Spotify has queue data
                         const spotifyQueue = queueData.queue.map(item => {
-                            const addedBy = metadataMap[item.uri] ? metadataMap[item.uri].added_by : 'Spotify';
+                            const metadata = metadataMap[item.uri];
+                            const addedBy = metadata ? metadata.added_by : 'Spotify';
 //console.log('Sync - Track:', item.name, 'addedBy:', addedBy);
                             return {
                                 name: item.name,
@@ -289,7 +291,8 @@ class QueueManager {
                                 duration: item.duration_ms,
                                 image: item.album.images[0]?.url,
                                 addedBy: addedBy,
-                                addedAt: Date.now()
+                                addedAt: Date.now(),
+                                isAnon: metadata ? metadata.is_anon : 0
                             };
                         });
 
@@ -328,7 +331,7 @@ class QueueManager {
             }
             
             const placeholders = trackUris.map(() => '?').join(',');
-            const query = `SELECT track_uri, added_by, added_at FROM queue_metadata WHERE track_uri IN (${placeholders})`;
+            const query = `SELECT track_uri, added_by, added_at, is_anon FROM queue_metadata WHERE track_uri IN (${placeholders})`;
             
 //console.log('Querying metadata for', trackUris.length, 'tracks');
 //console.log('Query:', query);
@@ -347,7 +350,8 @@ class QueueManager {
 //console.log('Track', row.track_uri, 'added by:', row.added_by);
                             metadataMap[row.track_uri] = {
                                 added_by: row.added_by,
-                                added_at: row.added_at
+                                added_at: row.added_at,
+                                is_anon: row.is_anon
                             };
                         });
                     } else {

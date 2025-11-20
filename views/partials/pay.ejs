@@ -17,17 +17,17 @@
             Save PIN for next purchase
             <input id="savePIN" type="checkbox" />
         </label>
-        <label class="small checkbox-note">Note: Changing your PIN will require re-entry for future transactions.</label>
+        <label class="small checkbox-note">Note: Changing your PIN will require re-entry for future
+            transactions.</label>
     </div>
-    <% if(typeof amount !== 'undefined' && (amount === '50' || amount === '40' || amount === '45' || amount === '47')) { %>
-    <div class="row">
+    <div class="row" id="anonModeRow" style="display: none;">
         <label class="medium label-inline" for="anonMode">
             Anonymous Mode
             <input id="anonMode" type="checkbox" />
         </label>
-        <label class="small checkbox-note">Hides your name from the public queue display. Teachers can still view who added the song, and it will appear in your transaction history.</label>
+        <label class="small checkbox-note">Hides your name from the public queue display. Teachers can still view
+            who added the song, and it will appear in your transaction history.</label>
     </div>
-    <% } %>
     <div class="actions"><button class="primary" id="transferBtn">Send Transfer</button></div>
 </div>
 <script>
@@ -148,6 +148,14 @@
 
                 if (data.ok) {
                     document.getElementById('price').innerText = `${data.amount} Digipogs`;
+
+                    // Show/hide anonymous mode based on action type
+                    const anonModeRow = document.getElementById('anonModeRow');
+                    if (pendingAction === 'play') {
+                        anonModeRow.style.display = 'flex';
+                    } else {
+                        anonModeRow.style.display = 'none';
+                    }
 
                     if (pendingAction === 'play' && data.discountApplied) {
                         document.getElementsByClassName('row price-display')[0].style.border = '1px solid rgba(255, 215, 0, 0.5)';
