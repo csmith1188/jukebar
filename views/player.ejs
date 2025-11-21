@@ -32,6 +32,14 @@
                             </button>
                         </div>
                     </form>
+                    <% if (userID === ownerID) { %>
+                    <div class="owner-anon-container">
+                        <label class="owner-anon-label">
+                            <input type="checkbox" id="owner-anon-mode">
+                            Add songs anonymously
+                        </label>
+                    </div>
+                    <% } %>
                     <div id="searchResults"></div>
                 </div>
                 <div id="songStats">
@@ -109,7 +117,9 @@
                     }
 
                     if (currentID === ownerID) {
-                        addToQueue(uri);
+                        const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
+                        console.log('Owner adding track - anonMode:', anonMode);
+                        addToQueue(uri, anonMode);
                         return;
                     }
 
@@ -168,8 +178,11 @@
                     }
                 }
 
-                function addToQueue(uri) {
-                    const anonMode = document.getElementById('anonMode').checked;
+                function addToQueue(uri, anonMode = null) {
+                    if (anonMode === null) {
+                        anonMode = document.getElementById('anonMode')?.checked || false;
+                    }
+                    console.log('addToQueue called - uri:', uri, 'anonMode:', anonMode);
                     fetch('/addToQueue', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -227,7 +240,7 @@
                     }
                 }
 
-                async function getQueue() {
+                                async function getQueue() {
                     try {
                         const response = await fetch('/getQueue', {
                             method: 'GET',
@@ -235,29 +248,34 @@
                         });
                         const data = await response.json();
                         if (data.ok) {
-                            //console.log('Queue data:', data.tracks.items);
                             const queueDiv = document.getElementById('queue');
                             queueDiv.innerHTML = '';
                             if (data.tracks.items.length == 0) {
-                                const queueDiv = document.getElementById('queue');
                                 queueDiv.innerHTML = '<p>No tracks in queue.</p>';
                             } else {
                                 data.tracks.items.forEach((item, index) => {
                                     const itemDiv = document.createElement('div');
                                     itemDiv.className = 'queue-item';
-                                    // Safely convert addedBy to string, handling [object Object] cases
+                                    
+                                    // Handle anonymous mode
                                     let addedByDisplay = item.addedBy;
                                     if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
                                         addedByDisplay = 'Spotify';
                                     }
+                                    
+                                    // Check if anonymous mode and user is not a teacher
+                                    if ((item.isAnon === 1 || item.isAnon === true) && userPermission < 4) {
+                                        addedByDisplay = 'Anonymous';
+                                    }
+                                    
                                     itemDiv.innerHTML = `
-                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
-                        <div class="queue-item-content">
-                            <div class="queue-item-title">${item.name}</div>
-                            <div class="queue-item-artist">${item.artist}</div>
-                            <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
-                        </div>
-                    `;
+                                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                                        <div class="queue-item-content">
+                                            <div class="queue-item-title">${item.name}</div>
+                                            <div class="queue-item-artist">${item.artist}</div>
+                                            <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
+                                        </div>
+                                    `;
                                     queueDiv.appendChild(itemDiv);
                                 });
                             }
@@ -443,8 +461,6 @@
                 initializeQueueSync();
 
                 // Fallback: Still call original functions as backup (less frequently)
-                getQueue();
-                currentlyPlaying();
                 setInterval(getQueue, 60000); // Every minute as fallback
                 setInterval(currentlyPlaying, 60000);
             })();

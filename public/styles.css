@@ -1794,3 +1794,25 @@ p {
     color: #1db954;
     font-weight: bold;
 }
+
+/* Owner Anonymous Mode Checkbox */
+.owner-anon-container {
+    margin: 10px 0 15px 0;
+    text-align: center;
+}
+
+.owner-anon-label {
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    color: var(--text-color);
+    cursor: pointer;
+    user-select: none;
+}
+
+.owner-anon-label input[type="checkbox"] {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
