@@ -76,7 +76,6 @@
         </div>
 
         <script>
-            // Global variables accessible to all functions
             const userPermission = <%= userPermission %>;
             
             (function () {
@@ -87,8 +86,6 @@
                 const socket = io();
 
                 socket.on('auxiliaryPermission', (permission) => {
-                    //console.log('Auxiliary permission:', permission);
-                    //console.log('User permission:', userPermission);
                     if (permission <= userPermission) {
                         useJukebar = true;
                     } else {
