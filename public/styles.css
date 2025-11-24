@@ -50,6 +50,14 @@ header {
 body {
     background: var(--background);
     color: var(--text);
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+body.teacher-page {
+    overflow-y: auto;
+    height: auto;
 }
 
 /* Header Styles */
@@ -289,8 +297,7 @@ body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     color: #fff;
     margin: 0;
-    height: 100vh;
-    overflow: hidden;
+    overflow-y: auto;
 }
 
 h1 {
@@ -312,6 +319,7 @@ h1 {
     padding: 0 20px;
     height: calc(100vh - 200px);
     /* Fixed height for the container */
+    overflow: hidden;
 }
 
 #spotifyPlayer {
@@ -365,6 +373,40 @@ h1 {
     overflow-y: auto;
     padding-right: 15px;
     margin-right: -15px;
+}
+
+/* Queue History Section */
+#queueHistory {
+    background: #181818;
+    border-radius: 20px;
+    padding: 30px 40px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    height: 550px;
+    display: flex;
+    flex-direction: column;
+}
+
+#historyList {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 15px;
+    margin-right: -15px;
+}
+
+#loadMoreHistory {
+    background: #1db954;
+    color: #fff;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+#loadMoreHistory:hover {
+    background: #1ed760;
 }
 
 #currentlyPlaying {
