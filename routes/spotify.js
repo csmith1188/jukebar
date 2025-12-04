@@ -207,6 +207,33 @@ router.get('/getQueue', async (req, res) => {
             const queueData = await response.json();
             const items = queueData.queue || [];
 
+            // 📖 Fetch metadata for all tracks from database
+            const trackUris = items.map(item => item.uri);
+            const metadataMap = await new Promise((resolve) => {
+                if (trackUris.length === 0) {
+                    resolve({});
+                    return;
+                }
+                
+                const placeholders = trackUris.map(() => '?').join(',');
+                const query = `SELECT track_uri, added_by FROM queue_metadata WHERE track_uri IN (${placeholders})`;
+                
+                db.all(query, trackUris, (err, rows) => {
+                    if (err) {
+                        console.error('Failed to fetch queue metadata:', err);
+                        resolve({});
+                    } else {
+                        const map = {};
+                        if (rows) {
+                            rows.forEach(row => {
+                                map[row.track_uri] = row.added_by;
+                            });
+                        }
+                        resolve(map);
+                    }
+                });
+            });
+
             let simplified = items.map(t => ({
                 id: t.id,
                 name: t.name,
@@ -217,7 +244,8 @@ router.get('/getQueue', async (req, res) => {
                     image: t.album.images?.[0]?.url || null
                 },
                 explicit: t.explicit,
-                duration_ms: t.duration_ms
+                duration_ms: t.duration_ms,
+                addedBy: metadataMap[t.uri] || 'Spotify'  // ✨ Add the addedBy field
             }));
             res.json({
                 ok: true,
@@ -233,18 +261,17 @@ router.get('/getQueue', async (req, res) => {
 });
 
 router.post('/addToQueue', async (req, res) => {
-    console.log('addToQueue - Session:', req.session?.token?.id, 'hasPaid:', req.session?.hasPaid);
+//console.log('addToQueue - Session:', req.session?.token?.id, 'hasPaid:', req.session?.hasPaid);
     if (!req.session || !req.session.token || !req.session.token.id) {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
 
-    // Admin/Owner bypass
     const ownerId = Number(process.env.OWNER_ID);
     if (req.session.token.id === ownerId) {
         try {
             await ensureSpotifyAccessToken();
 
-            const { uri } = req.body;
+            const { uri, anonMode } = req.body;
             if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
             const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -255,25 +282,57 @@ router.post('/addToQueue', async (req, res) => {
 
             const trackData = await spotifyApi.getTrack(trackId);
             const track = trackData.body;
+            const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+            const isAnon = anonMode ? 1 : 0;
+            
             const trackInfo = {
                 name: track.name,
                 artist: track.artists.map(a => a.name).join(', '),
                 uri: track.uri,
                 cover: track.album.images[0].url,
+                addedBy: username
             };
 
             await spotifyApi.addToQueue(uri);
 
-            // Also add to queueManager for WebSocket updates
             const queueTrack = {
                 uri: track.uri,
                 name: track.name,
                 artist: track.artists.map(a => a.name).join(', '),
-                addedBy: req.session.user,
+                addedBy: username,
                 addedAt: Date.now(),
-                image: track.album.images[0]?.url
+                image: track.album.images[0]?.url,
+                isAnon: isAnon
             };
+//console.log('Adding track to queue with addedBy:', username, 'type:', typeof username); // Debug log
             queueManager.addToQueue(queueTrack);
+
+            // 📝 Save metadata to database (synchronously)
+//console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon) 
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [track.uri, username, Date.now(), username, isAnon],
+                    function(err) {
+                        if (err) {
+                            console.error('Failed to save queue metadata:', err);
+                            reject(err);
+                        } else {
+//console.log('Saved queue metadata for:', track.name, 'URI:', track.uri, 'LastID:', this.lastID, 'Changes:', this.changes);
+                            // Verify it was actually saved
+                            db.get('SELECT * FROM queue_metadata WHERE track_uri = ?', [track.uri], (verifyErr, row) => {
+                                if (verifyErr) {
+                                    console.error('Verification failed:', verifyErr);
+                                } else {
+//console.log('Verification: Row exists with addedBy:', row?.added_by);
+                                }
+                            });
+                            resolve();
+                        }
+                    }
+                );
+            });
 
             db.run(
                 "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
@@ -282,7 +341,7 @@ router.post('/addToQueue', async (req, res) => {
                 }
             );
 
-            console.log(`Add to queue successful for owner (ID: ${req.session.token.id})`);
+//console.log(`Add to queue successful for owner (ID: ${req.session.token.id})`);
             res.json({ success: true, message: "Track queued!", trackInfo });
             return;
         } catch (err) {
@@ -293,14 +352,14 @@ router.post('/addToQueue', async (req, res) => {
 
     // For non-admin users, check payment
     if (!req.session.hasPaid) {
-        console.log('addToQueue - Payment required. User ID:', req.session.token.id, 'hasPaid:', req.session.hasPaid);
+//console.log('addToQueue - Payment required. User ID:', req.session.token.id, 'hasPaid:', req.session.hasPaid);
         return res.status(403).json({ ok: false, error: 'Payment required to add to queue' });
     }
 
     try {
         await ensureSpotifyAccessToken();
 
-        const { uri } = req.body;
+        const { uri, anonMode } = req.body;
         if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
         const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -311,6 +370,7 @@ router.post('/addToQueue', async (req, res) => {
 
         const trackData = await spotifyApi.getTrack(trackId);
         const track = trackData.body;
+        const isAnon = anonMode ? 1 : 0;
         const trackInfo = {
             name: track.name,
             artist: track.artists.map(a => a.name).join(', '),
@@ -331,15 +391,45 @@ router.post('/addToQueue', async (req, res) => {
         await spotifyApi.addToQueue(uri);
 
         // Also add to queueManager for WebSocket updates
+        const username2 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+        
         const queueTrack = {
             uri: track.uri,
             name: track.name,
             artist: track.artists.map(a => a.name).join(', '),
-            addedBy: req.session.user,
+            addedBy: username2,
             addedAt: Date.now(),
-            image: track.album.images[0]?.url
+            image: track.album.images[0]?.url,
+            isAnon: isAnon
         };
         queueManager.addToQueue(queueTrack);
+
+        // 📝 Save metadata to database (synchronously)
+//console.log('Saving to DB - URI:', track.uri, 'addedBy:', username2, 'type:', typeof username2);
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [track.uri, username2, Date.now(), username2, isAnon],
+                function(err) {
+                    if (err) {
+                        console.error('Failed to save queue metadata:', err);
+                        reject(err);
+                    } else {
+//console.log('Saved queue metadata for:', track.name, 'URI:', track.uri, 'LastID:', this.lastID, 'Changes:', this.changes);
+                        // Verify it was actually saved
+                        db.get('SELECT * FROM queue_metadata WHERE track_uri = ?', [track.uri], (verifyErr, row) => {
+                            if (verifyErr) {
+                                console.error('Verification failed:', verifyErr);
+                            } else {
+//console.log('Verification: Row exists with addedBy:', row?.added_by);
+                            }
+                        });
+                        resolve();
+                    }
+                }
+            );
+        });
 
         db.run(
             "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
@@ -423,7 +513,7 @@ router.get('/currentlyPlaying', async (req, res) => {
 });
 
 router.post('/skip', async (req, res) => {
-    console.log('skip - Session:', req.session?.token?.id, 'hasPaid:', req.session?.hasPaid);
+//console.log('skip - Session:', req.session?.token?.id, 'hasPaid:', req.session?.hasPaid);
     if (!req.session || !req.session.token || !req.session.token.id) {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
@@ -437,7 +527,7 @@ router.post('/skip', async (req, res) => {
 
             // Update queueManager and broadcast to clients
             const nextTrack = queueManager.skipTrack();
-            console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
+//console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
             res.json({ ok: true, currentTrack: nextTrack });
             return;
         } catch (error) {
@@ -452,7 +542,7 @@ router.post('/skip', async (req, res) => {
 
     // For non-admin users, check payment and claim it
     if (!req.session.hasPaid) {
-        console.log('skip - Payment required. User ID:', req.session.token.id, 'hasPaid:', req.session.hasPaid);
+//console.log('skip - Payment required. User ID:', req.session.token.id, 'hasPaid:', req.session.hasPaid);
         return res.status(403).json({ ok: false, error: 'Payment required to skip' });
     }
 
@@ -511,11 +601,13 @@ router.post('/queue/add', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'Missing track URI' });
         }
 
+        const username3 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+        
         const track = {
             uri,
             name: trackName,
             artist,
-            addedBy: req.session.user,
+            addedBy: username3,
             addedAt: Date.now()
         };
 
@@ -523,7 +615,7 @@ router.post('/queue/add', async (req, res) => {
 
         // Log the transaction
         if (req.session.token?.id) {
-            await logTransaction(req.session.token.id, req.session.user, 'QUEUE', uri, trackName, artist, 50);
+            await logTransaction(req.session.token.id, username3, 'QUEUE', uri, trackName, artist, 50);
         }
 
         res.json({ ok: true, message: 'Track added to queue', queue: queueManager.queue });

@@ -134,7 +134,7 @@ router.post('/api/leaderboard/force-reset', async (req, res) => {
         });
 
         res.json({ ok: true, message: "Leaderboard has been force reset." });
-        //console.log('✅ Leaderboard force reset completed!');
+        //console.log('Leaderboard force reset completed!');
     } catch (error) {
         res.status(500).json({ ok: false, message: error.message });
     }

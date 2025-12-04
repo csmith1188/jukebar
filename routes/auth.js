@@ -25,7 +25,7 @@ router.get('/login', (req, res) => {
         setRawToken(rawToken);
         
         // console.log('Token data:', tokenData);
-        console.log('User permission:', req.session.permission);
+//console.log('User permission:', req.session.permission);
         
         db.run("INSERT INTO users (id, displayName, pin) VALUES (?, ?, ?)", [tokenData.id, tokenData.displayName, null], (err) => {
             // if the table doesnt exist, create it
@@ -43,7 +43,7 @@ router.get('/login', (req, res) => {
                                     console.error('Database error:', err.message);
                                 }
                             } else {
-                                console.log('New user added to database');
+//console.log('New user added to database');
                             }
                         });
                         const redirectTo = req.query.redirectURL || '/spotify';
@@ -57,7 +57,7 @@ router.get('/login', (req, res) => {
                 console.error('Database error:', err.message);
                 res.status(500).send('Database error');
             } else {
-                console.log('New user added to database');
+//console.log('New user added to database');
                 const redirectTo = req.query.redirectURL || '/spotify';
                 res.redirect(redirectTo);
             }
