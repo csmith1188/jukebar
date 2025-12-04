@@ -173,6 +173,8 @@
     let historyOffset = 0;
     const historyLimit = 20;
 
+
+    // this function fetches the queue history and appends it to the history list
     async function fetchQueueHistory(reset = false) {
         if (reset) historyOffset = 0;
         
@@ -196,6 +198,7 @@
                     const date = new Date(play.timestamp);
                     const timeAgo = getTimeAgo(date);
                     
+                    // Constructs inner HTML
                     playDiv.innerHTML = `
                         <img src="${play.albumImage || '/img/placeholder.png'}" alt="${play.track_name}" class="album-cover" style="width: 60px; height: 60px; border-radius: 8px; margin-right: 16px; object-fit: cover;" />
                         <div style="flex: 1; min-width: 0;">
@@ -220,7 +223,7 @@
                 
                 historyOffset += data.plays.length;
                 
-                // Hide "Load More" if we got fewer results than requested
+                // Hide "Load More" if there's fewer results than requested
                 if (data.plays.length < historyLimit) {
                     document.getElementById('loadMoreHistory').style.display = 'none';
                 } else {
@@ -236,6 +239,7 @@
         }
     }
 
+    // displays the date format as M D, Y, T example: "Jun 5, 2023, 3:45 PM"
     function getTimeAgo(date) {
         return date.toLocaleString('en-US', {
             month: 'short',
@@ -260,6 +264,8 @@
         searchSpotify();
     }
 
+
+    // search feature for banning tracks
     async function searchSpotify() {
         const query = document.getElementById('searchInput').value;
         if (!query) return;
@@ -299,13 +305,10 @@
 
     const socket = io();
 
-    socket.on('connect', () => {
-        //console.log('Connected to server for queue updates');
-        socket.emit('requestQueueUpdate');
-    });
 
-    socket.on('disconnect', () => {
-        //console.log('Disconnected from server');
+    // Request initial queue data on connect
+    socket.on('connect', () => {
+        socket.emit('requestQueueUpdate');
     });
 
     // Handle queue updates

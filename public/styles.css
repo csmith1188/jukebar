@@ -297,7 +297,7 @@ body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     color: #fff;
     margin: 0;
-    overflow-y: auto;
+    /* overflow-y: auto; */
 }
 
 h1 {
@@ -384,6 +384,8 @@ h1 {
     height: 550px;
     display: flex;
     flex-direction: column;
+    margin: 0 auto;
+    max-width: 1400px;
 }
 
 #historyList {
@@ -876,6 +878,22 @@ p {
 
 .close-btn:hover {
     color: red;
+}
+
+.notification-success {
+    background-color: #1db954 !important;
+}
+
+.notification-error {
+    background-color: #ff0000 !important;
+}
+
+.notification-error .close-btn {
+    color: white !important;
+}
+
+.notification-error .close-btn:hover {
+    color: #ffcccc !important;
 }
 
 /* teacher */
