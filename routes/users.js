@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { isAuthenticated } = require('../middleware/auth');
+const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
 
 // Middleware to check if user has teacher permissions
 const requireTeacherAccess = (req, res, next) => {
@@ -31,6 +32,64 @@ router.get('/api/users', isAuthenticated, requireTeacherAccess, async (req, res)
     } catch (error) {
         console.error('Error fetching users:', error);
         res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
+// Get queue history (play transactions only)
+router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    console.log('📊 Queue history endpoint hit - User:', req.session.user, 'Permission:', req.session.permission);
+    try {
+        const db = require('../utils/database');
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = parseInt(req.query.offset) || 0;
+        
+        console.log('Fetching queue history - limit:', limit, 'offset:', offset);
+        
+        // Get play transactions with user info
+        const plays = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT 
+                    t.track_name,
+                    t.artist_name,
+                    t.track_uri,
+                    t.display_name as user,
+                    t.timestamp,
+                    datetime(t.timestamp) as formatted_time
+                FROM transactions t
+                WHERE t.action = 'play'
+                ORDER BY t.timestamp DESC
+                LIMIT ? OFFSET ?
+            `, [limit, offset], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
+        });
+
+        // Fetch album art from Spotify for each track
+        await ensureSpotifyAccessToken();
+        const enrichedPlays = await Promise.all(plays.map(async (play) => {
+            try {
+                if (play.track_uri) {
+                    const trackId = play.track_uri.replace('spotify:track:', '');
+                    const trackData = await spotifyApi.getTrack(trackId);
+                    return {
+                        ...play,
+                        albumImage: trackData.body.album.images?.[0]?.url || '/img/placeholder.png'
+                    };
+                }
+            } catch (err) {
+                console.warn(`Could not fetch album art for ${play.track_name}:`, err.message);
+            }
+            return { ...play, albumImage: '/img/placeholder.png' };
+        }));
+        
+        res.json({ ok: true, plays: enrichedPlays });
+    } catch (error) {
+        console.error('Error fetching queue history:', error);
+        res.status(500).json({ ok: false, error: 'Failed to fetch queue history' });
     }
 });
 

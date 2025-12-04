@@ -18,9 +18,9 @@ class QueueManager {
 
     // Add track to queue
     addToQueue(track) {
-        // console.log('🔵 addToQueue called with track:', track);
+//console.log('addToQueue called with track:', track);
         this.queue.push(track);
-        // console.log('🔵 Queue after adding:', this.queue.length, 'tracks');
+//console.log('Queue after adding:', this.queue.length, 'tracks');
         
         // Send queue update - but don't force currentTrack update (let Spotify sync handle that)
         this.broadcastUpdate('queueUpdate', {
@@ -48,7 +48,15 @@ class QueueManager {
             const nextTrack = this.queue.shift();
             this.currentTrack = nextTrack; // Update current track when skipping
             this.lastUpdate = Date.now();
-            // console.log('🔴 Skipped to next track:', nextTrack?.name);
+            
+            // 🗑️ Clean up metadata for the skipped track
+            if (nextTrack && nextTrack.uri) {
+                this.removeTrackMetadata(nextTrack.uri).catch(err => {
+                    console.error('Failed to remove track metadata on skip:', err);
+                });
+            }
+            
+//console.log('Skipped to next track:', nextTrack?.name);
             
             // Send queue update with updated current track
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
@@ -86,7 +94,7 @@ class QueueManager {
 
     // Broadcast updates to all connected clients
     broadcastUpdate(type, data) {
-        // console.log(`🟡 Broadcasting ${type} event to ${this.clients.size} clients with data:`, data);
+//console.log(`Broadcasting ${type} event to ${this.clients.size} clients with data:`, data);
         
         let successCount = 0;
         let failCount = 0;
@@ -110,7 +118,7 @@ class QueueManager {
             }
         });
         
-        // console.log(`🟡 Broadcast complete: ${successCount} sent, ${failCount} failed`);
+//console.log(`Broadcast complete: ${successCount} sent, ${failCount} failed`);
     }
 
     // Add WebSocket client
@@ -142,7 +150,7 @@ class QueueManager {
     // Initialize queue from Spotify on startup
     async initializeFromSpotify(spotifyApi) {
         try {
-            // console.log('🔵 Fetching current Spotify queue...');
+//console.log('Fetching current Spotify queue...');
             
             // Ensure we have a valid access token
             const { ensureSpotifyAccessToken } = require('./spotify');
@@ -160,7 +168,7 @@ class QueueManager {
                 };
                 this.isPlaying = currentPlayback.body.is_playing;
                 this.progress = currentPlayback.body.progress_ms;
-                // console.log('🔵 Current track set:', this.currentTrack.name);
+//console.log('Current track set:', this.currentTrack.name);
             }
             
             // Try to get the user's queue using available methods
@@ -175,32 +183,43 @@ class QueueManager {
                 } else if (typeof spotifyApi.getUserQueue === 'function') {
                     queueData = await spotifyApi.getUserQueue();
                 } else {
-                    // console.log('🔵 Queue API method not available in this Spotify library version');
-                    // console.log('🔵 Starting with empty queue - tracks will be added as they are queued');
+//console.log('Queue API method not available in this Spotify library version');
+//console.log('Starting with empty queue - tracks will be added as they are queued');
                     this.queue = [];
                     return;
                 }
                 
                 if (queueData && queueData.body && queueData.body.queue) {
-                    // Convert Spotify queue items to our format
-                    this.queue = queueData.body.queue.map(item => ({
-                        name: item.name,
-                        artist: item.artists.map(a => a.name).join(', '),
-                        uri: item.uri,
-                        duration: item.duration_ms,
-                        image: item.album.images[0]?.url,
-                        addedBy: 'Spotify', // We don't know who added tracks that were already in queue
-                        addedAt: Date.now()
-                    }));
+//console.log('Found', queueData.body.queue.length, 'tracks in Spotify queue');
                     
-                    // console.log(`🔵 Initialized queue with ${this.queue.length} tracks from Spotify`);
+                    // 📖 Fetch metadata for all tracks from database
+                    const trackUris = queueData.body.queue.map(item => item.uri);
+                    const metadataMap = await this.getQueueMetadata(trackUris);
+                    
+                    // Convert Spotify queue items to our format, merging with metadata
+                    this.queue = queueData.body.queue.map(item => {
+                        const metadata = metadataMap[item.uri];
+                        
+                        return {
+                            name: item.name,
+                            artist: item.artists.map(a => a.name).join(', '),
+                            uri: item.uri,
+                            duration: item.duration_ms,
+                            image: item.album.images[0]?.url,
+                            addedBy: metadata ? metadata.added_by : 'Spotify', // ✨ Use stored data if available
+                            addedAt: metadata ? metadata.added_at : Date.now(),
+                            isAnon: metadata ? metadata.is_anon : 0
+                        };
+                    });
+                    
+//console.log('Initialized queue with', this.queue.length, 'tracks');
                 } else {
-                    // console.log('🔵 No queue data found or queue is empty');
+//console.log('No queue data found or queue is empty');
                     this.queue = [];
                 }
             } catch (queueError) {
-                // console.log('🔵 Could not fetch Spotify queue:', queueError.message);
-                // console.log('🔵 Starting with empty queue - tracks will be added as they are queued');
+//console.log('Could not fetch Spotify queue:', queueError.message);
+//console.log('Starting with empty queue - tracks will be added as they are queued');
                 this.queue = [];
             }
             
@@ -233,10 +252,10 @@ class QueueManager {
 
                 // Only broadcast if track changed
                 if (!this.currentTrack || this.currentTrack.uri !== track.uri) {
-                    // console.log('🟢 Track changed during sync, updating current track:', track.name);
+//console.log('Track changed during sync, updating current track:', track.name);
                     this.updateCurrentTrack(track);
                 } else {
-                    // console.log('🟢 Track unchanged during sync:', track.name);
+//console.log('Track unchanged during sync:', track.name);
                 }
 
                 this.updatePlaybackState(
@@ -254,25 +273,37 @@ class QueueManager {
                 if (queueResponse.status === 200) {
                     const queueData = await queueResponse.json();
                     if (queueData.queue && Array.isArray(queueData.queue)) {
+                        // 📖 Fetch metadata for all tracks from database
+                        const trackUris = queueData.queue.map(item => item.uri);
+//console.log('Syncing queue - requesting metadata for', trackUris.length, 'tracks');
+                        const metadataMap = await this.getQueueMetadata(trackUris);
+//console.log('Sync - received metadata for', Object.keys(metadataMap).length, 'tracks');
+                        
                         // Only update our queue if Spotify has queue data
-                        const spotifyQueue = queueData.queue.map(item => ({
-                            name: item.name,
-                            artist: item.artists.map(a => a.name).join(', '),
-                            uri: item.uri,
-                            duration: item.duration_ms,
-                            image: item.album.images[0]?.url,
-                            addedBy: 'Spotify',
-                            addedAt: Date.now()
-                        }));
+                        const spotifyQueue = queueData.queue.map(item => {
+                            const metadata = metadataMap[item.uri];
+                            const addedBy = metadata ? metadata.added_by : 'Spotify';
+//console.log('Sync - Track:', item.name, 'addedBy:', addedBy);
+                            return {
+                                name: item.name,
+                                artist: item.artists.map(a => a.name).join(', '),
+                                uri: item.uri,
+                                duration: item.duration_ms,
+                                image: item.album.images[0]?.url,
+                                addedBy: addedBy,
+                                addedAt: Date.now(),
+                                isAnon: metadata ? metadata.is_anon : 0
+                            };
+                        });
 
                         // Update our internal queue with Spotify's queue
                         this.queue = spotifyQueue;
-                        // console.log(`🟢 Synced queue with Spotify: ${this.queue.length} tracks`);
+//console.log(`Synced queue with Spotify: ${this.queue.length} tracks`);
                     }
                 }
             } catch (queueError) {
                 // Don't fail the whole sync if queue fetch fails
-                // console.log('🟡 Could not sync queue from Spotify:', queueError.message);
+//console.log('Could not sync queue from Spotify:', queueError.message);
             }
         } catch (error) {
             // Handle network errors more gracefully
@@ -287,6 +318,71 @@ class QueueManager {
                 console.error('Spotify sync error:', error.message || error);
             }
         }
+    }
+
+    // Fetch metadata for multiple tracks from database
+    async getQueueMetadata(trackUris) {
+        const db = require('./database');
+        
+        return new Promise((resolve, reject) => {
+            if (trackUris.length === 0) {
+                resolve({});
+                return;
+            }
+            
+            const placeholders = trackUris.map(() => '?').join(',');
+            const query = `SELECT track_uri, added_by, added_at, is_anon FROM queue_metadata WHERE track_uri IN (${placeholders})`;
+            
+//console.log('Querying metadata for', trackUris.length, 'tracks');
+//console.log('Query:', query);
+//console.log('URIs:', trackUris);
+            
+            db.all(query, trackUris, (err, rows) => {
+                if (err) {
+                    console.error('Failed to fetch queue metadata:', err);
+                    resolve({});
+                } else {
+//console.log('Found', rows ? rows.length : 0, 'metadata rows in database');
+                    // Convert array to map for easy lookup
+                    const metadataMap = {};
+                    if (rows && rows.length > 0) {
+                        rows.forEach(row => {
+//console.log('Track', row.track_uri, 'added by:', row.added_by);
+                            metadataMap[row.track_uri] = {
+                                added_by: row.added_by,
+                                added_at: row.added_at,
+                                is_anon: row.is_anon
+                            };
+                        });
+                    } else {
+//console.log('No metadata rows found in database');
+                    }
+//console.log('Built metadata map with', Object.keys(metadataMap).length, 'entries');
+                    resolve(metadataMap);
+                }
+            });
+        });
+    }
+
+    // Remove metadata for a track when it's played/skipped
+    async removeTrackMetadata(trackUri) {
+        const db = require('./database');
+        
+        return new Promise((resolve, reject) => {
+            db.run(
+                'DELETE FROM queue_metadata WHERE track_uri = ?',
+                [trackUri],
+                (err) => {
+                    if (err) {
+                        console.error('Failed to remove track metadata:', err);
+                        reject(err);
+                    } else {
+//console.log('Removed metadata for track:', trackUri);
+                        resolve();
+                    }
+                }
+            );
+        });
     }
 }
 

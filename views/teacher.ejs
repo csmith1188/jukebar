@@ -10,7 +10,7 @@
     <script src="/socket.io/socket.io.js"></script>
 </head>
 
-<body>
+<body class="teacher-page">
     <%- include('partials/header', { page: 'teacher' }) %>
         <div class="main-content">
             <p class="user-greeting">Logged in as: <strong>
@@ -55,6 +55,20 @@
                             <tbody id="userTableBody">
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+            <div class="container" style="margin-top: 30px;">
+                <div id="queueHistory">
+                    <div class="section-header">
+                        <h2>Queue History</h2>
+                        <p class="section-subtitle">Recently played tracks</p>
+                    </div>
+                    <div id="historyList">
+                        <p style="text-align: center; color: #b3b3b3;">Loading...</p>
+                    </div>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button id="loadMoreHistory">Load More</button>
                     </div>
                 </div>
             </div>
@@ -156,12 +170,102 @@
         });
     }
 
-    document.addEventListener('DOMContentLoaded', fetchUsers);
+    let historyOffset = 0;
+    const historyLimit = 20;
+
+
+    // this function fetches the queue history and appends it to the history list
+    async function fetchQueueHistory(reset = false) {
+        if (reset) historyOffset = 0;
+        
+        try {
+            const res = await fetch(`/api/queueHistory?limit=${historyLimit}&offset=${historyOffset}`);
+            if (!res.ok) throw new Error('Failed to fetch queue history');
+            const data = await res.json();
+            
+            const historyList = document.getElementById('historyList');
+            
+            if (reset) {
+                historyList.innerHTML = '';
+            }
+            
+            if (data.plays && data.plays.length > 0) {
+                data.plays.forEach(play => {
+                    const playDiv = document.createElement('div');
+                    playDiv.className = 'queue-item';
+                    playDiv.style.cssText = 'display: flex; align-items: center; border-radius: 12px; padding: 12px; margin-bottom: 8px; transition: background 0.2s ease; border: 1px solid rgba(255, 255, 255, 0.15);';
+                    
+                    const date = new Date(play.timestamp);
+                    const timeAgo = getTimeAgo(date);
+                    
+                    // Constructs inner HTML
+                    playDiv.innerHTML = `
+                        <img src="${play.albumImage || '/img/placeholder.png'}" alt="${play.track_name}" class="album-cover" style="width: 60px; height: 60px; border-radius: 8px; margin-right: 16px; object-fit: cover;" />
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 1rem; margin: 0 0 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${play.track_name}</div>
+                            <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; margin: 0;">${play.artist_name}</div>
+                        </div>
+                        <div style="text-align: right; margin-left: 16px; min-width: 120px;">
+                            <div style="color: #1db954; font-size: 0.85rem; font-weight: 500;">${play.user}</div>
+                            <div style="color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; margin-top: 2px;">${timeAgo}</div>
+                        </div>
+                    `;
+                    
+                    playDiv.addEventListener('mouseenter', () => {
+                        playDiv.style.background = 'rgba(255, 255, 255, 0.1)';
+                    });
+                    playDiv.addEventListener('mouseleave', () => {
+                        playDiv.style.background = 'transparent';
+                    });
+                    
+                    historyList.appendChild(playDiv);
+                });
+                
+                historyOffset += data.plays.length;
+                
+                // Hide "Load More" if there's fewer results than requested
+                if (data.plays.length < historyLimit) {
+                    document.getElementById('loadMoreHistory').style.display = 'none';
+                } else {
+                    document.getElementById('loadMoreHistory').style.display = 'inline-block';
+                }
+            } else if (reset) {
+                historyList.innerHTML = '<p style="text-align: center; color: #b3b3b3;">No play history found</p>';
+                document.getElementById('loadMoreHistory').style.display = 'none';
+            }
+        } catch (err) {
+            console.error('Error loading queue history:', err);
+            document.getElementById('historyList').innerHTML = '<p style="text-align: center; color: #ff4444;">Failed to load history</p>';
+        }
+    }
+
+    // displays the date format as M D, Y, T example: "Jun 5, 2023, 3:45 PM"
+    function getTimeAgo(date) {
+        return date.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+    }
+
+    document.getElementById('loadMoreHistory')?.addEventListener('click', () => {
+        fetchQueueHistory(false);
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchUsers();
+        fetchQueueHistory(true);
+    });
     function handleSearchSubmit(event) {
         event.preventDefault();
         searchSpotify();
     }
 
+
+    // search feature for banning tracks
     async function searchSpotify() {
         const query = document.getElementById('searchInput').value;
         if (!query) return;
@@ -201,13 +305,10 @@
 
     const socket = io();
 
-    socket.on('connect', () => {
-        //console.log('Connected to server for queue updates');
-        socket.emit('requestQueueUpdate');
-    });
 
-    socket.on('disconnect', () => {
-        //console.log('Disconnected from server');
+    // Request initial queue data on connect
+    socket.on('connect', () => {
+        socket.emit('requestQueueUpdate');
     });
 
     // Handle queue updates
