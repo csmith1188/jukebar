@@ -77,6 +77,13 @@
 
         <script>
             const userPermission = <%= userPermission %>;
+            
+            // Global variables that need to be accessed by multiple functions
+            let currentlyPlayingUri = null;
+            let currentProgress = 0; // Current progress in ms
+            let currentDuration = 0; // Track duration in ms
+            let isCurrentlyPlaying = false;
+            let progressInterval = null;
 
             (function () {
                 'use strict';
@@ -86,19 +93,11 @@
                 const socket = io();
 
                 socket.on('auxiliaryPermission', (permission) => {
-                    console.log('=== AUXILIARY PERMISSION UPDATE ===');
-                    console.log('Received auxiliaryPermission:', permission);
-                    console.log('User permission:', userPermission);
-                    console.log('Comparison:', permission, '<=', userPermission, '=', permission <= userPermission);
                     if (permission <= userPermission) {
                         useJukebar = true;
-                        console.log('✅ Jukebar ENABLED for user');
                     } else {
                         useJukebar = false;
-                        console.log('❌ Jukebar DISABLED for user');
                     }
-                    console.log('useJukebar is now:', useJukebar);
-                    console.log('===================================');
                 });
 
                 // Global payment status flag
@@ -106,7 +105,6 @@
                 let currentID = <%= JSON.stringify(userID || null) %>;
                 let pendingTrackUri = null;
                 let pendingAction = null;
-                let currentlyPlayingUri = null;
                 const ownerID = <%= JSON.stringify(ownerID) %>;
 
                 function handleSearchSubmit(event) {
@@ -115,29 +113,19 @@
                 }
 
                 async function checkPaymentAndPlay(uri) {
-                    console.log('=== CHECK PAYMENT AND PLAY ===');
-                    console.log('useJukebar:', useJukebar);
-                    console.log('userPermission:', userPermission);
-                    console.log('currentID:', currentID);
-                    console.log('ownerID:', ownerID);
-
                     // Check if Jukebar is enabled
                     if (!useJukebar) {
-                        console.log('❌ Jukebar disabled - blocking request');
                         Notify('Jukebar is currently disabled by your teacher.', 'error');
                         return;
                     }
 
                     if (currentID === ownerID) {
-                        console.log('✅ Owner detected - bypassing payment');
                         const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
-                        console.log('Owner adding track - anonMode:', anonMode);
                         addToQueue(uri, anonMode);
                         return;
                     }
 
                     if (!hasPaid) {
-                        console.log('💰 Payment required - showing payment modal');
                         pendingTrackUri = uri;
                         pendingAction = 'play';
                         showPayment();
@@ -145,26 +133,34 @@
                     }
 
                     // Reset payment flag after using it
-                    console.log('✅ Payment confirmed - adding to queue');
                     hasPaid = false;
                     addToQueue(uri);
                 }
 
                 async function checkPaymentAndSkip() {
+                    console.log('⏭️ Skip clicked - currentlyPlayingUri:', currentlyPlayingUri);
+                    
                     // Check if Jukebar is enabled
                     if (!useJukebar) {
                         Notify('Jukebar is currently disabled by your teacher.', 'error');
                         return;
                     }
 
-                    currentlyPlayingUri = `spotify:track:${currentlyPlayingUri}`;
-                    if (currentID === ownerID) {
-                        skip(currentlyPlayingUri);
+                    // Build the full URI - add prefix only if not already present
+                    let skipUri = currentlyPlayingUri;
+                    if (currentlyPlayingUri && !currentlyPlayingUri.startsWith('spotify:track:')) {
+                        skipUri = `spotify:track:${currentlyPlayingUri}`;
+                    }
+
+                    console.log('⏭️ Final skipUri:', skipUri);
+                    
+                    if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
+                        skip(skipUri);
                         return;
                     }
 
                     if (!hasPaid) {
-                        pendingTrackUri = currentlyPlayingUri;
+                        pendingTrackUri = skipUri;
                         pendingAction = 'skip';
                         showPayment();
                         return;
@@ -172,7 +168,7 @@
 
                     // Reset payment flag after using it
                     hasPaid = false;
-                    skip(currentlyPlayingUri);
+                    skip(skipUri);
                 }
 
                 async function skip(uri) {
@@ -182,10 +178,19 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ uri })
                         });
-                        if (!response.ok) {
-                            refund();
-                        } else {
+                        
+                        const data = await response.json();
+                        
+                        if (data.shieldBlocked) {
+                            // Skip was blocked by a shield
+                            Notify(data.message || 'Skip blocked by shield! 🛡️', 'error');
+                        } else if (data.ok) {
+                            // Skip succeeded
                             Notify('Track skipped!', 'success');
+                        } else {
+                            // Other error
+                            Notify(data.error || 'Failed to skip', 'error');
+                            refund();
                         }
                     } catch (error) {
                         console.error('Error skipping track:', error);
@@ -197,7 +202,6 @@
                     if (anonMode === null) {
                         anonMode = document.getElementById('anonMode')?.checked || false;
                     }
-                    console.log('addToQueue called - uri:', uri, 'anonMode:', anonMode);
                     fetch('/addToQueue', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -363,6 +367,11 @@
                             } else if (pendingAction === 'skip') {
                                 pendingAction = null;
                                 checkPaymentAndSkip();
+                            } else if (pendingAction === 'Skip Shield' && pendingTrackUri) {
+                                const uri = pendingTrackUri;
+                                pendingTrackUri = null;
+                                pendingAction = null;
+                                purchaseShieldAfterPayment(uri);
                             }
                         }, 100); // 100ms delay
                     }
@@ -477,6 +486,7 @@
                     return {
                         hasPaid: hasPaid,
                         pendingAction: pendingAction,
+                        pendingTrackUri: pendingTrackUri,
                         currentID: currentID
                     };
                 };
@@ -491,17 +501,45 @@
                         Notify('Jukebar is currently disabled by your teacher.', 'error');
                         return;
                     }
+                    
+                    // Owner can purchase shields for free without payment modal
+                    if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
+                        purchaseShieldAfterPayment(trackUri);
+                        return;
+                    }
+                    
                     pendingTrackUri = trackUri;
                     pendingAction = 'Skip Shield';
                     showPayment();
                 };
 
+                async function purchaseShieldAfterPayment(trackUri) {
+                    try {
+                        const response = await fetch('/purchaseShield', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ trackUri })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.ok) {
+                            Notify(data.message || 'Skip Shield added successfully!', 'success');
+                            // Reset payment flag after successful purchase
+                            hasPaid = false;
+                            // Refresh queue to show updated shield count
+                            socket.emit('getQueue');
+                        } else {
+                            Notify(data.error || 'Failed to add Skip Shield', 'error');
+                        }
+                    } catch (err) {
+                        console.error('Error purchasing shield:', err);
+                        Notify('Network error purchasing Skip Shield', 'error');
+                    }
+                }
+
                 // Initialize WebSocket-based queue sync
                 initializeQueueSync();
-
-                // Fallback: Still call original functions as backup (less frequently)
-                setInterval(getQueue, 60000); // Every minute as fallback
-                setInterval(currentlyPlaying, 60000);
             })();
 
             // WebSocket-based queue synchronization
@@ -509,24 +547,17 @@
                 const socket = io();
 
                 socket.on('connect', () => {
-                    //console.log('Connected to queue sync');
                     socket.emit('requestQueueUpdate');
-                });
-
-                socket.on('disconnect', () => {
-                    //console.log('Disconnected from queue sync');
                 });
 
                 // Handle initial state
                 socket.on('initialState', (data) => {
-                    //console.log('initialState event received:', data);
                     updateQueueDisplay(data.data);
                     updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
                 });
 
                 // Handle queue updates (when queue changes)
                 socket.on('queueUpdate', (data) => {
-                    //console.log('queueUpdate event received:', data);
                     updateQueueDisplay(data);
                     // Only update currently playing if we have valid current track data
                     if (data.currentTrack) {
@@ -536,7 +567,6 @@
 
                 // Handle playback state updates (playing/paused status)
                 socket.on('playbackState', (data) => {
-                    //console.log('playbackState event received:', data);
                     updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
                 });
 
@@ -553,6 +583,16 @@
 
                 socket.on('skip', (data) => {
                     showNotification('Track skipped', 'info');
+                });
+
+                // Handle shield purchase confirmation
+                socket.on('shieldPurchased', (data) => {
+                    if (data.ok) {
+                        Notify(data.message || 'Skip Shield added! 🛡️', 'success');
+                        socket.emit('getQueue'); // Refresh queue
+                    } else {
+                        Notify(data.error || 'Failed to add Skip Shield', 'error');
+                    }
                 });
             }
 
@@ -586,7 +626,7 @@
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
-                                <span class="shield-badge">🛡️ ${shieldCount}</span>
+                                ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
                             </div>
                             <button class="shield-button" onclick="purchaseShield('${track.uri}')" title="Add Skip Shield">
                                 <img src="/img/skipShield.png" alt="Skip Shield" class="shield-icon">
@@ -606,17 +646,104 @@
                 if (!currentDiv) return;
 
                 if (track) {
+                    // Update global currentlyPlayingUri for skip functionality
+                    if (track.uri) {
+                        currentlyPlayingUri = track.uri.replace('spotify:track:', '');
+                        console.log('🎵 Now playing URI:', currentlyPlayingUri);
+                    } else if (track.id) {
+                        currentlyPlayingUri = track.id;
+                        console.log('🎵 Now playing ID:', currentlyPlayingUri);
+                    } else {
+                        console.log('⚠️ No URI in track:', track);
+                    }
+                    
+                    // Update global progress variables
+                    currentProgress = track.progress || 0;
+                    currentDuration = track.duration || 0;
+                    isCurrentlyPlaying = isPlaying;
+                    
+                    // Handle anonymous mode display
+                    let addedByDisplay = track.addedBy || 'Spotify';
+                    if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
+                        addedByDisplay = 'Spotify';
+                    }
+                    if ((track.isAnon === 1 || track.isAnon === true) && userPermission < 3) {
+                        addedByDisplay = 'Anonymous';
+                    }
+
+                    const shieldCount = track.skipShields || 0;
+                    
+                    // Format time as mm:ss
+                    const formatTime = (ms) => {
+                        const totalSeconds = Math.floor(ms / 1000);
+                        const minutes = Math.floor(totalSeconds / 60);
+                        const seconds = totalSeconds % 60;
+                        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                    };
+                    
+                    const currentTime = formatTime(currentProgress);
+                    const totalTime = formatTime(currentDuration);
+                    
                     currentDiv.innerHTML = `
-                        <div class="current-item">
-                            ${track.image ? `<img src="${track.image}" alt="Album Cover" class="album-cover">` : ''}
-                            <div class="current-item-content">
-                                <div class="current-item-title">${track.name}</div>
-                                <div class="current-item-artist">${track.artist}</div>
+                        <div class="current-item queue-item">
+                            <img src="${track.image}" alt="${track.name}" class="album-cover-small">
+                            <div class="queue-item-content">
+                                <div class="queue-item-title">${track.name}</div>
+                                <div class="queue-item-artist">${track.artist}</div>
+                                <div class="queue-item-added-by">Added by ${addedByDisplay}</div>
+                                <div class="track-progress" id="track-progress-display">${currentTime} / ${totalTime}</div>
+                                ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
                             </div>
+                            <button class="shield-button" onclick="purchaseShield('${track.uri}')" title="Add Skip Shield">
+                                <img src="/img/skipShield.png" alt="Skip Shield" class="shield-icon">
+                            </button>
                         </div>
                     `;
+                    
+                    // Start progress update interval
+                    startProgressInterval();
                 } else {
+                    currentlyPlayingUri = null;
+                    currentProgress = 0;
+                    currentDuration = 0;
+                    isCurrentlyPlaying = false;
+                    stopProgressInterval();
                     currentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
+                }
+            }
+            
+            // Start interval to update progress every second
+            function startProgressInterval() {
+                stopProgressInterval(); // Clear any existing interval
+                
+                progressInterval = setInterval(() => {
+                    if (isCurrentlyPlaying && currentProgress < currentDuration) {
+                        currentProgress += 1000; // Increment by 1 second
+                        updateProgressDisplay();
+                    }
+                }, 1000);
+            }
+            
+            // Stop progress interval
+            function stopProgressInterval() {
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                }
+            }
+            
+            // Update just the progress display without re-rendering everything
+            function updateProgressDisplay() {
+                const progressDisplay = document.getElementById('track-progress-display');
+                if (progressDisplay) {
+                    const formatTime = (ms) => {
+                        const totalSeconds = Math.floor(ms / 1000);
+                        const minutes = Math.floor(totalSeconds / 60);
+                        const seconds = totalSeconds % 60;
+                        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                    };
+                    
+                    progressDisplay.textContent = `${formatTime(currentProgress)} / ${formatTime(currentDuration)}`;
                 }
             }
 

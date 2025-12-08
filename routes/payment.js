@@ -36,7 +36,7 @@ router.post('/transfer', async (req, res) => {
         let amount;
         if (pendingAction === 'skip') {
             // Skips are a fixed cost (no discounts)
-            amount = 100;
+            amount = 75;
         } else if (pendingAction === 'Skip Shield') {
             // Skip Shields are a fixed cost (no discounts)
             amount = 25;
@@ -343,7 +343,7 @@ router.post('/getAmount', async (req, res) => {
         let discountApplied = false;
 
         if (pendingAction === 'skip') {
-            amount = 100;
+            amount = 75;
         } else if (pendingAction === 'Skip Shield') {
             amount = 25;
         } else {

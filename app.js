@@ -98,9 +98,9 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Initialize queue from Spotify on startup
     async function initializeQueue() {
         try {
-            //console.log('Initializing queue from Spotify...');
+            console.log('Initializing queue from Spotify...');
             await queueManager.initializeFromSpotify(spotifyApi);
-            //console.log('Queue initialization complete');
+            console.log('Queue initialization complete');
         } catch (error) {
             console.warn('Could not initialize queue from Spotify:', error.message);
         }

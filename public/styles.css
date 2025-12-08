@@ -55,10 +55,6 @@ body {
     overflow: hidden;
 }
 
-body.teacher-page {
-    overflow-y: auto;
-    height: auto;
-}
 
 /* Header Styles */
 header {

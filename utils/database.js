@@ -73,14 +73,9 @@ db.run(`CREATE TABLE IF NOT EXISTS queue_metadata (
                     console.log('Added skip_shields column to queue_metadata table');
                 }
                 
-                // Clear the queue metadata on app startup
-                db.run('DELETE FROM queue_metadata', (clearErr) => {
-                    if (clearErr) {
-                        console.error('Error clearing queue_metadata on startup:', clearErr);
-                    } else {
-                        console.log('Cleared queue_metadata on app startup');
-                    }
-                });
+                // DO NOT clear queue metadata on startup - we want to preserve it
+                // for pre-existing Spotify queue tracks and skip shields
+                console.log('queue_metadata table ready');
             });
         });
     }

@@ -282,7 +282,7 @@ router.post('/addToQueue', async (req, res) => {
 
             const trackData = await spotifyApi.getTrack(trackId);
             const track = trackData.body;
-            const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+            const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
             const isAnon = anonMode ? 1 : 0;
             
             const trackInfo = {
@@ -311,9 +311,9 @@ router.post('/addToQueue', async (req, res) => {
 //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
-                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon) 
-                     VALUES (?, ?, ?, ?, ?)`,
-                    [track.uri, username, Date.now(), username, isAnon],
+                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [track.uri, username, Date.now(), username, isAnon, 0],
                     function(err) {
                         if (err) {
                             console.error('Failed to save queue metadata:', err);
@@ -391,7 +391,7 @@ router.post('/addToQueue', async (req, res) => {
         await spotifyApi.addToQueue(uri);
 
         // Also add to queueManager for WebSocket updates
-        const username2 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+        const username2 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
         
         const queueTrack = {
             uri: track.uri,
@@ -408,9 +408,9 @@ router.post('/addToQueue', async (req, res) => {
 //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username2, 'type:', typeof username2);
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [track.uri, username2, Date.now(), username2, isAnon],
+                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [track.uri, username2, Date.now(), username2, isAnon, 0],
                 function(err) {
                     if (err) {
                         console.error('Failed to save queue metadata:', err);
@@ -518,11 +518,59 @@ router.post('/skip', async (req, res) => {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
 
+    const { uri } = req.body;
+    const trackUri = uri; // URI of the currently playing track sent from frontend
+    
+    console.log('=== SKIP REQUEST ===');
+    console.log('Track URI:', trackUri);
+    console.log('User ID:', req.session.token.id);
+    console.log('User:', req.session.user);
 
     const ownerId = Number(process.env.OWNER_ID);
     if (req.session.token.id === ownerId) {
+        console.log('✅ Owner detected - checking for shields');
         try {
             await ensureSpotifyAccessToken();
+            
+            // Owner can skip, but still need to decrement shields if present
+            if (trackUri) {
+                console.log('Querying database for shields on:', trackUri);
+                // Check for skip shields
+                const trackMetadata = await new Promise((resolve, reject) => {
+                    db.get(
+                        'SELECT skip_shields FROM queue_metadata WHERE track_uri = ?',
+                        [trackUri],
+                        (err, row) => {
+                            if (err) reject(err);
+                            else resolve(row);
+                        }
+                    );
+                });
+
+                // If shields exist, decrement but still allow skip (owner bypass)
+                console.log('Track metadata:', trackMetadata);
+                if (trackMetadata && trackMetadata.skip_shields > 0) {
+                    const remainingShields = trackMetadata.skip_shields - 1;
+                    console.log(`🛡️ SHIELD FOUND: ${trackMetadata.skip_shields} shields on track`);
+                    console.log('Decrementing shield count...');
+                    
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            'UPDATE queue_metadata SET skip_shields = skip_shields - 1 WHERE track_uri = ?',
+                            [trackUri],
+                            (err) => {
+                                if (err) reject(err);
+                                else resolve();
+                            }
+                        );
+                    });
+
+                    console.log(`✅ Owner skip - shield decremented. ${remainingShields} remaining`);
+                } else {
+                    console.log('❌ No shields found on track (owner skip)');
+                }
+            }
+            
             await spotifyApi.skipToNext();
 
             // Update queueManager and broadcast to clients
@@ -547,7 +595,84 @@ router.post('/skip', async (req, res) => {
     }
 
     try {
+        console.log('💰 Regular user skip - payment confirmed');
         await ensureSpotifyAccessToken();
+
+        // Check if the track being skipped has skip shields
+        if (trackUri) {
+            console.log('Querying database for shields on:', trackUri);
+            // Query database for skip shields
+            const trackMetadata = await new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT skip_shields FROM queue_metadata WHERE track_uri = ?',
+                    [trackUri],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    }
+                );
+            });
+
+            console.log('Track metadata:', trackMetadata);
+            // If track has skip shields, block the skip and decrement shield count
+            if (trackMetadata && trackMetadata.skip_shields > 0) {
+                console.log(`🛡️ SHIELD DETECTED: ${trackMetadata.skip_shields} shields - BLOCKING SKIP`);
+                console.log('User will be charged but skip will be blocked');
+                const remainingShields = trackMetadata.skip_shields - 1;
+                console.log(`Decrementing shield: ${trackMetadata.skip_shields} -> ${remainingShields}`);
+                
+                // Decrement shield count
+                await new Promise((resolve, reject) => {
+                    db.run(
+                        'UPDATE queue_metadata SET skip_shields = skip_shields - 1 WHERE track_uri = ?',
+                        [trackUri],
+                        (err) => {
+                            if (err) reject(err);
+                            else resolve();
+                        }
+                    );
+                });
+                console.log('✅ Shield decremented in database');
+
+                // Get track details for logging
+                const currentPlayback = await spotifyApi.getMyCurrentPlayingTrack();
+                const trackName = currentPlayback.body?.item?.name || 'Unknown';
+                const artistName = currentPlayback.body?.item?.artists?.map(a => a.name).join(', ') || 'Unknown';
+
+                // Log the blocked skip transaction
+                await logTransaction({
+                    userID: req.session.token.id,
+                    displayName: req.session.user,
+                    action: 'skip_blocked',
+                    trackURI: trackUri,
+                    trackName: trackName,
+                    artistName: artistName,
+                    cost: 75
+                });
+
+                // Clear payment flag (they still paid but skip was blocked)
+                req.session.hasPaid = false;
+                
+                // Broadcast updated queue to refresh shield count
+                await queueManager.syncWithSpotify(spotifyApi);
+
+                console.log('🚫 Returning shield blocked response to client');
+                return req.session.save(() => {
+                    res.json({ 
+                        ok: false, 
+                        shieldBlocked: true,
+                        remaining: remainingShields,
+                        message: `Skip blocked by shield! ${remainingShields} shield${remainingShields !== 1 ? 's' : ''} remaining. You were charged 100 digipogs.` 
+                    });
+                });
+            } else {
+                console.log('❌ No shields found - proceeding with skip');
+            }
+        } else {
+            console.log('⚠️ No track URI provided - proceeding with skip anyway');
+        }
+
+        // No shields, proceed with skip
         await spotifyApi.skipToNext();
 
         // Update queueManager and broadcast to clients
@@ -561,7 +686,7 @@ router.post('/skip', async (req, res) => {
                 trackURI: currentTrack.uri,
                 trackName: currentTrack.name,
                 artistName: currentTrack.artist,
-                cost: 125
+                cost: 75
             });
         }
         // Clear payment flag after successful skip
@@ -601,7 +726,7 @@ router.post('/queue/add', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'Missing track URI' });
         }
 
-        const username3 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+        const username3 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
         
         const track = {
             uri,
