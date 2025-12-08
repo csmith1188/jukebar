@@ -167,6 +167,9 @@ app.get('/debug/formbar', isAuthenticated, (req, res) => {
 
 app.get('/leaderboard', isAuthenticated, (req, res) => {
     try {
+        if (Date.now() - (req.app.get('leaderboardLastReset') || 0) > 6 * 24 * 60 * 60 * 1000) {
+            checkAndResetLeaderboard(req.app);
+        }
         res.render('leaderboard.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,

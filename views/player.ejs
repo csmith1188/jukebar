@@ -410,7 +410,7 @@
                     // Add the appropriate type class
                     if (type === 'error') {
                         notification.classList.add('notification-error');
-                    } else{
+                    } else {
                         // default to success for other types
                         notification.classList.add('notification-success');
                     }
@@ -484,6 +484,16 @@
                 window.setPlayerState = function (updates) {
                     if (updates.hasPaid !== undefined) hasPaid = updates.hasPaid;
                     if (updates.pendingAction !== undefined) pendingAction = updates.pendingAction;
+                };
+
+                window.purchaseShield = function (trackUri) {
+                    if (!useJukebar) {
+                        Notify('Jukebar is currently disabled by your teacher.', 'error');
+                        return;
+                    }
+                    pendingTrackUri = trackUri;
+                    pendingAction = 'Skip Shield';
+                    showPayment();
                 };
 
                 // Initialize WebSocket-based queue sync
@@ -567,14 +577,20 @@
                             addedByDisplay = 'Anonymous';
                         }
 
+                        const shieldCount = track.skipShields || 0;
+                        
                         return `
                         <div class="queue-item">
-                            <img src="${track.image}" alt="${track.name}" class="album-cover">
+                            <img src="${track.image}" alt="${track.name}" class="album-cover-small">
                             <div class="queue-item-content">
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
+                                <span class="shield-badge">🛡️ ${shieldCount}</span>
                             </div>
+                            <button class="shield-button" onclick="purchaseShield('${track.uri}')" title="Add Skip Shield">
+                                <img src="/img/skipShield.png" alt="Skip Shield" class="shield-icon">
+                            </button>
                         </div>
                     `;
                     }).join('');

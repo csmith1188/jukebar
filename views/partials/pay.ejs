@@ -99,7 +99,10 @@
                 amount = 50;
             } else if (pendingAction === 'skip') {
                 reason += ' - Skip Track';
-                amount = 125;
+                amount = 100;
+            } else if (pendingAction === 'Skip Shield') {
+                reason += ' - Purchase Skip Shield for ' + state.pendingTrackUri;
+                amount = 25;
             } else {
                 console.error('Unknown pending action:', pendingAction);
                 alert('Unknown action. Please try again. Your digipogs have not been charged.');

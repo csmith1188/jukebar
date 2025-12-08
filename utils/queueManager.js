@@ -208,7 +208,8 @@ class QueueManager {
                             image: item.album.images[0]?.url,
                             addedBy: metadata ? metadata.added_by : 'Spotify', // ✨ Use stored data if available
                             addedAt: metadata ? metadata.added_at : Date.now(),
-                            isAnon: metadata ? metadata.is_anon : 0
+                            isAnon: metadata ? metadata.is_anon : 0,
+                            skipShields: metadata ? metadata.skip_shields : 0
                         };
                     });
                     
@@ -292,7 +293,8 @@ class QueueManager {
                                 image: item.album.images[0]?.url,
                                 addedBy: addedBy,
                                 addedAt: Date.now(),
-                                isAnon: metadata ? metadata.is_anon : 0
+                                isAnon: metadata ? metadata.is_anon : 0,
+                                skipShields: metadata ? metadata.skip_shields : 0
                             };
                         });
 
@@ -331,7 +333,7 @@ class QueueManager {
             }
             
             const placeholders = trackUris.map(() => '?').join(',');
-            const query = `SELECT track_uri, added_by, added_at, is_anon FROM queue_metadata WHERE track_uri IN (${placeholders})`;
+            const query = `SELECT track_uri, added_by, added_at, is_anon, skip_shields FROM queue_metadata WHERE track_uri IN (${placeholders})`;
             
 //console.log('Querying metadata for', trackUris.length, 'tracks');
 //console.log('Query:', query);
@@ -351,7 +353,8 @@ class QueueManager {
                             metadataMap[row.track_uri] = {
                                 added_by: row.added_by,
                                 added_at: row.added_at,
-                                is_anon: row.is_anon
+                                is_anon: row.is_anon,
+                                skip_shields: row.skip_shields || 0
                             };
                         });
                     } else {

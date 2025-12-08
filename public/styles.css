@@ -322,6 +322,35 @@ h1 {
     overflow: hidden;
 }
 
+/* Teacher Page Layout - Three Column */
+.teacher-page .main-content {
+    padding: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+}
+
+.teacher-page .user-greeting {
+    padding: 20px 20px 0 20px;
+}
+
+.container.teacher-layout {
+    max-width: none !important;
+    width: calc(100vw - 40px) !important;
+    gap: 15px;
+    margin: 20px !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+}
+
+.container.teacher-layout #spotifyPlayer,
+.container.teacher-layout #queueHistory,
+.container.teacher-layout #userManagement {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+
 #spotifyPlayer {
     background: #181818;
     border-radius: 20px;
@@ -386,6 +415,13 @@ h1 {
     flex-direction: column;
     margin: 0 auto;
     max-width: 1400px;
+}
+
+/* Override for teacher layout */
+.teacher-layout #queueHistory {
+    height: 100%;
+    max-width: none;
+    margin: 0;
 }
 
 #historyList {
@@ -612,6 +648,7 @@ p {
     border-radius: 12px;
     padding: 12px;
     margin-bottom: 12px;
+    min-height: 90px;
     transition: background 0.2s ease;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -623,6 +660,8 @@ p {
 .queue-item-content {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .queue-item-title {
@@ -649,6 +688,8 @@ p {
     margin-top: 4px;
     font-style: italic;
     opacity: 0.8;
+    white-space: normal;
+    word-wrap: break-word;
 }
 
 .queue-item:hover .queue-item-added-by {
@@ -664,6 +705,62 @@ p {
     border-radius: 12px;
     font-size: 0.7rem;
     margin-top: 4px;
+}
+
+/* Skip Shield Styles */
+.shield-button {
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    color: #000;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+    padding: 0;
+}
+
+.shield-button:hover {
+    background: linear-gradient(135deg, #ffed4e 0%, #ffd700 100%);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.5);
+}
+
+.shield-button:active {
+    transform: scale(0.95);
+}
+
+.shield-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.shield-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    color: #000;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(255, 215, 0, 0.4);
+    margin-top: 6px;
+}
+
+.queue-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 
@@ -972,6 +1069,16 @@ p {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    min-width: 350px;
+}
+
+/* Override for teacher layout to match others */
+.teacher-layout #userManagement,
+.teacher-layout #spotifyPlayer,
+.teacher-layout #queueHistory {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    max-width: none !important;
 }
 
 .section-header {

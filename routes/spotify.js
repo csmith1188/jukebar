@@ -654,4 +654,147 @@ router.post('/queue/skip', async (req, res) => {
     }
 });
 
+router.post('/purchaseShield', isAuthenticated, async (req, res) => {
+    console.log('=== PURCHASE SHIELD REQUEST ===');
+    const { trackUri } = req.body;
+    const userId = req.session.token?.id;
+    const displayName = req.session.user;
+    
+    console.log('Request body:', req.body);
+    console.log('User ID:', userId);
+    console.log('Display name:', displayName);
+    console.log('Track URI:', trackUri);
+
+    // Validation: Check authentication
+    if (!userId || !displayName) {
+        console.error('❌ User not properly authenticated');
+        return res.status(401).json({ ok: false, error: 'User not authenticated' });
+    }
+
+    // Validation: Check track URI
+    if (!trackUri) {
+        console.error('❌ Track URI missing from request');
+        return res.status(400).json({ ok: false, error: 'Track URI is required' });
+    }
+
+    // Owner bypass - they can add shields for free
+    const ownerId = Number(process.env.OWNER_ID);
+    const isOwner = userId === ownerId;
+    console.log('Is owner:', isOwner, '(userId:', userId, 'ownerId:', ownerId, ')');
+
+    try {
+        // Step 1: Verify track exists in queue
+        console.log('Step 1: Checking if track exists in queue...');
+        const track = await new Promise((resolve, reject) => {
+            db.get("SELECT * FROM queue_metadata WHERE track_uri = ?", [trackUri], (err, row) => {
+                if (err) {
+                    console.error('❌ Database error querying queue_metadata:', err);
+                    reject(err);
+                } else {
+                    console.log('Track found in queue:', row);
+                    resolve(row);
+                }
+            });
+        });
+
+        if (!track) {
+            console.error('❌ Track not found in queue:', trackUri);
+            return res.status(404).json({ ok: false, error: 'Track not found in queue' });
+        }
+
+        console.log('✅ Track found:', track.track_name, 'by', track.artist_name);
+
+        // Step 2: Verify payment for non-owner
+        if (!isOwner) {
+            console.log('Step 2: Checking payment status...');
+            console.log('hasPaid:', req.session.hasPaid);
+            
+            if (!req.session.hasPaid) {
+                console.error('❌ Payment required but not received');
+                return res.status(402).json({ ok: false, error: 'Payment required' });
+            }
+            console.log('✅ Payment verified');
+        } else {
+            console.log('Step 2: Skipped (owner bypass)');
+        }
+
+        // Step 3: Update shield count
+        console.log('Step 3: Incrementing shield count...');
+        const updateResult = await new Promise((resolve, reject) => {
+            db.run(
+                "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ?",
+                [trackUri],
+                function(err) {
+                    if (err) {
+                        console.error('❌ Database error updating shields:', err);
+                        reject(err);
+                    } else {
+                        console.log('✅ Shield count incremented. Rows affected:', this.changes);
+                        resolve(this.changes);
+                    }
+                }
+            );
+        });
+
+        if (updateResult === 0) {
+            console.error('❌ No rows updated - track may have been removed from queue');
+            return res.status(404).json({ ok: false, error: 'Track no longer in queue' });
+        }
+
+        // Step 4: Log transaction
+        console.log('Step 4: Logging transaction...');
+        try {
+            await logTransaction({
+                userID: userId,
+                displayName: displayName,
+                action: 'shield',
+                trackURI: trackUri,
+                trackName: track.track_name,
+                artistName: track.artist_name,
+                cost: isOwner ? 0 : 25
+            });
+            console.log('✅ Transaction logged');
+        } catch (logErr) {
+            console.error('⚠️ Failed to log transaction (non-fatal):', logErr);
+            // Continue anyway - shield was added
+        }
+
+        // Step 5: Clear payment flag for non-owner
+        if (!isOwner) {
+            console.log('Step 5: Clearing payment flag...');
+            req.session.hasPaid = false;
+            console.log('✅ Payment flag cleared');
+        }
+
+        // Step 6: Broadcast queue update
+        console.log('Step 6: Broadcasting queue update...');
+        try {
+            // Force re-sync from Spotify to get updated metadata
+            await queueManager.syncWithSpotify(spotifyApi);
+            console.log('✅ Queue synced and broadcasted');
+        } catch (broadcastErr) {
+            console.error('⚠️ Failed to sync queue (non-fatal):', broadcastErr);
+            // Continue anyway - shield was added
+        }
+
+        // Step 7: Save session and respond
+        console.log('Step 7: Saving session and responding...');
+        req.session.save((saveErr) => {
+            if (saveErr) {
+                console.error('⚠️ Session save error (non-fatal):', saveErr);
+            }
+            console.log('✅ Shield purchase complete!');
+            console.log('================================');
+            res.json({ ok: true, message: 'Shield added successfully' });
+        });
+
+    } catch (error) {
+        console.error('❌ FATAL ERROR in purchaseShield:', error);
+        console.error('Error stack:', error.stack);
+        console.log('================================');
+        res.status(500).json({ ok: false, error: 'Server error', details: error.message });
+    }
+});
+
+
 module.exports = router;
