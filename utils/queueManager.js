@@ -68,13 +68,13 @@ class QueueManager {
         this.isPlaying = isPlaying;
         if (progress !== null) this.progress = progress;
         this.lastUpdate = Date.now();
-        
+
         // Add progress to currentTrack for display
         const currentTrackWithProgress = this.currentTrack ? {
             ...this.currentTrack,
             progress: this.progress
         } : null;
-        
+
         this.broadcastUpdate('playbackState', {
             isPlaying: this.isPlaying,
             progress: this.progress,
@@ -164,7 +164,7 @@ class QueueManager {
             const currentPlayback = await spotifyApi.getMyCurrentPlayingTrack();
             if (currentPlayback.body && currentPlayback.body.item) {
                 const currentUri = currentPlayback.body.item.uri;
-                
+
                 // Fetch metadata for current track
                 const db = require('./database');
                 const currentMetadata = await new Promise((resolve, reject) => {
@@ -177,7 +177,7 @@ class QueueManager {
                         }
                     );
                 });
-                
+
                 this.currentTrack = {
                     name: currentPlayback.body.item.name,
                     artist: currentPlayback.body.item.artists.map(a => a.name).join(', '),
@@ -227,7 +227,7 @@ class QueueManager {
                                         `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
                                          VALUES (?, ?, ?, ?, ?, ?)`,
                                         [item.uri, 'Spotify', Date.now(), 'Spotify', 0, 0],
-                                        function(err) {
+                                        function (err) {
                                             if (err) {
                                                 console.error('Failed to create default metadata:', err);
                                                 reject(err);
@@ -294,113 +294,100 @@ class QueueManager {
     // Periodic Spotify sync (called every 5 seconds)
     async syncWithSpotify(spotifyApi) {
         try {
-            // Ensure we have a valid access token
-            const { ensureSpotifyAccessToken } = require('./spotify');
-            await ensureSpotifyAccessToken();
-
-            const currentPlayback = await spotifyApi.getMyCurrentPlayingTrack();
-
-            if (currentPlayback.body && currentPlayback.body.item && currentPlayback.body.is_playing !== undefined) {
-                const currentUri = currentPlayback.body.item.uri;
-                
-                // Fetch metadata for current track
-                const db = require('./database');
-                const currentMetadata = await new Promise((resolve, reject) => {
-                    db.get(
-                        'SELECT * FROM queue_metadata WHERE track_uri = ?',
-                        [currentUri],
-                        (err, row) => {
-                            if (err) reject(err);
-                            else resolve(row);
-                        }
-                    );
-                });
-                
-                const track = {
-                    name: currentPlayback.body.item.name,
-                    artist: currentPlayback.body.item.artists.map(a => a.name).join(', '),
-                    uri: currentPlayback.body.item.uri,
-                    duration: currentPlayback.body.item.duration_ms,
-                    image: currentPlayback.body.item.album.images[0]?.url,
-                    addedBy: currentMetadata ? currentMetadata.added_by : 'Spotify',
-                    addedAt: currentMetadata ? currentMetadata.added_at : Date.now(),
-                    isAnon: currentMetadata ? currentMetadata.is_anon : 0,
-                    skipShields: currentMetadata ? currentMetadata.skip_shields : 0
-                };
-
-                // Only broadcast if track changed OR if metadata changed (shields added/removed)
-                const metadataChanged = this.currentTrack && 
-                    (this.currentTrack.skipShields !== track.skipShields ||
-                     this.currentTrack.addedBy !== track.addedBy);
-                     
-                if (!this.currentTrack || this.currentTrack.uri !== track.uri || metadataChanged) {
-                    //console.log('Track or metadata changed during sync, updating current track:', track.name);
-                    this.updateCurrentTrack(track);
-                } else {
-                    //console.log('Track unchanged during sync:', track.name);
-                }
-
-                this.updatePlaybackState(
-                    currentPlayback.body.is_playing,
-                    currentPlayback.body.progress_ms
-                );
-            }
-
-            // Also sync the queue from Spotify to keep it up-to-date
-            try {
-                const queueResponse = await fetch('https://api.spotify.com/v1/me/player/queue', {
+            // Fetch BOTH currently playing AND queue at the same time
+            const [currentlyPlayingResponse, queueResponse] = await Promise.all([
+                fetch('https://api.spotify.com/v1/me/player/currently-playing', {
                     headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
-                });
+                }),
+                fetch('https://api.spotify.com/v1/me/player/queue', {
+                    headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
+                })
+            ]);
 
-                if (queueResponse.status === 200) {
-                    const queueData = await queueResponse.json();
-                    if (queueData.queue && Array.isArray(queueData.queue)) {
-                        // 📖 Fetch metadata for all tracks from database
-                        const trackUris = queueData.queue.map(item => item.uri);
-                        //console.log('Syncing queue - requesting metadata for', trackUris.length, 'tracks');
-                        const metadataMap = await this.getQueueMetadata(trackUris);
-                        //console.log('Sync - received metadata for', Object.keys(metadataMap).length, 'tracks');
-
-                        // Only update our queue if Spotify has queue data
-                        const spotifyQueue = queueData.queue.map(item => {
-                            const metadata = metadataMap[item.uri];
-                            const addedBy = metadata ? metadata.added_by : 'Spotify';
-                            //console.log('Sync - Track:', item.name, 'addedBy:', addedBy);
-                            return {
-                                name: item.name,
-                                artist: item.artists.map(a => a.name).join(', '),
-                                uri: item.uri,
-                                duration: item.duration_ms,
-                                image: item.album.images[0]?.url,
-                                addedBy: addedBy,
-                                addedAt: Date.now(),
-                                isAnon: metadata ? metadata.is_anon : 0,
-                                skipShields: metadata ? metadata.skip_shields : 0
-                            };
-                        });
-
-                        // Update our internal queue with Spotify's queue
-                        this.queue = spotifyQueue;
-                        //console.log(`Synced queue with Spotify: ${this.queue.length} tracks`);
-
-                    }
+            // Process currently playing
+            let currentTrack = null;
+            if (currentlyPlayingResponse.status === 200) {
+                const currentData = await currentlyPlayingResponse.json();
+                if (currentData && currentData.item) {
+                    currentTrack = {
+                        id: currentData.item.id,
+                        name: currentData.item.name,
+                        artist: currentData.item.artists.map(a => a.name).join(', '),
+                        uri: currentData.item.uri,
+                        image: currentData.item.album.images?.[0]?.url || null,
+                        album: {
+                            name: currentData.item.album.name
+                        },
+                        duration_ms: currentData.item.duration_ms,
+                        progress_ms: currentData.progress_ms
+                    };
                 }
-            } catch (queueError) {
-                // Don't fail the whole sync if queue fetch fails
-                //console.log('Could not sync queue from Spotify:', queueError.message);
             }
+
+            // Process queue
+            let queueTracks = [];
+            if (queueResponse.status === 200) {
+                const queueData = await queueResponse.json();
+                queueTracks = queueData.queue || [];
+            }
+
+            // Get metadata for all tracks (including currently playing)
+            const allUris = [
+                ...(currentTrack ? [currentTrack.uri] : []),
+                ...queueTracks.map(t => t.uri)
+            ];
+
+            const metadataMap = await this.getQueueMetadata(allUris);
+
+            // Add metadata to currently playing
+            if (currentTrack) {
+                const metadata = metadataMap[currentTrack.uri];
+                if (metadata) {
+                    currentTrack.addedBy = metadata.added_by;
+                    currentTrack.displayName = metadata.display_name;
+                    currentTrack.isAnon = metadata.is_anon;
+                    currentTrack.skipShields = metadata.skip_shields;
+                }
+                // Add frontend-compatible property names
+                currentTrack.progress = currentTrack.progress_ms;
+                currentTrack.duration = currentTrack.duration_ms;
+            }
+
+            // Build queue with metadata
+            const newQueue = queueTracks.map(track => {
+                const metadata = metadataMap[track.uri];
+                return {
+                    uri: track.uri,
+                    name: track.name,
+                    artist: track.artists.map(a => a.name).join(', '),
+                    addedBy: metadata?.added_by || 'Spotify',
+                    displayName: metadata?.display_name || 'Spotify',
+                    addedAt: metadata?.added_at || Date.now(),
+                    image: track.album?.images?.[0]?.url,
+                    isAnon: metadata?.is_anon || 0,
+                    skipShields: metadata?.skip_shields || 0
+                };
+            });
+
+            // Update internal state
+            this.queue = newQueue;
+            this.currentTrack = currentTrack;
+
+            // Broadcast BOTH at the same time using existing broadcast methods
+            this.broadcastUpdate('queueUpdate', {
+                queue: newQueue,
+                currentTrack: currentTrack,
+                isPlaying: this.isPlaying,
+                progress: this.progress,
+                lastUpdate: Date.now()
+            });
+            
+            this.broadcastUpdate('currentTrack', currentTrack);
+
+            return { currentTrack, queue: newQueue };
         } catch (error) {
-            // Handle network errors more gracefully
-            if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-                // Only log network errors once every minute to avoid spam
-                if (!this.lastNetworkError || Date.now() - this.lastNetworkError > 60000) {
-                    console.warn('Network error connecting to Spotify API - will retry:', error.code, error.hostname);
-                    this.lastNetworkError = Date.now();
-                }
-            } else {
-                // Log other errors normally
-                console.error('Spotify sync error:', error.message || error);
-            }
+            console.error('Error syncing with Spotify:', error);
+            throw error;
         }
     }
 

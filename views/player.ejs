@@ -684,9 +684,11 @@
                     const currentTime = formatTime(currentProgress);
                     const totalTime = formatTime(currentDuration);
                     
+                    const imageUrl = track.image || track.album?.image || '/img/placeholder.png';
+                    
                     currentDiv.innerHTML = `
                         <div class="current-item queue-item">
-                            <img src="${track.image}" alt="${track.name}" class="album-cover-small">
+                            <img src="${imageUrl}" alt="${track.name}" class="album-cover-small">
                             <div class="queue-item-content">
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>

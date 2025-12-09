@@ -36,10 +36,10 @@ router.post('/transfer', async (req, res) => {
         let amount;
         if (pendingAction === 'skip') {
             // Skips are a fixed cost (no discounts)
-            amount = 75;
+            amount = 100;
         } else if (pendingAction === 'Skip Shield') {
             // Skip Shields are a fixed cost (no discounts)
-            amount = 25;
+            amount = 75;
         } else {
             amount = Number(process.env.TRANSFER_AMOUNT) || 50;
             if (userRow && userRow.id) {
@@ -343,9 +343,9 @@ router.post('/getAmount', async (req, res) => {
         let discountApplied = false;
 
         if (pendingAction === 'skip') {
-            amount = 75;
+            amount = 100;
         } else if (pendingAction === 'Skip Shield') {
-            amount = 25;
+            amount = 75;
         } else {
             amount = Number(process.env.TRANSFER_AMOUNT) || 50;
             // Get top 3 user IDs in order
