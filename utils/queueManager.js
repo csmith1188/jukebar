@@ -152,7 +152,7 @@ class QueueManager {
 
     // Initialize queue from Spotify on startup
     async initializeFromSpotify(spotifyApi) {
-        console.log('🎵 initializeFromSpotify() called');
+        console.log('initializeFromSpotify() called');
         try {
             console.log('Fetching current Spotify queue...');
 
@@ -232,7 +232,7 @@ class QueueManager {
                                                 console.error('Failed to create default metadata:', err);
                                                 reject(err);
                                             } else {
-                                                console.log(`✅ Created default metadata (changes: ${this.changes}, lastID: ${this.lastID})`);
+                                                console.log(`Created default metadata (changes: ${this.changes}, lastID: ${this.lastID})`);
                                                 // Add to metadataMap so it's available immediately
                                                 metadataMap[item.uri] = {
                                                     added_by: 'Spotify',
@@ -339,23 +339,51 @@ class QueueManager {
 
             const metadataMap = await this.getQueueMetadata(allUris);
 
-            // Add metadata to currently playing
+            // Track which metadata entries we've already used
+            const usedMetadata = new Set();
+
+            // Add metadata to currently playing (use FIRST/oldest entry)
             if (currentTrack) {
-                const metadata = metadataMap[currentTrack.uri];
-                if (metadata) {
+                const metadataArray = metadataMap[currentTrack.uri];
+                if (metadataArray && metadataArray.length > 0) {
+                    // Use the first (oldest) metadata entry for currently playing
+                    const metadata = metadataArray[0];
                     currentTrack.addedBy = metadata.added_by;
                     currentTrack.displayName = metadata.display_name;
                     currentTrack.isAnon = metadata.is_anon;
                     currentTrack.skipShields = metadata.skip_shields;
+                    
+                    // Mark this metadata as used so queue items don't use it
+                    const metadataKey = `${currentTrack.uri}_${metadata.added_at}`;
+                    usedMetadata.add(metadataKey);
                 }
                 // Add frontend-compatible property names
                 currentTrack.progress = currentTrack.progress_ms;
                 currentTrack.duration = currentTrack.duration_ms;
             }
 
-            // Build queue with metadata
-            const newQueue = queueTracks.map(track => {
-                const metadata = metadataMap[track.uri];
+            // Build queue with metadata, matching by position for duplicates
+            const newQueue = queueTracks.map((track, index) => {
+                const metadataArray = metadataMap[track.uri];
+                let metadata = null;
+
+                if (metadataArray && metadataArray.length > 0) {
+                    // Find the first unused metadata entry for this URI (ordered by added_at)
+                    for (let i = 0; i < metadataArray.length; i++) {
+                        const metadataKey = `${track.uri}_${metadataArray[i].added_at}`;
+                        
+                        if (!usedMetadata.has(metadataKey)) {
+                            metadata = metadataArray[i];
+                            usedMetadata.add(metadataKey);
+                            break;
+                        }
+                    }
+                    // Fallback to first entry if all are used (shouldn't happen)
+                    if (!metadata) {
+                        metadata = metadataArray[0];
+                    }
+                }
+
                 return {
                     uri: track.uri,
                     name: track.name,
@@ -369,6 +397,24 @@ class QueueManager {
                 };
             });
 
+            // For currently playing, use the FIRST (oldest) metadata entry
+            if (currentTrack) {
+                const metadataArray = metadataMap[currentTrack.uri];
+                if (metadataArray && metadataArray.length > 0) {
+                    // Find the metadata entry that's NOT in the queue anymore (it's playing)
+                    // This should be the one with the oldest added_at that doesn't match any queue position
+                    const metadata = metadataArray[0]; // First entry is the one currently playing
+
+                    currentTrack.addedBy = metadata.added_by;
+                    currentTrack.displayName = metadata.display_name;
+                    currentTrack.isAnon = metadata.is_anon;
+                    currentTrack.skipShields = metadata.skip_shields;
+                }
+                // Add frontend-compatible property names
+                currentTrack.progress = currentTrack.progress_ms;
+                currentTrack.duration = currentTrack.duration_ms;
+            }
+
             // Update internal state
             this.queue = newQueue;
             this.currentTrack = currentTrack;
@@ -381,7 +427,7 @@ class QueueManager {
                 progress: this.progress,
                 lastUpdate: Date.now()
             });
-            
+
             this.broadcastUpdate('currentTrack', currentTrack);
 
             return { currentTrack, queue: newQueue };
@@ -391,7 +437,7 @@ class QueueManager {
         }
     }
 
-    // Fetch metadata for multiple tracks from database
+    // In getQueueMetadata, change to return ALL instances, not just first:
     async getQueueMetadata(trackUris) {
         const db = require('./database');
 
@@ -402,34 +448,32 @@ class QueueManager {
             }
 
             const placeholders = trackUris.map(() => '?').join(',');
-            const query = `SELECT track_uri, added_by, added_at, is_anon, skip_shields FROM queue_metadata WHERE track_uri IN (${placeholders})`;
-
-            //console.log('Querying metadata for', trackUris.length, 'tracks');
-            //console.log('Query:', query);
-            //console.log('URIs:', trackUris);
+            const query = `SELECT track_uri, added_by, display_name, added_at, is_anon, skip_shields FROM queue_metadata WHERE track_uri IN (${placeholders}) ORDER BY added_at ASC`;
 
             db.all(query, trackUris, (err, rows) => {
                 if (err) {
                     console.error('Failed to fetch queue metadata:', err);
                     resolve({});
                 } else {
-                    //console.log('Found', rows ? rows.length : 0, 'metadata rows in database');
-                    // Convert array to map for easy lookup
+                    // BUILD A MAP with ARRAYS to handle duplicates
                     const metadataMap = {};
+
                     if (rows && rows.length > 0) {
-                        rows.forEach(row => {
-                            //console.log('Track', row.track_uri, 'added by:', row.added_by);
-                            metadataMap[row.track_uri] = {
+                        for (const row of rows) {
+                            // Store as array to handle multiple instances of same track
+                            if (!metadataMap[row.track_uri]) {
+                                metadataMap[row.track_uri] = [];
+                            }
+                            metadataMap[row.track_uri].push({
                                 added_by: row.added_by,
+                                display_name: row.display_name,
                                 added_at: row.added_at,
                                 is_anon: row.is_anon,
-                                skip_shields: row.skip_shields || 0
-                            };
-                        });
-                    } else {
-                        //console.log('No metadata rows found in database');
+                                skip_shields: row.skip_shields
+                            });
+                        }
                     }
-                    //console.log('Built metadata map with', Object.keys(metadataMap).length, 'entries');
+
                     resolve(metadataMap);
                 }
             });
@@ -437,13 +481,20 @@ class QueueManager {
     }
 
     // Remove metadata for a track when it's played/skipped
+    // Only removes the OLDEST entry if there are duplicates
     async removeTrackMetadata(trackUri) {
         const db = require('./database');
 
         return new Promise((resolve, reject) => {
             db.run(
-                'DELETE FROM queue_metadata WHERE track_uri = ?',
-                [trackUri],
+                `DELETE FROM queue_metadata 
+                 WHERE track_uri = ? 
+                 AND added_at = (
+                     SELECT MIN(added_at) 
+                     FROM queue_metadata 
+                     WHERE track_uri = ?
+                 )`,
+                [trackUri, trackUri],
                 (err) => {
                     if (err) {
                         console.error('Failed to remove track metadata:', err);
@@ -495,7 +546,7 @@ class QueueManager {
                             console.error('Failed to delete stale metadata:', err);
                             reject(err);
                         } else {
-                            console.log(`🧹 Cleaned up ${this.changes} stale track(s) from metadata`);
+                            console.log(`Cleaned up ${this.changes} stale track(s) from metadata`);
                             resolve();
                         }
                     }

@@ -649,12 +649,12 @@
                     // Update global currentlyPlayingUri for skip functionality
                     if (track.uri) {
                         currentlyPlayingUri = track.uri.replace('spotify:track:', '');
-                        console.log('🎵 Now playing URI:', currentlyPlayingUri);
+                        console.log('Now playing URI:', currentlyPlayingUri);
                     } else if (track.id) {
                         currentlyPlayingUri = track.id;
-                        console.log('🎵 Now playing ID:', currentlyPlayingUri);
+                        console.log('Now playing ID:', currentlyPlayingUri);
                     } else {
-                        console.log('⚠️ No URI in track:', track);
+                        console.log('WARNING: No URI in track:', track);
                     }
                     
                     // Update global progress variables
