@@ -14,20 +14,20 @@ function playRandomBlockedSound() {
     try {
         const sfxDir = path.join(__dirname, '..', 'public', 'sfx');
         const files = fs.readdirSync(sfxDir).filter(f => f.endsWith('.wav') || f.endsWith('.mp3'));
-        
+
         if (files.length === 0) {
             console.warn('No sound files found in /sfx');
             return null;
         }
-        
+
         const randomFile = files[Math.floor(Math.random() * files.length)];
         const soundPath = path.join(sfxDir, randomFile);
-        
+
         console.log(`Playing blocked sound: ${randomFile}`);
         exec(`omxplayer "${soundPath}"`, (err) => {
             if (err) console.error('Error playing sound:', err);
         });
-        
+
         return randomFile; // Return filename for logging
     } catch (err) {
         console.error('Error in playRandomBlockedSound:', err);
@@ -340,8 +340,8 @@ router.post('/addToQueue', async (req, res) => {
             //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
-                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
                     [track.uri, username, Date.now(), username, isAnon, 0],
                     function (err) {
                         if (err) {
@@ -471,19 +471,16 @@ router.post('/addToQueue', async (req, res) => {
             );
         }
 
-        //log the transaction
-        if (currentTrack) {
-            await logTransaction({
-                userID: req.session.token.id,
-                displayName: req.session.token.displayName || req.session.user,
-                action: 'play',
-                trackURI: trackInfo.uri,
-                trackName: trackInfo.name,
-                artistName: trackInfo.artist,
-                cost: 50
-            });
-
-        }
+        // Log the transaction - ALWAYS log, not just when currentTrack exists
+        await logTransaction({
+            userID: req.session.token.id,
+            displayName: req.session.user,
+            action: 'play',
+            trackURI: trackInfo.uri,
+            trackName: trackInfo.name,
+            artistName: trackInfo.artist,
+            cost: 50
+        });
 
         // Clear payment flag after successful queue addition
         req.session.hasPaid = false;

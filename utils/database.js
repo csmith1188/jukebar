@@ -43,41 +43,76 @@ db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
-db.run(`CREATE TABLE IF NOT EXISTS queue_metadata (
-    track_uri TEXT PRIMARY KEY,
-    added_by TEXT NOT NULL,
-    added_at INTEGER NOT NULL,
-    display_name TEXT NOT NULL,
-    skip_shields INTEGER DEFAULT 0
-)`, (err) => {
+// Check if table needs migration (remove PRIMARY KEY constraint)
+db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_metadata'", [], (err, row) => {
     if (err) {
-        console.error('Error creating queue_metadata table:', err);
-    } else {
-        // Add is_anon column if it doesn't exist
-                db.run(`ALTER TABLE queue_metadata ADD COLUMN is_anon INTEGER DEFAULT 0`, (alterErr) => {
-            if (alterErr) {
-                if (!alterErr.message.includes('duplicate column')) {
-                    console.error('Error adding is_anon column:', alterErr);
-                }
-            } else {
-                console.log('Added is_anon column to queue_metadata table');
-            }
-            
-            // ADD THIS: Migrate skip_shields column
-            db.run(`ALTER TABLE queue_metadata ADD COLUMN skip_shields INTEGER DEFAULT 0`, (shieldErr) => {
-                if (shieldErr) {
-                    if (!shieldErr.message.includes('duplicate column')) {
-                        console.error('Error adding skip_shields column:', shieldErr);
-                    }
-                } else {
-                    console.log('Added skip_shields column to queue_metadata table');
+        console.error('Error checking queue_metadata schema:', err);
+        return;
+    }
+    
+    // If table exists and has PRIMARY KEY, recreate it
+    if (row && row.sql.includes('PRIMARY KEY')) {
+        console.log('Migrating queue_metadata table to remove UNIQUE constraint...');
+        
+        db.serialize(() => {
+            // Rename old table
+            db.run('ALTER TABLE queue_metadata RENAME TO queue_metadata_old', (renameErr) => {
+                if (renameErr) {
+                    console.error('Error renaming table:', renameErr);
+                    return;
                 }
                 
-                // DO NOT clear queue metadata on startup - we want to preserve it
-                // for pre-existing Spotify queue tracks and skip shields
-                console.log('queue_metadata table ready');
+                // Create new table without PRIMARY KEY
+                db.run(`CREATE TABLE queue_metadata (
+                    track_uri TEXT NOT NULL,
+                    added_by TEXT NOT NULL,
+                    added_at INTEGER NOT NULL,
+                    display_name TEXT NOT NULL,
+                    is_anon INTEGER DEFAULT 0,
+                    skip_shields INTEGER DEFAULT 0
+                )`, (createErr) => {
+                    if (createErr) {
+                        console.error('Error creating new table:', createErr);
+                        return;
+                    }
+                    
+                    // Copy data from old table
+                    db.run(`INSERT INTO queue_metadata SELECT * FROM queue_metadata_old`, (copyErr) => {
+                        if (copyErr) {
+                            console.error('Error copying data:', copyErr);
+                            return;
+                        }
+                        
+                        // Drop old table
+                        db.run('DROP TABLE queue_metadata_old', (dropErr) => {
+                            if (dropErr) {
+                                console.error('Error dropping old table:', dropErr);
+                            } else {
+                                console.log('Successfully migrated queue_metadata table (duplicates now allowed)');
+                            }
+                        });
+                    });
+                });
             });
         });
+    } else if (!row) {
+        // Table doesn't exist, create it fresh
+        db.run(`CREATE TABLE queue_metadata (
+            track_uri TEXT NOT NULL,
+            added_by TEXT NOT NULL,
+            added_at INTEGER NOT NULL,
+            display_name TEXT NOT NULL,
+            is_anon INTEGER DEFAULT 0,
+            skip_shields INTEGER DEFAULT 0
+        )`, (createErr) => {
+            if (createErr) {
+                console.error('Error creating queue_metadata table:', createErr);
+            } else {
+                console.log('queue_metadata table created');
+            }
+        });
+    } else {
+        console.log('queue_metadata table ready');
     }
 });
 
