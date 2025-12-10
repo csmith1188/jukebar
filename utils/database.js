@@ -47,15 +47,15 @@ db.run(`CREATE TABLE IF NOT EXISTS queue_metadata (
     track_uri TEXT PRIMARY KEY,
     added_by TEXT NOT NULL,
     added_at INTEGER NOT NULL,
-    display_name TEXT NOT NULL
+    display_name TEXT NOT NULL,
+    skip_shields INTEGER DEFAULT 0
 )`, (err) => {
     if (err) {
         console.error('Error creating queue_metadata table:', err);
     } else {
         // Add is_anon column if it doesn't exist
-        db.run(`ALTER TABLE queue_metadata ADD COLUMN is_anon INTEGER DEFAULT 0`, (alterErr) => {
+                db.run(`ALTER TABLE queue_metadata ADD COLUMN is_anon INTEGER DEFAULT 0`, (alterErr) => {
             if (alterErr) {
-                // Column might already exist, which is fine
                 if (!alterErr.message.includes('duplicate column')) {
                     console.error('Error adding is_anon column:', alterErr);
                 }
@@ -63,16 +63,32 @@ db.run(`CREATE TABLE IF NOT EXISTS queue_metadata (
                 console.log('Added is_anon column to queue_metadata table');
             }
             
-            // Clear the queue metadata on app startup
-            db.run('DELETE FROM queue_metadata', (clearErr) => {
-                if (clearErr) {
-                    console.error('Error clearing queue_metadata on startup:', clearErr);
+            // ADD THIS: Migrate skip_shields column
+            db.run(`ALTER TABLE queue_metadata ADD COLUMN skip_shields INTEGER DEFAULT 0`, (shieldErr) => {
+                if (shieldErr) {
+                    if (!shieldErr.message.includes('duplicate column')) {
+                        console.error('Error adding skip_shields column:', shieldErr);
+                    }
                 } else {
-                    console.log('Cleared queue_metadata on app startup');
+                    console.log('Added skip_shields column to queue_metadata table');
                 }
+                
+                // DO NOT clear queue metadata on startup - we want to preserve it
+                // for pre-existing Spotify queue tracks and skip shields
+                console.log('queue_metadata table ready');
             });
         });
     }
 });
+
+db.run(`CREATE TABLE IF NOT EXISTS currently_playing (
+    track_uri TEXT PRIMARY KEY,
+    added_by TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    display_name TEXT NOT NULL,
+    skip_shields INTEGER DEFAULT 0,
+    is_anon INTEGER DEFAULT 0,
+    duration_ms INTEGER DEFAULT 0
+    )`);
 
 module.exports = db;

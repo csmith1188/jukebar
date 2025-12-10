@@ -98,9 +98,9 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Initialize queue from Spotify on startup
     async function initializeQueue() {
         try {
-            //console.log('Initializing queue from Spotify...');
+            console.log('Initializing queue from Spotify...');
             await queueManager.initializeFromSpotify(spotifyApi);
-            //console.log('Queue initialization complete');
+            console.log('Queue initialization complete');
         } catch (error) {
             console.warn('Could not initialize queue from Spotify:', error.message);
         }
@@ -167,6 +167,9 @@ app.get('/debug/formbar', isAuthenticated, (req, res) => {
 
 app.get('/leaderboard', isAuthenticated, (req, res) => {
     try {
+        if (Date.now() - (req.app.get('leaderboardLastReset') || 0) > 6 * 24 * 60 * 60 * 1000) {
+            checkAndResetLeaderboard(req.app);
+        }
         res.render('leaderboard.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
