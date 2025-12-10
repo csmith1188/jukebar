@@ -37,7 +37,7 @@ router.get('/api/users', isAuthenticated, requireTeacherAccess, async (req, res)
 
 // Get queue history (play transactions only)
 router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (req, res) => {
-    console.log('📊 Queue history endpoint hit - User:', req.session.user, 'Permission:', req.session.permission);
+    console.log('Queue history endpoint hit - User:', req.session.user, 'Permission:', req.session.permission);
     try {
         const db = require('../utils/database');
         const limit = parseInt(req.query.limit) || 20;

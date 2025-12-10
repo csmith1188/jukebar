@@ -152,7 +152,7 @@ class QueueManager {
 
     // Initialize queue from Spotify on startup
     async initializeFromSpotify(spotifyApi) {
-        console.log('🎵 initializeFromSpotify() called');
+        console.log('initializeFromSpotify() called');
         try {
             console.log('Fetching current Spotify queue...');
 
@@ -232,7 +232,7 @@ class QueueManager {
                                                 console.error('Failed to create default metadata:', err);
                                                 reject(err);
                                             } else {
-                                                console.log(`✅ Created default metadata (changes: ${this.changes}, lastID: ${this.lastID})`);
+                                                console.log(`Created default metadata (changes: ${this.changes}, lastID: ${this.lastID})`);
                                                 // Add to metadataMap so it's available immediately
                                                 metadataMap[item.uri] = {
                                                     added_by: 'Spotify',
@@ -495,7 +495,7 @@ class QueueManager {
                             console.error('Failed to delete stale metadata:', err);
                             reject(err);
                         } else {
-                            console.log(`🧹 Cleaned up ${this.changes} stale track(s) from metadata`);
+                            console.log(`Cleaned up ${this.changes} stale track(s) from metadata`);
                             resolve();
                         }
                     }
