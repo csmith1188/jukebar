@@ -140,7 +140,7 @@ router.post('/api/leaderboard/force-reset', async (req, res) => {
     }
 });
 
-// Auto-check endpoint (can be called by frontend or cron job)
+// Auto-check endpoint
 router.get('/api/leaderboard/auto-check', async (req, res) => {
     const wasReset = await checkAndResetLeaderboard(req.app);
     if (wasReset) {

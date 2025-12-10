@@ -16,7 +16,19 @@
             <p class="user-greeting">Logged in as: <strong>
                     <%= user %>
                 </strong></p>
-            <div class="container">
+            <div class="container teacher-layout">
+                <div id="queueHistory">
+                    <div class="section-header">
+                        <h2>Queue History</h2>
+                        <p class="section-subtitle">Recently played tracks</p>
+                    </div>
+                    <div id="historyList">
+                        <p style="text-align: center; color: #b3b3b3;">Loading...</p>
+                    </div>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button id="loadMoreHistory">Load More</button>
+                    </div>
+                </div>
                 <div id="spotifyPlayer">
                     <div class="section-header">
                         <h2>Music Control</h2>
@@ -55,20 +67,6 @@
                             <tbody id="userTableBody">
                             </tbody>
                         </table>
-                    </div>
-                </div>
-            </div>
-            <div class="container" style="margin-top: 30px;">
-                <div id="queueHistory">
-                    <div class="section-header">
-                        <h2>Queue History</h2>
-                        <p class="section-subtitle">Recently played tracks</p>
-                    </div>
-                    <div id="historyList">
-                        <p style="text-align: center; color: #b3b3b3;">Loading...</p>
-                    </div>
-                    <div style="text-align: center; margin-top: 20px;">
-                        <button id="loadMoreHistory">Load More</button>
                     </div>
                 </div>
             </div>

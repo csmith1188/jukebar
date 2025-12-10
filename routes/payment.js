@@ -7,8 +7,8 @@ const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
 router.post('/transfer', async (req, res) => {
     try {
         const to = process.env.OWNER_ID;
-    let { pin, reason } = req.body || {};
-    const pendingAction = req.body?.pendingAction;
+        let { pin, reason } = req.body || {};
+        const pendingAction = req.body?.pendingAction;
 
         //gets the top 3 users to apply a discount
         const topUsers = await new Promise((resolve, reject) => {
@@ -36,7 +36,10 @@ router.post('/transfer', async (req, res) => {
         let amount;
         if (pendingAction === 'skip') {
             // Skips are a fixed cost (no discounts)
-            amount = 125;
+            amount = 100;
+        } else if (pendingAction === 'Skip Shield') {
+            // Skip Shields are a fixed cost (no discounts)
+            amount = 75;
         } else {
             amount = Number(process.env.TRANSFER_AMOUNT) || 50;
             if (userRow && userRow.id) {
@@ -76,7 +79,10 @@ router.post('/transfer', async (req, res) => {
             reason: String(reason),
         };
 
-        //console.log('Transfer payload being sent to Formbar:', payload);
+        console.log('=== FORMBAR TRANSFER REQUEST ===');
+        console.log('Transfer payload being sent to Formbar:', payload);
+        console.log('Formbar address:', FORMBAR_ADDRESS);
+        
         const transferResult = await fetch(`${FORMBAR_ADDRESS}/api/digipogs/transfer`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -84,8 +90,9 @@ router.post('/transfer', async (req, res) => {
         });
 
         const responseJson = await transferResult.json();
-        //console.log('Formbar response status:', transferResult.status);
-        //console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
+        console.log('Formbar response status:', transferResult.status);
+        console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
+        console.log('================================');
 
         // Check if the transfer was successful based on the response
         if (transferResult.ok && responseJson) {
@@ -336,7 +343,9 @@ router.post('/getAmount', async (req, res) => {
         let discountApplied = false;
 
         if (pendingAction === 'skip') {
-            amount = 125;
+            amount = 100;
+        } else if (pendingAction === 'Skip Shield') {
+            amount = 75;
         } else {
             amount = Number(process.env.TRANSFER_AMOUNT) || 50;
             // Get top 3 user IDs in order
@@ -354,7 +363,7 @@ router.post('/getAmount', async (req, res) => {
                 if (topUsers[0] === userIdNum) {
                     amount = Math.max(0, amount - 10); //10 pogs off
                     discountApplied = true;
-                } else if (topUsers[1] === userIdNum) { 
+                } else if (topUsers[1] === userIdNum) {
                     amount = Math.max(0, amount - 5);  //5 pogs off
                     discountApplied = true;
                 } else if (topUsers[2] === userIdNum) {
