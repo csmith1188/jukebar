@@ -439,7 +439,7 @@ router.post('/addToQueue', async (req, res) => {
         //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username2, 'type:', typeof username2);
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
                  VALUES (?, ?, ?, ?, ?, ?)`,
                 [track.uri, username2, Date.now(), username2, isAnon, 0],
                 function (err) {

@@ -432,8 +432,13 @@ class QueueManager {
 
             return { currentTrack, queue: newQueue };
         } catch (error) {
-            console.error('Error syncing with Spotify:', error);
-            throw error;
+            console.error('Error syncing with Spotify:', error.message || error);
+            
+            // Don't crash the server - return current state
+            return { 
+                currentTrack: this.currentTrack, 
+                queue: this.queue 
+            };
         }
     }
 

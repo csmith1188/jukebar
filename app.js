@@ -110,8 +110,12 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     initializeQueue();
     
     // Periodic Spotify sync (every 5 seconds)
-    setInterval(() => {
-        queueManager.syncWithSpotify(spotifyApi);
+    setInterval(async () => {
+        try {
+            await queueManager.syncWithSpotify(spotifyApi);
+        } catch (error) {
+            console.error('Sync interval error (non-fatal):', error.message);
+        }
     }, 5000);
 }
 
