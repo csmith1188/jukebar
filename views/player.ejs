@@ -628,8 +628,12 @@
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
                             </div>
-                            <button class="shield-button" onclick="purchaseShield('${track.uri}')" title="Add Skip Shield">
-                                <img src="/img/skipShield.png" alt="Skip Shield" class="shield-icon">
+                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${track.image}')" title="More options">
+                                <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="2" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="8" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="14" cy="2" r="2" fill="currentColor"/>
+                                </svg>
                             </button>
                         </div>
                     `;

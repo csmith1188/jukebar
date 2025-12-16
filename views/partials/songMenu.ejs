@@ -1,0 +1,49 @@
+<div class="song-menu-container">
+    <div class="song-info">
+        <h3 class="current-song-title">Current Song</h3>
+        <p class="song-details">Artist - Song Name</p>
+    </div>
+    
+    <div class="menu-actions">
+        <button class="skip-shield-btn" id="skipShieldBtn">
+            <i class="fas fa-shield-alt"></i>
+            Skip Shield (75 Digipogs)
+        </button>
+        
+        <button class="vote-ban-btn" id="voteBanBtn">
+            <i class="fas fa-ban"></i>
+            Vote Ban
+        </button>
+    </div>
+    
+    <div class="shield-status" id="shieldStatus" style="display: none;">
+        <span class="shield-indicator">
+            <i class="fas fa-shield-alt"></i>
+            Skip Shield Active
+        </span>
+    </div>
+</div>
+
+<script>
+document.getElementById('skipShieldBtn').addEventListener('click', function() {
+    // Get the currently playing track URI from the global variable
+    if (!currentlyPlayingUri) {
+        alert('No track currently playing!');
+        return;
+    }
+    
+    // Call the purchaseShield function from player.ejs
+    if (typeof window.purchaseShield === 'function') {
+        const trackUri = 'spotify:track:' + currentlyPlayingUri;
+        window.purchaseShield(trackUri);
+    } else {
+        console.error('purchaseShield function not found');
+        alert('Unable to purchase shield');
+    }
+});
+
+document.getElementById('voteBanBtn').addEventListener('click', function() {
+    // Vote ban button - no function as requested
+    console.log('Vote ban clicked - no function implemented');
+});
+</script>

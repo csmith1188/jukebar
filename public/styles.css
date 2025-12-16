@@ -739,6 +739,44 @@ p {
     object-fit: contain;
 }
 
+/* Queue Item Actions Container */
+.queue-item-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Ellipsis Button */
+.ellipsis-button {
+    background: transparent;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    overflow: hidden;
+}
+
+.ellipsis-button:hover {
+    background: #1db954;
+}
+
+.ellipsis-button:active {
+    background: #1db954;
+}
+
 .shield-badge {
     display: inline-flex;
     align-items: center;
