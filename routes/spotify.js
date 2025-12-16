@@ -10,26 +10,37 @@ const fs = require('fs');
 const path = require('path');
 
 // Play random sound from /sfx folder
+let isPlayingSound = false;
+
 function playRandomBlockedSound() {
+    if (isPlayingSound) {
+        console.log('Already playing a sound; skipping');
+        return null;
+    }
+
     try {
         const sfxDir = path.join(__dirname, '..', 'public', 'sfx');
         const files = fs.readdirSync(sfxDir).filter(f => f.endsWith('.wav') || f.endsWith('.mp3'));
-        
+
         if (files.length === 0) {
             console.warn('No sound files found in /sfx');
             return null;
         }
-        
+
         const randomFile = files[Math.floor(Math.random() * files.length)];
         const soundPath = path.join(sfxDir, randomFile);
-        
-        console.log(`🔊 Playing blocked sound: ${randomFile}`);
+
+        console.log(`Playing blocked sound: ${randomFile}`);
+        isPlayingSound = true;
+
         exec(`omxplayer "${soundPath}"`, (err) => {
+            isPlayingSound = false;
             if (err) console.error('Error playing sound:', err);
         });
-        
+
         return randomFile; // Return filename for logging
     } catch (err) {
+        isPlayingSound = false;
         console.error('Error in playRandomBlockedSound:', err);
         return null;
     }
@@ -340,8 +351,8 @@ router.post('/addToQueue', async (req, res) => {
             //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
-                    `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
                     [track.uri, username, Date.now(), username, isAnon, 0],
                     function (err) {
                         if (err) {
@@ -439,7 +450,7 @@ router.post('/addToQueue', async (req, res) => {
         //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username2, 'type:', typeof username2);
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
                  VALUES (?, ?, ?, ?, ?, ?)`,
                 [track.uri, username2, Date.now(), username2, isAnon, 0],
                 function (err) {
@@ -471,19 +482,16 @@ router.post('/addToQueue', async (req, res) => {
             );
         }
 
-        //log the transaction
-        if (currentTrack) {
-            await logTransaction({
-                userID: req.session.token.id,
-                displayName: req.session.token.displayName || req.session.user,
-                action: 'play',
-                trackURI: trackInfo.uri,
-                trackName: trackInfo.name,
-                artistName: trackInfo.artist,
-                cost: 50
-            });
-
-        }
+        // Log the transaction - ALWAYS log, not just when currentTrack exists
+        await logTransaction({
+            userID: req.session.token.id,
+            displayName: req.session.user,
+            action: 'play',
+            trackURI: trackInfo.uri,
+            trackName: trackInfo.name,
+            artistName: trackInfo.artist,
+            cost: 50
+        });
 
         // Clear payment flag after successful queue addition
         req.session.hasPaid = false;
@@ -561,7 +569,7 @@ router.post('/skip', async (req, res) => {
 
     const ownerId = Number(process.env.OWNER_ID);
     if (req.session.token.id === ownerId) {
-        console.log('✅ Owner detected - checking for shields');
+        console.log('Owner detected - checking for shields');
         try {
             await ensureSpotifyAccessToken();
 
@@ -584,7 +592,7 @@ router.post('/skip', async (req, res) => {
                 console.log('Track metadata:', trackMetadata);
                 if (trackMetadata && trackMetadata.skip_shields > 0) {
                     const remainingShields = trackMetadata.skip_shields - 1;
-                    console.log(`🛡️ SHIELD FOUND: ${trackMetadata.skip_shields} shields on track`);
+                    console.log(`SHIELD FOUND: ${trackMetadata.skip_shields} shields on track`);
                     console.log('Decrementing shield count...');
 
                     await new Promise((resolve, reject) => {
@@ -598,9 +606,9 @@ router.post('/skip', async (req, res) => {
                         );
                     });
 
-                    console.log(`✅ Owner skip - shield decremented. ${remainingShields} remaining`);
+                    console.log(`Owner skip - shield decremented. ${remainingShields} remaining`);
                 } else {
-                    console.log('❌ No shields found on track (owner skip)');
+                    console.log('No shields found on track (owner skip)');
                 }
             }
 
@@ -628,7 +636,7 @@ router.post('/skip', async (req, res) => {
     }
 
     try {
-        console.log('💰 Regular user skip - payment confirmed');
+        console.log('Regular user skip - payment confirmed');
         await ensureSpotifyAccessToken();
 
         // Check if the track being skipped has skip shields
@@ -649,7 +657,7 @@ router.post('/skip', async (req, res) => {
             console.log('Track metadata:', trackMetadata);
             // If track has skip shields, block the skip and decrement shield count
             if (trackMetadata && trackMetadata.skip_shields > 0) {
-                console.log(`🛡️ SHIELD DETECTED: ${trackMetadata.skip_shields} shields - BLOCKING SKIP`);
+                console.log(`SHIELD DETECTED: ${trackMetadata.skip_shields} shields - BLOCKING SKIP`);
                 console.log('User will be charged but skip will be blocked');
                 const remainingShields = trackMetadata.skip_shields - 1;
                 console.log(`Decrementing shield: ${trackMetadata.skip_shields} -> ${remainingShields}`);
@@ -665,7 +673,7 @@ router.post('/skip', async (req, res) => {
                         }
                     );
                 });
-                console.log('✅ Shield decremented in database');
+                console.log('Shield decremented in database');
 
                 // Play random blocked sound
                 const soundFile = playRandomBlockedSound();
@@ -692,8 +700,8 @@ router.post('/skip', async (req, res) => {
                 // Broadcast updated queue to refresh shield count
                 await queueManager.syncWithSpotify(spotifyApi);
 
-                console.log('🚫 Returning shield blocked response to client');
-                console.log(`🔊 Played sound: ${soundFile}`);
+                console.log('Returning shield blocked response to client');
+                console.log(`Played sound: ${soundFile}`);
                 return req.session.save(() => {
                     res.json({
                         ok: false,
@@ -704,10 +712,10 @@ router.post('/skip', async (req, res) => {
                     });
                 });
             } else {
-                console.log('❌ No shields found - proceeding with skip');
+                console.log('No shields found - proceeding with skip');
             }
         } else {
-            console.log('⚠️ No track URI provided - proceeding with skip anyway');
+            console.log('No track URI provided - proceeding with skip anyway');
         }
 
         // No shields, proceed with skip
@@ -830,13 +838,13 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
 
     // Validation: Check authentication
     if (!userId || !displayName) {
-        console.error('❌ User not properly authenticated');
+        console.error('User not properly authenticated');
         return res.status(401).json({ ok: false, error: 'User not authenticated' });
     }
 
     // Validation: Check track URI
     if (!trackUri) {
-        console.error('❌ Track URI missing from request');
+        console.error('Track URI missing from request');
         return res.status(400).json({ ok: false, error: 'Track URI is required' });
     }
 
@@ -851,7 +859,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         const track = await new Promise((resolve, reject) => {
             db.get("SELECT * FROM queue_metadata WHERE track_uri = ?", [trackUri], (err, row) => {
                 if (err) {
-                    console.error('❌ Database error querying queue_metadata:', err);
+                    console.error('Database error querying queue_metadata:', err);
                     reject(err);
                 } else {
                     console.log('Track found in queue:', row);
@@ -861,11 +869,11 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         });
 
         if (!track) {
-            console.error('❌ Track not found in queue:', trackUri);
+            console.error('Track not found in queue:', trackUri);
             return res.status(404).json({ ok: false, error: 'Track not found in queue' });
         }
 
-        console.log('✅ Track found:', track.track_name, 'by', track.artist_name);
+        console.log('Track found:', track.track_name, 'by', track.artist_name);
 
         // Step 2: Verify payment for non-owner
         if (!isOwner) {
@@ -873,10 +881,10 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
             console.log('hasPaid:', req.session.hasPaid);
 
             if (!req.session.hasPaid) {
-                console.error('❌ Payment required but not received');
+                console.error('Payment required but not received');
                 return res.status(402).json({ ok: false, error: 'Payment required' });
             }
-            console.log('✅ Payment verified');
+            console.log('Payment verified');
         } else {
             console.log('Step 2: Skipped (owner bypass)');
         }
@@ -889,10 +897,10 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 [trackUri],
                 function (err) {
                     if (err) {
-                        console.error('❌ Database error updating shields:', err);
+                        console.error('Database error updating shields:', err);
                         reject(err);
                     } else {
-                        console.log('✅ Shield count incremented. Rows affected:', this.changes);
+                        console.log('Shield count incremented. Rows affected:', this.changes);
                         resolve(this.changes);
                     }
                 }
@@ -900,7 +908,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         });
 
         if (updateResult === 0) {
-            console.error('❌ No rows updated - track may have been removed from queue');
+            console.error('No rows updated - track may have been removed from queue');
             return res.status(404).json({ ok: false, error: 'Track no longer in queue' });
         }
 
@@ -916,9 +924,9 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 artistName: track.artist_name,
                 cost: isOwner ? 0 : 25
             });
-            console.log('✅ Transaction logged');
+            console.log('Transaction logged');
         } catch (logErr) {
-            console.error('⚠️ Failed to log transaction (non-fatal):', logErr);
+            console.error('WARNING: Failed to log transaction (non-fatal):', logErr);
             // Continue anyway - shield was added
         }
 
@@ -926,7 +934,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         if (!isOwner) {
             console.log('Step 5: Clearing payment flag...');
             req.session.hasPaid = false;
-            console.log('✅ Payment flag cleared');
+            console.log('Payment flag cleared');
         }
 
         // Step 6: Broadcast queue update
@@ -934,9 +942,9 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         try {
             // Force re-sync from Spotify to get updated metadata
             await queueManager.syncWithSpotify(spotifyApi);
-            console.log('✅ Queue synced and broadcasted');
+            console.log('Queue synced and broadcasted');
         } catch (broadcastErr) {
-            console.error('⚠️ Failed to sync queue (non-fatal):', broadcastErr);
+            console.error('WARNING: Failed to sync queue (non-fatal):', broadcastErr);
             // Continue anyway - shield was added
         }
 
@@ -944,15 +952,15 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         console.log('Step 7: Saving session and responding...');
         req.session.save((saveErr) => {
             if (saveErr) {
-                console.error('⚠️ Session save error (non-fatal):', saveErr);
+                console.error('WARNING: Session save error (non-fatal):', saveErr);
             }
-            console.log('✅ Shield purchase complete!');
+            console.log('Shield purchase complete!');
             console.log('================================');
             res.json({ ok: true, message: 'Shield added successfully' });
         });
 
     } catch (error) {
-        console.error('❌ FATAL ERROR in purchaseShield:', error);
+        console.error('FATAL ERROR in purchaseShield:', error);
         console.error('Error stack:', error.stack);
         console.log('================================');
         res.status(500).json({ ok: false, error: 'Server error', details: error.message });

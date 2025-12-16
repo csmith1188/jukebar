@@ -815,6 +815,24 @@ p {
     background: #1ed760;
 }
 
+.progress-bar-container {
+    width: 100%;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 8px 0;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #1DB954, #1ed760);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+
 /* Leaderboard */
 .leaderboard-container {
     max-width: 800px;
