@@ -10,17 +10,17 @@ let formbarSocketRef = null;
 
 function setRawToken(token) {
     cachedRawToken = token;
-    console.log('🔑 Raw token cached for Formbar auth');
+    console.log('Raw token cached for Formbar auth');
     console.log('Token length:', token ? token.length : 0);
     
     // If formbar socket is already connected, authenticate immediately
     if (formbarSocketRef && formbarSocketRef.connected) {
-        console.log('🔄 Re-authenticating with Formbar using new token...');
+        console.log('Re-authenticating with Formbar using new token...');
         formbarSocketRef.emit('auth', { token: cachedRawToken });
         
         // Request current classroom state after auth
         setTimeout(() => {
-            console.log('📡 Requesting current classroom state from Formbar...');
+            console.log('Requesting current classroom state from Formbar...');
             formbarSocketRef.emit('getClassroom');
         }, 500);
     }
@@ -31,19 +31,19 @@ function setupFormbarSocket(io, formbarSocket) {
     formbarSocketRef = formbarSocket;
     
     formbarSocket.on('connect', () => {
-        console.log('✅ Connected to Formbar socket');
+        console.log('Connected to Formbar socket');
 
         if (cachedRawToken) {
-            console.log('🔑 Sending auth token to Formbar...');
+            console.log('Sending auth token to Formbar...');
             formbarSocket.emit('auth', { token: cachedRawToken });
             
             // Request current classroom state after auth
             setTimeout(() => {
-                console.log('📡 Requesting current classroom state from Formbar...');
+                console.log('Requesting current classroom state from Formbar...');
                 formbarSocket.emit('getClassroom');
             }, 500);
         } else {
-            console.log('⚠️ No cached token available for Formbar auth');
+            console.log('WARNING: No cached token available for Formbar auth');
         }
     });
     
@@ -62,7 +62,7 @@ function setupFormbarSocket(io, formbarSocket) {
             console.log('Broadcasting to all clients...');
             io.emit('auxiliaryPermission', auxiliaryPermission);
         } else {
-            console.log('⚠️ No auxiliary permission found in classroom data');
+            console.log('WARNING: No auxiliary permission found in classroom data');
         }
         
         // Relay the classroom data to all connected clients
@@ -75,28 +75,28 @@ function setupFormbarSocket(io, formbarSocket) {
     });
 
     formbarSocket.on('connect_error', (err) => {
-        console.error('❌ Formbar connection error:', err.message);
+        console.error('Formbar connection error:', err.message);
         console.error('Error details:', err);
     });
 
     formbarSocket.on('disconnect', (reason) => {
-        console.log('⚠️ Disconnected from Formbar. Reason:', reason);
+        console.log('WARNING: Disconnected from Formbar. Reason:', reason);
     });
 
     formbarSocket.on('reconnect_attempt', (attemptNumber) => {
-        console.log(`🔄 Attempting to reconnect to Formbar (attempt ${attemptNumber})...`);
+        console.log(`Attempting to reconnect to Formbar (attempt ${attemptNumber})...`);
     });
 
     formbarSocket.on('reconnect', (attemptNumber) => {
-        console.log(`✅ Reconnected to Formbar after ${attemptNumber} attempts`);
+        console.log(`Reconnected to Formbar after ${attemptNumber} attempts`);
     });
 
     formbarSocket.on('reconnect_error', (err) => {
-        console.error('❌ Reconnection error:', err.message);
+        console.error('Reconnection error:', err.message);
     });
 
     formbarSocket.on('reconnect_failed', () => {
-        console.error('❌ Failed to reconnect to Formbar after all attempts');
+        console.error('Failed to reconnect to Formbar after all attempts');
     });
 }
 
