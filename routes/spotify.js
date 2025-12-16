@@ -490,7 +490,7 @@ router.post('/addToQueue', async (req, res) => {
             trackURI: trackInfo.uri,
             trackName: trackInfo.name,
             artistName: trackInfo.artist,
-            cost: 50
+            cost: Number(process.env.SONG_AMOUNT) || 50
         });
 
         // Clear payment flag after successful queue addition
@@ -691,7 +691,7 @@ router.post('/skip', async (req, res) => {
                     trackURI: trackUri,
                     trackName: trackName,
                     artistName: artistName,
-                    cost: 100
+                    cost: Number(process.env.SKIP_AMOUNT) || 100
                 });
 
                 // Clear payment flag (they still paid but skip was blocked)
@@ -708,7 +708,7 @@ router.post('/skip', async (req, res) => {
                         shieldBlocked: true,
                         remaining: remainingShields,
                         soundPlayed: soundFile,
-                        message: `SKIP BLOCKED! This song is protected by ${remainingShields} shield${remainingShields !== 1 ? 's' : ''}. You were charged 100 digipogs.`
+                        message: `SKIP BLOCKED! This song is protected by ${remainingShields} shield${remainingShields !== 1 ? 's' : ''}. You were charged ${process.env.SKIP_AMOUNT || 100} digipogs.`
                     });
                 });
             } else {
@@ -732,7 +732,7 @@ router.post('/skip', async (req, res) => {
                 trackURI: currentTrack.uri,
                 trackName: currentTrack.name,
                 artistName: currentTrack.artist,
-                cost: 75
+                cost: Number(process.env.SKIP_AMOUNT) || 100
             });
         }
         // Clear payment flag after successful skip
@@ -922,7 +922,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 trackURI: trackUri,
                 trackName: track.track_name,
                 artistName: track.artist_name,
-                cost: isOwner ? 0 : 25
+                cost: isOwner ? 0 : (Number(process.env.SKIP_SHIELD_AMOUNT) || 75)
             });
             console.log('Transaction logged');
         } catch (logErr) {

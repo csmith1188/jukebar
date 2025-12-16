@@ -1,30 +1,34 @@
 <div class="song-menu-container">
-    <div class="song-info">
-        <h3 class="current-song-title">Current Song</h3>
-        <p class="song-details">Artist - Song Name</p>
+    <div class="song-menu-track-display">
+        <img id="menuTrackImage" src="" alt="Album Cover" class="menu-album-cover">
+        <div class="menu-track-info">
+            <div id="menuTrackTitle" class="menu-track-title">Track Name</div>
+            <div id="menuTrackArtist" class="menu-track-artist">Artist Name</div>
+        </div>
     </div>
     
     <div class="menu-actions">
-        <button class="skip-shield-btn" id="skipShieldBtn">
-            <i class="fas fa-shield-alt"></i>
-            Skip Shield (75 Digipogs)
+        <button class="menu-shield-button" id="skipShieldBtn">
+            <img src="/img/skipShield.png" alt="Shield" class="shield-icon">
+            <span class="button-text">Shield this song</span>
         </button>
         
-        <button class="vote-ban-btn" id="voteBanBtn">
+        <button class="menu-ban-button" id="voteBanBtn">
             <i class="fas fa-ban"></i>
-            Vote Ban
+            <span class="button-text">Vote Ban</span>
         </button>
-    </div>
-    
-    <div class="shield-status" id="shieldStatus" style="display: none;">
-        <span class="shield-indicator">
-            <i class="fas fa-shield-alt"></i>
-            Skip Shield Active
-        </span>
     </div>
 </div>
 
 <script>
+// Listen for updateSongMenu event to populate track details
+window.addEventListener('updateSongMenu', (event) => {
+    const details = event.detail;
+    document.getElementById('menuTrackImage').src = details.imageUrl || details.image;
+    document.getElementById('menuTrackTitle').textContent = details.name;
+    document.getElementById('menuTrackArtist').textContent = details.artist;
+});
+
 document.getElementById('skipShieldBtn').addEventListener('click', function() {
     // Get the currently playing track URI from the global variable
     if (!currentlyPlayingUri) {

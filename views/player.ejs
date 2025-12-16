@@ -75,6 +75,13 @@
             </div>
         </div>
 
+        <div id="songMenuModal">
+            <div class="song-menu-content">
+                <button id="hide-song-menu">&times;</button>
+                <%- include('partials/songMenu') %>
+            </div>
+        </div>
+
         <script>
             const userPermission = <%= userPermission %>;
             
@@ -455,11 +462,23 @@
                     document.getElementById('changelogModal').style.display = 'none';
                 });
 
+                // Song menu button event listeners
+                document.getElementById('hide-song-menu')?.addEventListener('click', () => {
+                    document.getElementById('songMenuModal').style.display = 'none';
+                    document.querySelector('.main-content').classList.remove('blurred');
+                });
+
                 // Close modal when clicking outside of it
                 window.addEventListener('click', (event) => {
                     const changelogModal = document.getElementById('changelogModal');
                     if (event.target === changelogModal) {
                         changelogModal.style.display = 'none';
+                    }
+                    
+                    const songMenuModal = document.getElementById('songMenuModal');
+                    if (event.target === songMenuModal) {
+                        songMenuModal.style.display = 'none';
+                        document.querySelector('.main-content').classList.remove('blurred');
                     }
                 });
 
@@ -779,6 +798,25 @@
                 setTimeout(() => {
                     notification.remove();
                 }, 3000);
+            }
+
+            function openSongMenu(uri, name, artist, imageUrl) {
+                // Set the song details in the modal
+                window.currentSongDetails = {
+                    uri: uri,
+                    name: name,
+                    artist: artist,
+                    imageUrl: imageUrl
+                };
+
+                // Show the modal
+                document.getElementById('songMenuModal').style.display = 'block';
+                document.querySelector('.main-content').classList.add('blurred');
+
+                // Dispatch event to update the song menu content
+                window.dispatchEvent(new CustomEvent('updateSongMenu', { 
+                    detail: { uri, name, artist, imageUrl } 
+                }));
             }
         </script>
 </body>

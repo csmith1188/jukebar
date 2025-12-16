@@ -129,7 +129,10 @@ app.get('/', isAuthenticated, (req, res) => {
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
             userPermission: req.session.permission || 2,
-            ownerID: Number(process.env.OWNER_ID) || 4
+            ownerID: Number(process.env.OWNER_ID) || 4,
+            songAmount: Number(process.env.SONG_AMOUNT) || 50,
+            skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
+            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT) || 75
         });
     } catch (error) {
         res.send(error.message);
@@ -145,7 +148,10 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
             userPermission: req.session.permission || 2,
-            ownerID: Number(process.env.OWNER_ID) || 4
+            ownerID: Number(process.env.OWNER_ID) || 4,
+            songAmount: Number(process.env.SONG_AMOUNT) || 50,
+            skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
+            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT) || 75
         });
     } catch (error) {
         res.send(error.message);

@@ -343,11 +343,11 @@ router.post('/getAmount', async (req, res) => {
         let discountApplied = false;
 
         if (pendingAction === 'skip') {
-            amount = 100;
+            amount = Number(process.env.SKIP_AMOUNT) || 100;
         } else if (pendingAction === 'Skip Shield') {
-            amount = 75;
+            amount = Number(process.env.SKIP_SHIELD_AMOUNT) || 75;
         } else {
-            amount = Number(process.env.TRANSFER_AMOUNT) || 50;
+            amount = Number(process.env.SONG_AMOUNT) || 50;
             // Get top 3 user IDs in order
             const topUsers = await new Promise((resolve, reject) => {
                 db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
