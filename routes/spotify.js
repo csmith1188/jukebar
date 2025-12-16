@@ -10,7 +10,14 @@ const fs = require('fs');
 const path = require('path');
 
 // Play random sound from /sfx folder
+let isPlayingSound = false;
+
 function playRandomBlockedSound() {
+    if (isPlayingSound) {
+        console.log('Already playing a sound; skipping');
+        return null;
+    }
+
     try {
         const sfxDir = path.join(__dirname, '..', 'public', 'sfx');
         const files = fs.readdirSync(sfxDir).filter(f => f.endsWith('.wav') || f.endsWith('.mp3'));
@@ -24,12 +31,16 @@ function playRandomBlockedSound() {
         const soundPath = path.join(sfxDir, randomFile);
 
         console.log(`Playing blocked sound: ${randomFile}`);
+        isPlayingSound = true;
+
         exec(`omxplayer "${soundPath}"`, (err) => {
+            isPlayingSound = false;
             if (err) console.error('Error playing sound:', err);
         });
 
         return randomFile; // Return filename for logging
     } catch (err) {
+        isPlayingSound = false;
         console.error('Error in playRandomBlockedSound:', err);
         return null;
     }
