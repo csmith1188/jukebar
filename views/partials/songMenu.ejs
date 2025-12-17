@@ -1,53 +1,86 @@
-<div class="song-menu-container">
-    <div class="song-menu-track-display">
-        <img id="menuTrackImage" src="" alt="Album Cover" class="menu-album-cover">
-        <div class="menu-track-info">
-            <div id="menuTrackTitle" class="menu-track-title">Track Name</div>
-            <div id="menuTrackArtist" class="menu-track-artist">Artist Name</div>
-        </div>
-    </div>
+<div class="context-menu-dropdown" id="contextMenuDropdown">
+    <button class="context-menu-item" id="contextShieldBtn">
+        <img src="/img/skipShield.png" alt="Shield" class="context-menu-icon">
+        <span>Skip Shield</span>
+    </button>
     
-    <div class="menu-actions">
-        <button class="menu-shield-button" id="skipShieldBtn">
-            <img src="/img/skipShield.png" alt="Shield" class="shield-icon">
-            <span class="button-text">Shield this song</span>
-        </button>
-        
-        <button class="menu-ban-button" id="voteBanBtn">
-            <i class="fas fa-ban"></i>
-            <span class="button-text">Vote Ban</span>
-        </button>
-    </div>
+    <button class="context-menu-item ban-item" id="contextBanBtn">
+        <img src="/img/ban.png" alt="Ban" class="context-menu-icon">
+        <span>Vote Ban</span>
+    </button>
 </div>
 
 <script>
-// Listen for updateSongMenu event to populate track details
+let currentMenuTrackUri = null;
+
+// Listen for updateSongMenu event to show dropdown at position
 window.addEventListener('updateSongMenu', (event) => {
     const details = event.detail;
-    document.getElementById('menuTrackImage').src = details.imageUrl || details.image;
-    document.getElementById('menuTrackTitle').textContent = details.name;
-    document.getElementById('menuTrackArtist').textContent = details.artist;
+    const dropdown = document.getElementById('contextMenuDropdown');
+    
+    // Store the track URI
+    currentMenuTrackUri = details.uri;
+    
+    // Position the dropdown
+    dropdown.style.left = details.x + 'px';
+    dropdown.style.top = details.y + 'px';
+    dropdown.style.display = 'block';
 });
 
-document.getElementById('skipShieldBtn').addEventListener('click', function() {
-    // Get the currently playing track URI from the global variable
-    if (!currentlyPlayingUri) {
-        alert('No track currently playing!');
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('contextMenuDropdown');
+    if (!e.target.closest('.context-menu-dropdown') && !e.target.closest('.ellipsis-button')) {
+        dropdown.style.display = 'none';
+    }
+});
+
+// Skip Shield button handler
+document.getElementById('contextShieldBtn').addEventListener('click', async function() {
+    const dropdown = document.getElementById('contextMenuDropdown');
+    
+    if (!currentMenuTrackUri) {
+        alert('No track selected!');
         return;
     }
     
-    // Call the purchaseShield function from player.ejs
-    if (typeof window.purchaseShield === 'function') {
-        const trackUri = 'spotify:track:' + currentlyPlayingUri;
-        window.purchaseShield(trackUri);
-    } else {
-        console.error('purchaseShield function not found');
-        alert('Unable to purchase shield');
+    try {
+        // Check if track still exists in queue
+        const checkResponse = await fetch('/checkTrackExists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackUri: currentMenuTrackUri })
+        });
+        
+        const result = await checkResponse.json();
+        
+        if (!result.exists) {
+            // Close the dropdown
+            dropdown.style.display = 'none';
+            
+            // Show error notification
+            alert('This song has left the queue and can no longer be shielded.');
+            return;
+        }
+        
+        // Track still exists, proceed with shield purchase
+        if (typeof window.purchaseShield === 'function') {
+            window.purchaseShield(currentMenuTrackUri);
+            dropdown.style.display = 'none';
+        } else {
+            console.error('purchaseShield function not found');
+            alert('Unable to purchase shield');
+        }
+    } catch (error) {
+        console.error('Error checking track:', error);
+        alert('Unable to verify track status');
     }
 });
 
-document.getElementById('voteBanBtn').addEventListener('click', function() {
-    // Vote ban button - no function as requested
+// Vote Ban button handler
+document.getElementById('contextBanBtn').addEventListener('click', function() {
+    const dropdown = document.getElementById('contextMenuDropdown');
     console.log('Vote ban clicked - no function implemented');
+    dropdown.style.display = 'none';
 });
 </script>

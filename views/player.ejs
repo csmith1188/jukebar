@@ -75,12 +75,7 @@
             </div>
         </div>
 
-        <div id="songMenuModal">
-            <div class="song-menu-content">
-                <button id="hide-song-menu">&times;</button>
-                <%- include('partials/songMenu') %>
-            </div>
-        </div>
+        <%- include('partials/songMenu') %>
 
         <script>
             const userPermission = <%= userPermission %>;
@@ -462,23 +457,11 @@
                     document.getElementById('changelogModal').style.display = 'none';
                 });
 
-                // Song menu button event listeners
-                document.getElementById('hide-song-menu')?.addEventListener('click', () => {
-                    document.getElementById('songMenuModal').style.display = 'none';
-                    document.querySelector('.main-content').classList.remove('blurred');
-                });
-
                 // Close modal when clicking outside of it
                 window.addEventListener('click', (event) => {
                     const changelogModal = document.getElementById('changelogModal');
                     if (event.target === changelogModal) {
                         changelogModal.style.display = 'none';
-                    }
-                    
-                    const songMenuModal = document.getElementById('songMenuModal');
-                    if (event.target === songMenuModal) {
-                        songMenuModal.style.display = 'none';
-                        document.querySelector('.main-content').classList.remove('blurred');
                     }
                 });
 
@@ -647,7 +630,7 @@
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
                             </div>
-                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${track.image}')" title="More options">
+                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${track.image}', event)" title="More options">
                                 <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <circle cx="2" cy="2" r="2" fill="currentColor"/>
                                     <circle cx="8" cy="2" r="2" fill="currentColor"/>
@@ -663,27 +646,48 @@
                 }
             }
 
+            // Track the last displayed track to avoid unnecessary re-renders
+            let lastDisplayedTrackUri = null;
+
             // Update currently playing with WebSocket data
             function updateCurrentlyPlaying(track, isPlaying) {
                 const currentDiv = document.getElementById('currentlyPlaying');
                 if (!currentDiv) return;
 
                 if (track) {
+                    // Get the current track URI
+                    const trackUri = track.uri || track.id;
+                    
                     // Update global currentlyPlayingUri for skip functionality
                     if (track.uri) {
                         currentlyPlayingUri = track.uri.replace('spotify:track:', '');
-                        console.log('Now playing URI:', currentlyPlayingUri);
                     } else if (track.id) {
                         currentlyPlayingUri = track.id;
-                        console.log('Now playing ID:', currentlyPlayingUri);
-                    } else {
-                        console.log('WARNING: No URI in track:', track);
                     }
                     
-                    // Update global progress variables
-                    currentProgress = track.progress || 0;
-                    currentDuration = track.duration || 0;
+                    // Update global progress variables from server data
+                    // Only update progress if it's a different track or if we don't have progress yet
+                    if (lastDisplayedTrackUri !== trackUri) {
+                        // New track - accept server's progress data
+                        currentProgress = track.progress || 0;
+                        currentDuration = track.duration || 0;
+                    } else {
+                        // Same track - only update duration if we don't have it
+                        if (!currentDuration && track.duration) {
+                            currentDuration = track.duration;
+                        }
+                        // Don't update progress - let the interval handle it
+                    }
                     isCurrentlyPlaying = isPlaying;
+                    
+                    // If same track, just update progress bar without re-rendering
+                    if (lastDisplayedTrackUri === trackUri) {
+                        updateProgressDisplay();
+                        return;
+                    }
+                    
+                    // Different track - do full re-render
+                    lastDisplayedTrackUri = trackUri;
                     
                     // Handle anonymous mode display
                     let addedByDisplay = track.addedBy || 'Spotify';
@@ -716,10 +720,15 @@
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay}</div>
-                                <div class="track-progress" id="track-progress-display">${currentTime} / ${totalTime}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
+                                <div class="progress-container">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="progress-fill"></div>
+                                    </div>
+                                    <div class="progress-time" id="track-progress-display">${currentTime} / ${totalTime}</div>
+                                </div>
                             </div>
-                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${imageUrl}')" title="More options">
+                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${imageUrl}', event)" title="More options">
                                 <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <circle cx="2" cy="2" r="2" fill="currentColor"/>
                                     <circle cx="8" cy="2" r="2" fill="currentColor"/>
@@ -729,10 +738,14 @@
                         </div>
                     `;
                     
+                    // Update progress bar immediately after render
+                    updateProgressDisplay();
+                    
                     // Start progress update interval
                     startProgressInterval();
                 } else {
                     currentlyPlayingUri = null;
+                    lastDisplayedTrackUri = null;
                     currentProgress = 0;
                     currentDuration = 0;
                     isCurrentlyPlaying = false;
@@ -764,6 +777,8 @@
             // Update just the progress display without re-rendering everything
             function updateProgressDisplay() {
                 const progressDisplay = document.getElementById('track-progress-display');
+                const progressFill = document.getElementById('progress-fill');
+                
                 if (progressDisplay) {
                     const formatTime = (ms) => {
                         const totalSeconds = Math.floor(ms / 1000);
@@ -773,6 +788,11 @@
                     };
                     
                     progressDisplay.textContent = `${formatTime(currentProgress)} / ${formatTime(currentDuration)}`;
+                }
+                
+                if (progressFill && currentDuration > 0) {
+                    const percentage = (currentProgress / currentDuration) * 100;
+                    progressFill.style.width = `${percentage}%`;
                 }
             }
 
@@ -800,22 +820,23 @@
                 }, 3000);
             }
 
-            function openSongMenu(uri, name, artist, imageUrl) {
-                // Set the song details in the modal
-                window.currentSongDetails = {
-                    uri: uri,
-                    name: name,
-                    artist: artist,
-                    imageUrl: imageUrl
-                };
+            function openSongMenu(uri, name, artist, imageUrl, event) {
+                // Prevent event bubbling
+                if (event) {
+                    event.stopPropagation();
+                }
 
-                // Show the modal
-                document.getElementById('songMenuModal').style.display = 'block';
-                document.querySelector('.main-content').classList.add('blurred');
+                // Get button position
+                const button = event?.target.closest('.ellipsis-button');
+                const rect = button?.getBoundingClientRect();
+                
+                // Calculate dropdown position (below and to the left of button)
+                const x = rect ? rect.left - 150 : 100; // Offset left to align with button
+                const y = rect ? rect.bottom + 5 : 100; // Below button with small gap
 
-                // Dispatch event to update the song menu content
+                // Dispatch event to show dropdown at position
                 window.dispatchEvent(new CustomEvent('updateSongMenu', { 
-                    detail: { uri, name, artist, imageUrl } 
+                    detail: { uri, name, artist, imageUrl, x, y } 
                 }));
             }
         </script>

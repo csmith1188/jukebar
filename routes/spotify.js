@@ -615,7 +615,7 @@ router.post('/skip', async (req, res) => {
             await spotifyApi.skipToNext();
 
             // Update queueManager and broadcast to clients
-            const nextTrack = queueManager.skipTrack();
+            const nextTrack = await queueManager.skipTrack();
             //console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
             res.json({ ok: true, currentTrack: nextTrack });
             return;
@@ -722,7 +722,7 @@ router.post('/skip', async (req, res) => {
         await spotifyApi.skipToNext();
 
         // Update queueManager and broadcast to clients
-        const nextTrack = queueManager.skipTrack();
+        const nextTrack = await queueManager.skipTrack();
 
         if (currentTrack) {
             await logTransaction({
@@ -804,7 +804,7 @@ router.post('/queue/skip', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
         }
 
-        const nextTrack = queueManager.skipTrack();
+        const nextTrack = await queueManager.skipTrack();
 
         if (nextTrack) {
             // Actually skip on Spotify
@@ -822,6 +822,33 @@ router.post('/queue/skip', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' });
         }
         res.status(500).json({ ok: false, error: 'Failed to skip track' });
+    }
+});
+
+// Check if track exists in queue or is currently playing
+router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
+    const { trackUri } = req.body;
+    const db = require('../utils/database');
+    const queueManager = require('../utils/queueManager');
+    
+    try {
+        // Check if it's currently playing
+        const currentTrack = queueManager.getCurrentTrack();
+        const isCurrentlyPlaying = currentTrack && currentTrack.uri === trackUri;
+        
+        // Check if track exists in queue metadata
+        const track = await new Promise((resolve, reject) => {
+            db.get("SELECT track_uri FROM queue_metadata WHERE track_uri = ?", [trackUri], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+        
+        // Track exists if it's currently playing OR in the queue
+        res.json({ exists: isCurrentlyPlaying || !!track });
+    } catch (error) {
+        console.error('Error checking track existence:', error);
+        res.status(500).json({ exists: false, error: 'Server error' });
     }
 });
 

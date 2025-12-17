@@ -43,16 +43,27 @@ class QueueManager {
     }
 
     // Skip to next track
-    skipTrack() {
+    async skipTrack() {
         if (this.queue.length > 0) {
+            const skippedTrack = this.currentTrack;
             const nextTrack = this.queue.shift();
             this.currentTrack = nextTrack; // Update current track when skipping
             this.lastUpdate = Date.now();
 
-            // Don't delete metadata - keep it so shields persist for currently playing track
-            // The metadata will be cleaned up by cleanupStaleMetadata() later
-
-            //console.log('Skipped to next track:', nextTrack?.name);
+            // Clean up metadata for the skipped track ONLY if not still in queue
+            if (skippedTrack && skippedTrack.uri) {
+                const stillInQueue = this.queue.some(t => t.uri === skippedTrack.uri);
+                
+                if (!stillInQueue) {
+                    await this.removeTrackMetadata(skippedTrack.uri);
+                    console.log('Cleaned up metadata for skipped track:', skippedTrack.uri);
+                } else {
+                    console.log('Skipped track still in queue, keeping metadata');
+                }
+            }
+            
+            // Update previous track URI for sync detection
+            this.previousTrackUri = nextTrack?.uri || null;
 
             // Send queue update with updated current track
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
@@ -291,6 +302,9 @@ class QueueManager {
         }
     }
 
+    // Track the previous track URI to detect track changes
+    previousTrackUri = null;
+
     // Periodic Spotify sync (called every 5 seconds)
     async syncWithSpotify(spotifyApi) {
         try {
@@ -321,6 +335,23 @@ class QueueManager {
                         duration_ms: currentData.item.duration_ms,
                         progress_ms: currentData.progress_ms
                     };
+                    
+                    // Detect track change - clean up metadata for previous track ONLY if it's not in queue
+                    if (this.previousTrackUri && this.previousTrackUri !== currentTrack.uri) {
+                        console.log('Track changed from', this.previousTrackUri, 'to', currentTrack.uri);
+                        
+                        // Check if previous track is still in the queue (duplicate)
+                        const stillInQueue = queueTracks.some(t => t.uri === this.previousTrackUri);
+                        
+                        if (!stillInQueue) {
+                            // Only remove metadata if track is not still in queue
+                            await this.removeTrackMetadata(this.previousTrackUri);
+                            console.log('Removed metadata for finished track:', this.previousTrackUri);
+                        } else {
+                            console.log('Previous track still in queue, keeping metadata');
+                        }
+                    }
+                    this.previousTrackUri = currentTrack.uri;
                 }
             }
 
