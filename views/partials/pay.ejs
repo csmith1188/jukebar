@@ -109,7 +109,7 @@
                 amount = <%= skipShieldAmount %>;
             } else if (pendingAction === 'Ban Vote') {
                 reason += ' - Initiate Ban Vote';
-                amount = 500;
+                amount = <%= voteBanAmount %>;
             } else {
                 console.error('Unknown pending action:', pendingAction);
                 alert('Unknown action. Please try again. Your digipogs have not been charged.');

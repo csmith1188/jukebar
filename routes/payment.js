@@ -352,7 +352,9 @@ router.post('/getAmount', async (req, res) => {
         if (pendingAction === 'skip') {
             amount = Number(process.env.SKIP_AMOUNT) || 100;
         } else if (pendingAction === 'Skip Shield') {
-            amount = Number(process.env.SKIP_SHIELD_AMOUNT) || 75;
+            amount = Number(process.env.SKIP_SHIELD) || 75;
+        } else if (pendingAction === 'Ban Vote') {
+            amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
             // Get top 3 user IDs in order
