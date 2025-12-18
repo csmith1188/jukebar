@@ -490,7 +490,7 @@ router.post('/addToQueue', async (req, res) => {
             trackURI: trackInfo.uri,
             trackName: trackInfo.name,
             artistName: trackInfo.artist,
-            cost: 50
+            cost: Number(process.env.SONG_AMOUNT) || 50
         });
 
         // Clear payment flag after successful queue addition
@@ -615,7 +615,7 @@ router.post('/skip', async (req, res) => {
             await spotifyApi.skipToNext();
 
             // Update queueManager and broadcast to clients
-            const nextTrack = queueManager.skipTrack();
+            const nextTrack = await queueManager.skipTrack();
             //console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
             res.json({ ok: true, currentTrack: nextTrack });
             return;
@@ -691,7 +691,7 @@ router.post('/skip', async (req, res) => {
                     trackURI: trackUri,
                     trackName: trackName,
                     artistName: artistName,
-                    cost: 100
+                    cost: Number(process.env.SKIP_AMOUNT) || 100
                 });
 
                 // Clear payment flag (they still paid but skip was blocked)
@@ -708,7 +708,7 @@ router.post('/skip', async (req, res) => {
                         shieldBlocked: true,
                         remaining: remainingShields,
                         soundPlayed: soundFile,
-                        message: `SKIP BLOCKED! This song is protected by ${remainingShields} shield${remainingShields !== 1 ? 's' : ''}. You were charged 100 digipogs.`
+                        message: `SKIP BLOCKED! This song is protected by ${remainingShields} shield${remainingShields !== 1 ? 's' : ''}. You were charged ${process.env.SKIP_AMOUNT || 100} digipogs.`
                     });
                 });
             } else {
@@ -722,7 +722,7 @@ router.post('/skip', async (req, res) => {
         await spotifyApi.skipToNext();
 
         // Update queueManager and broadcast to clients
-        const nextTrack = queueManager.skipTrack();
+        const nextTrack = await queueManager.skipTrack();
 
         if (currentTrack) {
             await logTransaction({
@@ -732,7 +732,7 @@ router.post('/skip', async (req, res) => {
                 trackURI: currentTrack.uri,
                 trackName: currentTrack.name,
                 artistName: currentTrack.artist,
-                cost: 75
+                cost: Number(process.env.SKIP_AMOUNT) || 100
             });
         }
         // Clear payment flag after successful skip
@@ -804,7 +804,7 @@ router.post('/queue/skip', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
         }
 
-        const nextTrack = queueManager.skipTrack();
+        const nextTrack = await queueManager.skipTrack();
 
         if (nextTrack) {
             // Actually skip on Spotify
@@ -822,6 +822,34 @@ router.post('/queue/skip', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'No active Spotify playback found. Please start playing music on a Spotify device first.' });
         }
         res.status(500).json({ ok: false, error: 'Failed to skip track' });
+    }
+});
+
+// Check if track exists in queue or is currently playing
+router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
+    const { trackUri } = req.body;
+    const db = require('../utils/database');
+    const queueManager = require('../utils/queueManager');
+    
+    try {
+        // Check if it's currently playing
+        const state = queueManager.getCurrentState();
+        const currentTrack = state.currentTrack;
+        const isCurrentlyPlaying = currentTrack && currentTrack.uri === trackUri;
+        
+        // Check if track exists in queue metadata
+        const track = await new Promise((resolve, reject) => {
+            db.get("SELECT track_uri FROM queue_metadata WHERE track_uri = ?", [trackUri], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+        
+        // Track exists if it's currently playing OR in the queue
+        res.json({ exists: isCurrentlyPlaying || !!track });
+    } catch (error) {
+        console.error('Error checking track existence:', error);
+        res.status(500).json({ exists: false, error: 'Server error' });
     }
 });
 
@@ -889,22 +917,24 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
             console.log('Step 2: Skipped (owner bypass)');
         }
 
-        // Step 3: Update shield count
+        // Step 3: Update shield count for specific track instance
         console.log('Step 3: Incrementing shield count...');
+        const addedAt = req.body.addedAt;
         const updateResult = await new Promise((resolve, reject) => {
-            db.run(
-                "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ?",
-                [trackUri],
-                function (err) {
-                    if (err) {
-                        console.error('Database error updating shields:', err);
-                        reject(err);
-                    } else {
-                        console.log('Shield count incremented. Rows affected:', this.changes);
-                        resolve(this.changes);
-                    }
+            const query = addedAt 
+                ? "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ? AND added_at = ?"
+                : "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ? LIMIT 1";
+            const params = addedAt ? [trackUri, addedAt] : [trackUri];
+            
+            db.run(query, params, function (err) {
+                if (err) {
+                    console.error('Database error updating shields:', err);
+                    reject(err);
+                } else {
+                    console.log('Shield count incremented for track at', addedAt || 'first instance', '. Rows affected:', this.changes);
+                    resolve(this.changes);
                 }
-            );
+            });
         });
 
         if (updateResult === 0) {
@@ -922,7 +952,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 trackURI: trackUri,
                 trackName: track.track_name,
                 artistName: track.artist_name,
-                cost: isOwner ? 0 : 25
+                cost: isOwner ? 0 : (Number(process.env.SKIP_SHIELD_AMOUNT) || 75)
             });
             console.log('Transaction logged');
         } catch (logErr) {

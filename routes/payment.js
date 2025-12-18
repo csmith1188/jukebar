@@ -9,6 +9,10 @@ router.post('/transfer', async (req, res) => {
         const to = process.env.OWNER_ID;
         let { pin, reason } = req.body || {};
         const pendingAction = req.body?.pendingAction;
+        
+        console.log('=== PAYMENT TRANSFER REQUEST ===');
+        console.log('pendingAction:', pendingAction);
+        console.log('reason:', reason);
 
         //gets the top 3 users to apply a discount
         const topUsers = await new Promise((resolve, reject) => {
@@ -36,10 +40,13 @@ router.post('/transfer', async (req, res) => {
         let amount;
         if (pendingAction === 'skip') {
             // Skips are a fixed cost (no discounts)
-            amount = 100;
+            amount = Number(process.env.SKIP_AMOUNT) || 100;
         } else if (pendingAction === 'Skip Shield') {
             // Skip Shields are a fixed cost (no discounts)
-            amount = 75;
+            amount = Number(process.env.SKIP_SHIELD) || 75;
+        } else if (pendingAction === 'Ban Vote') {
+            // Ban Votes are a fixed cost (no discounts)
+            amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else {
             amount = Number(process.env.TRANSFER_AMOUNT) || 50;
             if (userRow && userRow.id) {
@@ -343,11 +350,11 @@ router.post('/getAmount', async (req, res) => {
         let discountApplied = false;
 
         if (pendingAction === 'skip') {
-            amount = 100;
+            amount = Number(process.env.SKIP_AMOUNT) || 100;
         } else if (pendingAction === 'Skip Shield') {
-            amount = 75;
+            amount = Number(process.env.SKIP_SHIELD_AMOUNT) || 75;
         } else {
-            amount = Number(process.env.TRANSFER_AMOUNT) || 50;
+            amount = Number(process.env.SONG_AMOUNT) || 50;
             // Get top 3 user IDs in order
             const topUsers = await new Promise((resolve, reject) => {
                 db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {

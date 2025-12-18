@@ -43,16 +43,27 @@ class QueueManager {
     }
 
     // Skip to next track
-    skipTrack() {
+    async skipTrack() {
         if (this.queue.length > 0) {
+            const skippedTrack = this.currentTrack;
             const nextTrack = this.queue.shift();
             this.currentTrack = nextTrack; // Update current track when skipping
             this.lastUpdate = Date.now();
 
-            // Don't delete metadata - keep it so shields persist for currently playing track
-            // The metadata will be cleaned up by cleanupStaleMetadata() later
-
-            //console.log('Skipped to next track:', nextTrack?.name);
+            // Clean up metadata for the skipped track ONLY if not still in queue
+            if (skippedTrack && skippedTrack.uri) {
+                const stillInQueue = this.queue.some(t => t.uri === skippedTrack.uri);
+                
+                if (!stillInQueue) {
+                    await this.removeTrackMetadata(skippedTrack.uri);
+                    console.log('Cleaned up metadata for skipped track:', skippedTrack.uri);
+                } else {
+                    console.log('Skipped track still in queue, keeping metadata');
+                }
+            }
+            
+            // Update previous track URI for sync detection
+            this.previousTrackUri = nextTrack?.uri || null;
 
             // Send queue update with updated current track
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
@@ -165,11 +176,11 @@ class QueueManager {
             if (currentPlayback.body && currentPlayback.body.item) {
                 const currentUri = currentPlayback.body.item.uri;
 
-                // Fetch metadata for current track
+                // Fetch metadata for current track (get oldest entry for duplicates)
                 const db = require('./database');
                 const currentMetadata = await new Promise((resolve, reject) => {
                     db.get(
-                        'SELECT * FROM queue_metadata WHERE track_uri = ?',
+                        'SELECT * FROM queue_metadata WHERE track_uri = ? ORDER BY added_at ASC LIMIT 1',
                         [currentUri],
                         (err, row) => {
                             if (err) reject(err);
@@ -291,6 +302,9 @@ class QueueManager {
         }
     }
 
+    // Track the previous track URI to detect track changes
+    previousTrackUri = null;
+
     // Periodic Spotify sync (called every 5 seconds)
     async syncWithSpotify(spotifyApi) {
         try {
@@ -324,11 +338,31 @@ class QueueManager {
                 }
             }
 
-            // Process queue
+            // Process queue first (needed for track change detection)
             let queueTracks = [];
             if (queueResponse.status === 200) {
                 const queueData = await queueResponse.json();
                 queueTracks = queueData.queue || [];
+            }
+
+            // Detect track change - clean up metadata for PREVIOUS track ONLY if it's finished (not in queue and not currently playing)
+            if (currentTrack && currentTrack.uri) {
+                if (this.previousTrackUri && this.previousTrackUri !== currentTrack.uri) {
+                    console.log('Track changed from', this.previousTrackUri, 'to', currentTrack.uri);
+                    
+                    // Check if previous track is still in the queue (duplicate) OR is the current track
+                    const stillInQueue = queueTracks.some(t => t.uri === this.previousTrackUri);
+                    const isCurrent = currentTrack.uri === this.previousTrackUri;
+                    
+                    if (!stillInQueue && !isCurrent) {
+                        // Only remove metadata if track has completely finished (not in queue and not playing)
+                        await this.removeTrackMetadata(this.previousTrackUri);
+                        console.log('Removed metadata for finished track:', this.previousTrackUri);
+                    } else {
+                        console.log('Previous track still active (in queue or playing), keeping metadata');
+                    }
+                }
+                this.previousTrackUri = currentTrack.uri;
             }
 
             // Get metadata for all tracks (including currently playing)
@@ -418,6 +452,11 @@ class QueueManager {
             // Update internal state
             this.queue = newQueue;
             this.currentTrack = currentTrack;
+            
+            // Update progress from currentTrack if available
+            if (currentTrack && currentTrack.progress_ms !== undefined) {
+                this.progress = currentTrack.progress_ms;
+            }
 
             // Broadcast BOTH at the same time using existing broadcast methods
             this.broadcastUpdate('queueUpdate', {

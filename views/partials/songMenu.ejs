@@ -1,0 +1,154 @@
+<div class="context-menu-dropdown" id="contextMenuDropdown">
+    <button class="context-menu-item" id="contextShieldBtn">
+        <img src="/img/skipShield.png" alt="Shield" class="context-menu-icon">
+        <span>Skip Shield</span>
+    </button>
+    
+    <button class="context-menu-item ban-item" id="contextBanBtn">
+        <img src="/img/ban.png" alt="Ban" class="context-menu-icon">
+        <span>Vote Ban</span>
+    </button>
+</div>
+
+<script>
+let currentMenuTrackUri = null;
+
+// Listen for updateSongMenu event to show dropdown at position
+window.addEventListener('updateSongMenu', (event) => {
+    const details = event.detail;
+    const dropdown = document.getElementById('contextMenuDropdown');
+    
+    // Store the track URI and details
+    currentMenuTrackUri = details.uri;
+    dropdown.dataset.trackName = details.name;
+    dropdown.dataset.trackArtist = details.artist;
+    dropdown.dataset.addedAt = details.addedAt || 0;
+    
+    // Position the dropdown
+    dropdown.style.left = details.x + 'px';
+    dropdown.style.top = details.y + 'px';
+    dropdown.style.display = 'block';
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('contextMenuDropdown');
+    if (!e.target.closest('.context-menu-dropdown') && !e.target.closest('.ellipsis-button')) {
+        dropdown.style.display = 'none';
+    }
+});
+
+// Skip Shield button handler
+document.getElementById('contextShieldBtn').addEventListener('click', async function() {
+    const dropdown = document.getElementById('contextMenuDropdown');
+    
+    if (!currentMenuTrackUri) {
+        Notify('No track selected!', 'error');
+        return;
+    }
+    
+    try {
+        // Check if track still exists in queue
+        const checkResponse = await fetch('/checkTrackExists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackUri: currentMenuTrackUri })
+        });
+        
+        const result = await checkResponse.json();
+        
+        if (!result.exists) {
+            // Close the dropdown
+            dropdown.style.display = 'none';
+            
+            // Show error notification
+            Notify('This song has left the queue and can no longer be shielded.');
+            return;
+        }
+        
+        // Track still exists, proceed with shield purchase
+        if (typeof window.purchaseShield === 'function') {
+            const addedAt = dropdown.dataset.addedAt || 0;
+            window.purchaseShield(currentMenuTrackUri, addedAt);
+            dropdown.style.display = 'none';
+        } else {
+            console.error('purchaseShield function not found');
+            Notify('Unable to purchase shield');
+        }
+    } catch (error) {
+        console.error('Error checking track:', error);
+        Notify('Unable to verify track status');
+    }
+});
+
+// Vote Ban button handler
+document.getElementById('contextBanBtn').addEventListener('click', function() {
+    const dropdown = document.getElementById('contextMenuDropdown');
+    
+    if (!currentMenuTrackUri) {
+        Notify('No track selected!');
+        return;
+    }
+    
+    // Get track details from the last updateSongMenu event
+    const trackData = dropdown.dataset;
+    
+    // Check minimum online users requirement (need at least 5)
+    fetch('/api/online-count')
+        .then(res => res.json())
+        .then(data => {
+            const onlineCount = data.count || 0;
+            
+            if (onlineCount < 5) {
+                Notify('At least 5 users must be online to start a ban vote', 'error');
+                return;
+            }
+            
+            // Check if user is owner (owners can start votes for free)
+            const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
+            
+            if (isOwner) {
+                // Owner bypass - start vote immediately
+                startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist);
+            } else {
+                // Regular user - show payment modal first
+                pendingAction = 'Ban Vote';
+                pendingTrackUri = currentMenuTrackUri;
+                pendingTrackName = trackData.trackName || 'Unknown Track';
+                pendingTrackArtist = trackData.trackArtist || 'Unknown Artist';
+                console.log('Set pendingAction to:', pendingAction);
+                console.log('Set pendingTrackUri to:', pendingTrackUri);
+                console.log('Set pendingTrackName to:', pendingTrackName);
+                console.log('Set pendingTrackArtist to:', pendingTrackArtist);
+                showPayment();
+            }
+        })
+        .catch(err => {
+            console.error('Failed to check online count:', err);
+            Notify('Failed to verify online users. Please try again.', 'error');
+        });
+    
+    dropdown.style.display = 'none';
+});
+
+function startBanVote(trackUri, trackName, trackArtist) {
+    console.log('Starting ban vote, socket:', window.banVoteSocket);
+    
+    // Emit socket event to initiate ban vote
+    const socket = window.banVoteSocket || (typeof io !== 'undefined' ? io() : null);
+    
+    if (socket) {
+        const user = '<%= typeof user !== "undefined" ? user : "User" %>';
+        console.log('Emitting initiateBanVote event');
+        socket.emit('initiateBanVote', {
+            trackUri: trackUri,
+            trackName: trackName || 'Unknown Track',
+            trackArtist: trackArtist || 'Unknown Artist',
+            initiator: user
+        });
+    } else {
+        console.error('Socket connection not available');
+        Notify('Unable to start ban vote - connection error', 'error');
+    }
+}
+</script>
