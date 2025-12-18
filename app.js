@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const http = require('http');
 const { Server } = require('socket.io');
 const { io: ioClient } = require('socket.io-client');
+const db = require('./utils/database');
 
 dotenv.config();
 
@@ -20,7 +21,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-app.use(session({
+const sessionMiddleware = session({
     secret: 'thisisasupersecretsigmaskibidikeyandihavethekeytotheuniversebutnobodywillknowabcdefghijklmnopqrstuvwxyz',
     resave: false,
     saveUninitialized: false,
@@ -30,7 +31,12 @@ app.use(session({
         sameSite: 'lax', // helps mitigate CSRF for top-level navigations
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
-}));
+});
+
+app.use(sessionMiddleware);
+
+// Share session with socket.io
+io.engine.use(sessionMiddleware);
 
 const { isAuthenticated } = require('./middleware/auth');
 
@@ -65,8 +71,21 @@ console.log('Formbar socket client created, attempting connection...');
 setupFormbarSocket(io, formbarSocket);
 
 // WebSocket connection handling for queue sync
+// Initialize VoteManager
+const VoteManager = require('./utils/voteManager');
+const voteManager = new VoteManager();
+
 io.on('connection', (socket) => {
     //console.log('Client connected for queue sync');
+    
+    // Broadcast updated user count to all clients
+    io.emit('userCount', io.engine.clientsCount);
+    
+    // Send active ban vote to newly connected user
+    const activeVote = voteManager.getActiveVote();
+    if (activeVote) {
+        socket.emit('banVoteStarted', activeVote);
+    }
     
     // Send current auxiliary permission to newly connected client
     const classroom = getCurrentClassroom();
@@ -83,11 +102,151 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         //console.log('Client disconnected from queue sync');
         queueManager.removeClient(socket);
+        // Broadcast updated user count after disconnect
+        io.emit('userCount', io.engine.clientsCount);
     });
     
     // Handle queue actions from clients
     socket.on('requestQueueUpdate', () => {
         socket.emit('queueUpdate', queueManager.getCurrentState());
+    });
+
+    // Handle ban vote initiation
+    socket.on('initiateBanVote', async (data) => {
+        try {
+            const { trackUri, trackName, trackArtist, initiator } = data;
+            const userId = socket.request?.session?.token?.id || socket.id;
+
+            // Get online user count
+            const onlineCount = io.engine.clientsCount;
+
+            // Check minimum users requirement
+            if (onlineCount < 5) {
+                socket.emit('banVoteError', { error: 'At least 5 users must be online to start a ban vote' });
+                return;
+            }
+
+            // Check if there's already an active vote
+            if (voteManager.hasActiveVote()) {
+                socket.emit('banVoteError', { error: 'Please wait for the current ban vote to complete before starting a new one' });
+                return;
+            }
+
+            // Check if track is already banned
+            const isBanned = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM banned_songs WHERE track_name = ? AND artist_name = ?', [trackName, trackArtist], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(!!row);
+                });
+            });
+
+            if (isBanned) {
+                socket.emit('banVoteError', { error: 'This track is already banned' });
+                return;
+            }
+
+            // Start the vote with expiration callback
+            const voteId = `${trackUri}-${Date.now()}`;
+            const voteData = voteManager.startBanVote(
+                voteId,
+                trackUri,
+                trackName,
+                trackArtist,
+                userId,
+                onlineCount,
+                (expiredData) => {
+                    // Broadcast that vote failed due to expiration
+                    console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
+                    io.emit('banVoteFailed', expiredData);
+                }
+            );
+
+            // Broadcast to all clients
+            io.emit('banVoteStarted', {
+                voteId,
+                trackUri,
+                trackName,
+                trackArtist,
+                initiator,
+                initiatorId: userId,
+                onlineCount: onlineCount,
+                totalOnline: onlineCount,
+                yesVotes: 1,
+                noVotes: 0,
+                expiresIn: voteData.expiresIn
+            });
+        } catch (error) {
+            console.error('Error initiating ban vote:', error);
+            socket.emit('banVoteError', { error: 'Failed to initiate ban vote' });
+        }
+    });
+
+    // Handle vote casting
+    socket.on('castBanVote', async (data) => {
+        try {
+            const { voteId, vote } = data;
+            const userId = socket.request?.session?.token?.id || socket.id;
+            const result = voteManager.castVote(voteId, userId, vote);
+
+            if (result.error) {
+                socket.emit('banVoteError', { error: result.error });
+                return;
+            }
+
+            if (result.passed) {
+                console.log('Vote passed! Broadcasting banVotePassed:', result);
+                // Insert into banned_songs table
+                try {
+                    await new Promise((resolve, reject) => {
+                        console.log('Inserting into banned_songs:', result.trackName, result.trackArtist);
+                        db.run(
+                            'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
+                            [result.trackName, result.trackArtist],
+                            (err) => {
+                                if (err) {
+                                    console.error('Database insertion error:', err);
+                                    reject(err);
+                                } else {
+                                    console.log('Successfully inserted ban into database');
+                                    resolve();
+                                }
+                            }
+                        );
+                    });
+                } catch (dbError) {
+                    console.error('Failed to insert ban into database:', dbError);
+                }
+
+                // Broadcast vote passed
+                io.emit('banVotePassed', {
+                    trackUri: result.trackUri,
+                    trackName: result.trackName,
+                    yesVotes: result.yesVotes,
+                    noVotes: result.noVotes
+                });
+            } else if (result.failed) {
+                // Broadcast vote failed
+                console.log('Broadcasting banVoteFailed:', result);
+                io.emit('banVoteFailed', {
+                    trackName: result.trackName,
+                    yesVotes: result.yesVotes,
+                    noVotes: result.noVotes,
+                    reason: result.reason
+                });
+            } else {
+                // Broadcast vote update
+                io.emit('banVoteUpdate', {
+                    yesVotes: result.yesVotes,
+                    noVotes: result.noVotes,
+                    onlineCount: result.onlineCount,
+                    totalOnline: result.onlineCount,
+                    trackName: result.trackName
+                });
+            }
+        } catch (error) {
+            console.error('Error casting ban vote:', error);
+            socket.emit('banVoteError', { error: 'Failed to cast vote' });
+        }
     });
 });
 
@@ -217,6 +376,7 @@ app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 
 server.listen(port, async () => {
+    io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
 });
 

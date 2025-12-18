@@ -833,7 +833,8 @@ router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
     
     try {
         // Check if it's currently playing
-        const currentTrack = queueManager.getCurrentTrack();
+        const state = queueManager.getCurrentState();
+        const currentTrack = state.currentTrack;
         const isCurrentlyPlaying = currentTrack && currentTrack.uri === trackUri;
         
         // Check if track exists in queue metadata
@@ -916,22 +917,24 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
             console.log('Step 2: Skipped (owner bypass)');
         }
 
-        // Step 3: Update shield count
+        // Step 3: Update shield count for specific track instance
         console.log('Step 3: Incrementing shield count...');
+        const addedAt = req.body.addedAt;
         const updateResult = await new Promise((resolve, reject) => {
-            db.run(
-                "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ?",
-                [trackUri],
-                function (err) {
-                    if (err) {
-                        console.error('Database error updating shields:', err);
-                        reject(err);
-                    } else {
-                        console.log('Shield count incremented. Rows affected:', this.changes);
-                        resolve(this.changes);
-                    }
+            const query = addedAt 
+                ? "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ? AND added_at = ?"
+                : "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ? LIMIT 1";
+            const params = addedAt ? [trackUri, addedAt] : [trackUri];
+            
+            db.run(query, params, function (err) {
+                if (err) {
+                    console.error('Database error updating shields:', err);
+                    reject(err);
+                } else {
+                    console.log('Shield count incremented for track at', addedAt || 'first instance', '. Rows affected:', this.changes);
+                    resolve(this.changes);
                 }
-            );
+            });
         });
 
         if (updateResult === 0) {

@@ -176,11 +176,11 @@ class QueueManager {
             if (currentPlayback.body && currentPlayback.body.item) {
                 const currentUri = currentPlayback.body.item.uri;
 
-                // Fetch metadata for current track
+                // Fetch metadata for current track (get oldest entry for duplicates)
                 const db = require('./database');
                 const currentMetadata = await new Promise((resolve, reject) => {
                     db.get(
-                        'SELECT * FROM queue_metadata WHERE track_uri = ?',
+                        'SELECT * FROM queue_metadata WHERE track_uri = ? ORDER BY added_at ASC LIMIT 1',
                         [currentUri],
                         (err, row) => {
                             if (err) reject(err);
@@ -335,31 +335,33 @@ class QueueManager {
                         duration_ms: currentData.item.duration_ms,
                         progress_ms: currentData.progress_ms
                     };
-                    
-                    // Detect track change - clean up metadata for previous track ONLY if it's not in queue
-                    if (this.previousTrackUri && this.previousTrackUri !== currentTrack.uri) {
-                        console.log('Track changed from', this.previousTrackUri, 'to', currentTrack.uri);
-                        
-                        // Check if previous track is still in the queue (duplicate)
-                        const stillInQueue = queueTracks.some(t => t.uri === this.previousTrackUri);
-                        
-                        if (!stillInQueue) {
-                            // Only remove metadata if track is not still in queue
-                            await this.removeTrackMetadata(this.previousTrackUri);
-                            console.log('Removed metadata for finished track:', this.previousTrackUri);
-                        } else {
-                            console.log('Previous track still in queue, keeping metadata');
-                        }
-                    }
-                    this.previousTrackUri = currentTrack.uri;
                 }
             }
 
-            // Process queue
+            // Process queue first (needed for track change detection)
             let queueTracks = [];
             if (queueResponse.status === 200) {
                 const queueData = await queueResponse.json();
                 queueTracks = queueData.queue || [];
+            }
+
+            // Detect track change - clean up metadata for previous track ONLY if it's not in queue
+            if (currentTrack && currentTrack.uri) {
+                if (this.previousTrackUri && this.previousTrackUri !== currentTrack.uri) {
+                    console.log('Track changed from', this.previousTrackUri, 'to', currentTrack.uri);
+                    
+                    // Check if previous track is still in the queue (duplicate)
+                    const stillInQueue = queueTracks.some(t => t.uri === this.previousTrackUri);
+                    
+                    if (!stillInQueue) {
+                        // Only remove metadata if track is not still in queue
+                        await this.removeTrackMetadata(this.previousTrackUri);
+                        console.log('Removed metadata for finished track:', this.previousTrackUri);
+                    } else {
+                        console.log('Previous track still in queue, keeping metadata');
+                    }
+                }
+                this.previousTrackUri = currentTrack.uri;
             }
 
             // Get metadata for all tracks (including currently playing)
@@ -449,6 +451,11 @@ class QueueManager {
             // Update internal state
             this.queue = newQueue;
             this.currentTrack = currentTrack;
+            
+            // Update progress from currentTrack if available
+            if (currentTrack && currentTrack.progress_ms !== undefined) {
+                this.progress = currentTrack.progress_ms;
+            }
 
             // Broadcast BOTH at the same time using existing broadcast methods
             this.broadcastUpdate('queueUpdate', {

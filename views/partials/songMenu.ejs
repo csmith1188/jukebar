@@ -18,8 +18,11 @@ window.addEventListener('updateSongMenu', (event) => {
     const details = event.detail;
     const dropdown = document.getElementById('contextMenuDropdown');
     
-    // Store the track URI
+    // Store the track URI and details
     currentMenuTrackUri = details.uri;
+    dropdown.dataset.trackName = details.name;
+    dropdown.dataset.trackArtist = details.artist;
+    dropdown.dataset.addedAt = details.addedAt || 0;
     
     // Position the dropdown
     dropdown.style.left = details.x + 'px';
@@ -65,7 +68,8 @@ document.getElementById('contextShieldBtn').addEventListener('click', async func
         
         // Track still exists, proceed with shield purchase
         if (typeof window.purchaseShield === 'function') {
-            window.purchaseShield(currentMenuTrackUri);
+            const addedAt = dropdown.dataset.addedAt || 0;
+            window.purchaseShield(currentMenuTrackUri, addedAt);
             dropdown.style.display = 'none';
         } else {
             console.error('purchaseShield function not found');
@@ -80,7 +84,51 @@ document.getElementById('contextShieldBtn').addEventListener('click', async func
 // Vote Ban button handler
 document.getElementById('contextBanBtn').addEventListener('click', function() {
     const dropdown = document.getElementById('contextMenuDropdown');
-    console.log('Vote ban clicked - no function implemented');
+    
+    if (!currentMenuTrackUri) {
+        alert('No track selected!');
+        return;
+    }
+    
+    // Get track details from the last updateSongMenu event
+    const trackData = dropdown.dataset;
+    
+    // Check if user is owner (owners can start votes for free)
+    const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
+    
+    if (isOwner) {
+        // Owner bypass - start vote immediately
+        startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist);
+    } else {
+        // Regular user - show payment modal first
+        pendingAction = 'Ban Vote';
+        pendingTrackUri = currentMenuTrackUri;
+        pendingTrackName = trackData.trackName || 'Unknown Track';
+        pendingTrackArtist = trackData.trackArtist || 'Unknown Artist';
+        showPayment();
+    }
+    
     dropdown.style.display = 'none';
 });
+
+function startBanVote(trackUri, trackName, trackArtist) {
+    console.log('Starting ban vote, socket:', window.banVoteSocket);
+    
+    // Emit socket event to initiate ban vote
+    const socket = window.banVoteSocket || (typeof io !== 'undefined' ? io() : null);
+    
+    if (socket) {
+        const user = '<%= typeof user !== "undefined" ? user : "User" %>';
+        console.log('Emitting initiateBanVote event');
+        socket.emit('initiateBanVote', {
+            trackUri: trackUri,
+            trackName: trackName || 'Unknown Track',
+            trackArtist: trackArtist || 'Unknown Artist',
+            initiator: user
+        });
+    } else {
+        console.error('Socket connection not available');
+        alert('Unable to start ban vote - connection error');
+    }
+}
 </script>
