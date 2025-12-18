@@ -81,6 +81,10 @@
             const pin = pinInput.value;
             const state = window.getPlayerState?.() || {};
             const pendingAction = state.pendingAction;
+            
+            console.log('doTransfer called');
+            console.log('Player state:', state);
+            console.log('pendingAction from state:', pendingAction);
 
             // Save PIN if checkbox is checked
             if (savePIN.checked) {
@@ -96,13 +100,16 @@
 
             if (pendingAction === 'play') {
                 reason += ' - Play Track';
-                amount = 50;
+                amount = <%= songAmount %>;
             } else if (pendingAction === 'skip') {
                 reason += ' - Skip Track';
-                amount = 100;
+                amount = <%= skipAmount %>;
             } else if (pendingAction === 'Skip Shield') {
                 reason += ' - Purchase Skip Shield';
-                amount = 75;
+                amount = <%= skipShieldAmount %>;
+            } else if (pendingAction === 'Ban Vote') {
+                reason += ' - Initiate Ban Vote';
+                amount = 500;
             } else {
                 console.error('Unknown pending action:', pendingAction);
                 alert('Unknown action. Please try again. Your digipogs have not been charged.');

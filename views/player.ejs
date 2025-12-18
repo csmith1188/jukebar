@@ -97,10 +97,51 @@
             </div>
         </div>
 
-        <%- include('partials/songMenu') %>
-
             <script>
+                // Notification functions - MUST be defined FIRST before any includes
+                let notificationTimeout;
+
+                function Notify(message, type = 'info') {
+                    let notification = document.getElementById("notification");
+                    let notificationText = document.getElementById("notification-text");
+
+                    notificationText.textContent = message;
+
+                    // Remove any existing type classes
+                    notification.classList.remove('notification-success', 'notification-error', 'notification-info');
+
+                    // Add the appropriate type class
+                    if (type === 'error') {
+                        notification.classList.add('notification-error');
+                    } else {
+                        // default to success for other types
+                        notification.classList.add('notification-success');
+                    }
+
+                    notification.style.display = "block";
+                    setTimeout(() => notification.style.opacity = "1", 100);
+
+                    clearTimeout(notificationTimeout);
+                    notificationTimeout = setTimeout(closeNotification, 5000);
+                }
+
+                function closeNotification() {
+                    let notification = document.getElementById("notification");
+                    clearTimeout(notificationTimeout);
+
+                    notification.style.opacity = "0";
+                    setTimeout(() => notification.style.display = "none", 500);
+                }
+
                 const userPermission = <%= userPermission %>;
+
+                // Global payment status flags - MUST be at top for songMenu.ejs to access
+                var hasPaid = <%= JSON.stringify(hasPaid || false) %>;
+                var pendingTrackUri = null;
+                var pendingTrackAddedAt = null;
+                var pendingTrackName = null;
+                var pendingTrackArtist = null;
+                var pendingAction = null;
 
                 // Global variables that need to be accessed by multiple functions
                 let currentlyPlayingUri = null;
@@ -108,11 +149,17 @@
                 let currentDuration = 0; // Track duration in ms
                 let isCurrentlyPlaying = false;
                 let progressInterval = null;
+                let currentID = <%= JSON.stringify(userID || null) %>; // User ID - needed by ban votes
+                const ownerID = <%= JSON.stringify(ownerID) %>; // Owner ID
 
                 // Create socket globally ONCE and expose it immediately
                 const socket = io();
                 window.banVoteSocket = socket;
+            </script>
 
+        <%- include('partials/songMenu') %>
+
+            <script>
                 (function () {
                     'use strict';
 
@@ -133,13 +180,6 @@
                             countElement.textContent = count;
                         }
                     });
-
-                    // Global payment status flag
-                    let hasPaid = <%= JSON.stringify(hasPaid || false) %>;
-                    let currentID = <%= JSON.stringify(userID || null) %>;
-                    let pendingTrackUri = null;
-                    let pendingAction = null;
-                    const ownerID = <%= JSON.stringify(ownerID) %>;
 
                     function handleSearchSubmit(event) {
                         event.preventDefault();
@@ -391,6 +431,9 @@
                         // Trigger getPrice via custom event
                         window.dispatchEvent(new CustomEvent('updatePrice', { detail: { pendingAction } }));
                     }
+                    
+                    // Expose showPayment globally for external event handlers
+                    window.showPayment = showPayment;
 
                     function hidePayment() {
                         document.getElementById('paymentModal').style.display = 'none';
@@ -455,42 +498,6 @@
                                 console.error('Error during refund:', error);
                             });
                     }
-
-                    // custom notifications taken from my other project
-                    let notificationTimeout;
-
-                    function Notify(message, type = 'info') {
-                        let notification = document.getElementById("notification");
-                        let notificationText = document.getElementById("notification-text");
-
-                        notificationText.textContent = message;
-
-                        // Remove any existing type classes
-                        notification.classList.remove('notification-success', 'notification-error', 'notification-info');
-
-                        // Add the appropriate type class
-                        if (type === 'error') {
-                            notification.classList.add('notification-error');
-                        } else {
-                            // default to success for other types
-                            notification.classList.add('notification-success');
-                        }
-
-                        notification.style.display = "block";
-                        setTimeout(() => notification.style.opacity = "1", 100);
-
-                        clearTimeout(notificationTimeout);
-                        notificationTimeout = setTimeout(closeNotification, 5000);
-                    }
-
-                    function closeNotification() {
-                        let notification = document.getElementById("notification");
-                        clearTimeout(notificationTimeout);
-
-                        notification.style.opacity = "0";
-                        setTimeout(() => notification.style.display = "none", 500);
-                    }
-
 
                     // Wire up event listeners
                     document.getElementById('searchForm')?.addEventListener('submit', handleSearchSubmit);
@@ -1005,7 +1012,7 @@
                         if (typeof Notify === 'function') {
                             Notify('Unable to cast vote', 'error');
                         } else {
-                            alert('Unable to cast vote');
+                            Notify('Unable to cast vote');
                         }
                         return;
                     }

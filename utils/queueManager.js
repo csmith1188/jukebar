@@ -345,20 +345,21 @@ class QueueManager {
                 queueTracks = queueData.queue || [];
             }
 
-            // Detect track change - clean up metadata for previous track ONLY if it's not in queue
+            // Detect track change - clean up metadata for PREVIOUS track ONLY if it's finished (not in queue and not currently playing)
             if (currentTrack && currentTrack.uri) {
                 if (this.previousTrackUri && this.previousTrackUri !== currentTrack.uri) {
                     console.log('Track changed from', this.previousTrackUri, 'to', currentTrack.uri);
                     
-                    // Check if previous track is still in the queue (duplicate)
+                    // Check if previous track is still in the queue (duplicate) OR is the current track
                     const stillInQueue = queueTracks.some(t => t.uri === this.previousTrackUri);
+                    const isCurrent = currentTrack.uri === this.previousTrackUri;
                     
-                    if (!stillInQueue) {
-                        // Only remove metadata if track is not still in queue
+                    if (!stillInQueue && !isCurrent) {
+                        // Only remove metadata if track has completely finished (not in queue and not playing)
                         await this.removeTrackMetadata(this.previousTrackUri);
                         console.log('Removed metadata for finished track:', this.previousTrackUri);
                     } else {
-                        console.log('Previous track still in queue, keeping metadata');
+                        console.log('Previous track still active (in queue or playing), keeping metadata');
                     }
                 }
                 this.previousTrackUri = currentTrack.uri;

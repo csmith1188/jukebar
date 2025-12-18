@@ -43,7 +43,7 @@ document.getElementById('contextShieldBtn').addEventListener('click', async func
     const dropdown = document.getElementById('contextMenuDropdown');
     
     if (!currentMenuTrackUri) {
-        alert('No track selected!');
+        Notify('No track selected!', 'error');
         return;
     }
     
@@ -62,7 +62,7 @@ document.getElementById('contextShieldBtn').addEventListener('click', async func
             dropdown.style.display = 'none';
             
             // Show error notification
-            alert('This song has left the queue and can no longer be shielded.');
+            Notify('This song has left the queue and can no longer be shielded.');
             return;
         }
         
@@ -73,11 +73,11 @@ document.getElementById('contextShieldBtn').addEventListener('click', async func
             dropdown.style.display = 'none';
         } else {
             console.error('purchaseShield function not found');
-            alert('Unable to purchase shield');
+            Notify('Unable to purchase shield');
         }
     } catch (error) {
         console.error('Error checking track:', error);
-        alert('Unable to verify track status');
+        Notify('Unable to verify track status');
     }
 });
 
@@ -86,27 +86,47 @@ document.getElementById('contextBanBtn').addEventListener('click', function() {
     const dropdown = document.getElementById('contextMenuDropdown');
     
     if (!currentMenuTrackUri) {
-        alert('No track selected!');
+        Notify('No track selected!');
         return;
     }
     
     // Get track details from the last updateSongMenu event
     const trackData = dropdown.dataset;
     
-    // Check if user is owner (owners can start votes for free)
-    const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
-    
-    if (isOwner) {
-        // Owner bypass - start vote immediately
-        startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist);
-    } else {
-        // Regular user - show payment modal first
-        pendingAction = 'Ban Vote';
-        pendingTrackUri = currentMenuTrackUri;
-        pendingTrackName = trackData.trackName || 'Unknown Track';
-        pendingTrackArtist = trackData.trackArtist || 'Unknown Artist';
-        showPayment();
-    }
+    // Check minimum online users requirement (need at least 5)
+    fetch('/api/online-count')
+        .then(res => res.json())
+        .then(data => {
+            const onlineCount = data.count || 0;
+            
+            if (onlineCount < 5) {
+                Notify('At least 5 users must be online to start a ban vote', 'error');
+                return;
+            }
+            
+            // Check if user is owner (owners can start votes for free)
+            const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
+            
+            if (isOwner) {
+                // Owner bypass - start vote immediately
+                startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist);
+            } else {
+                // Regular user - show payment modal first
+                pendingAction = 'Ban Vote';
+                pendingTrackUri = currentMenuTrackUri;
+                pendingTrackName = trackData.trackName || 'Unknown Track';
+                pendingTrackArtist = trackData.trackArtist || 'Unknown Artist';
+                console.log('Set pendingAction to:', pendingAction);
+                console.log('Set pendingTrackUri to:', pendingTrackUri);
+                console.log('Set pendingTrackName to:', pendingTrackName);
+                console.log('Set pendingTrackArtist to:', pendingTrackArtist);
+                showPayment();
+            }
+        })
+        .catch(err => {
+            console.error('Failed to check online count:', err);
+            Notify('Failed to verify online users. Please try again.', 'error');
+        });
     
     dropdown.style.display = 'none';
 });
@@ -128,7 +148,7 @@ function startBanVote(trackUri, trackName, trackArtist) {
         });
     } else {
         console.error('Socket connection not available');
-        alert('Unable to start ban vote - connection error');
+        Notify('Unable to start ban vote - connection error', 'error');
     }
 }
 </script>

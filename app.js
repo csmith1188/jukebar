@@ -117,6 +117,9 @@ io.on('connection', (socket) => {
             const { trackUri, trackName, trackArtist, initiator } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
 
+            // Note: Payment verification happens before this event is emitted (in the frontend)
+            // Owner bypass is handled in songMenu.ejs before calling startBanVote()
+
             // Get online user count
             const onlineCount = io.engine.clientsCount;
 
@@ -291,7 +294,8 @@ app.get('/', isAuthenticated, (req, res) => {
             ownerID: Number(process.env.OWNER_ID) || 4,
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
-            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT) || 75
+            skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
+            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500
         });
     } catch (error) {
         res.send(error.message);
@@ -310,11 +314,18 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             ownerID: Number(process.env.OWNER_ID) || 4,
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
-            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT) || 75
+            skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
+            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500
         });
     } catch (error) {
         res.send(error.message);
     }
+});
+
+// API endpoint to get online user count
+app.get('/api/online-count', (req, res) => {
+    const onlineCount = io.engine.clientsCount;
+    res.json({ count: onlineCount });
 });
 
 // Debug endpoint to check Formbar connection status
