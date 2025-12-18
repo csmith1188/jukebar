@@ -20,7 +20,7 @@
         <div class="main-content">
             <p class="user-greeting">Logged in as: <strong>
                     <%= user %>
-                </strong></p>
+                </strong> <span class="user-count">(<span id="onlineUserCount">1</span> online)</span></p>
             <div class="container">
                 <div id="spotifyPlayer">
                     <form id="searchForm">
@@ -75,336 +75,30 @@
             </div>
         </div>
 
-        <script>
-            const userPermission = <%= userPermission %>;
-            
-            // Global variables that need to be accessed by multiple functions
-            let currentlyPlayingUri = null;
-            let currentProgress = 0; // Current progress in ms
-            let currentDuration = 0; // Track duration in ms
-            let isCurrentlyPlaying = false;
-            let progressInterval = null;
+        <div id="banVoteModal" class="ban-vote-modal minimized" style="display: none;">
+            <div class="ban-vote-header">
+                <span id="banVoteStatus">Ban vote in progress...</span>
+                <button id="banVoteMinimize" class="ban-vote-minimize-btn" title="Minimize/Maximize">−</button>
+            </div>
+            <div class="ban-vote-content">
+                <h3 id="banVoteTitle"></h3>
+                <div class="ban-vote-details">
+                    <div class="vote-counts">
+                        <span>Yes: <strong id="banVoteYes">0</strong></span>
+                        <span>No: <strong id="banVoteNo">0</strong></span>
+                        <span>Online: <strong id="banVoteOnline">0</strong></span>
+                    </div>
+                    <div class="vote-buttons">
+                        <button onclick="castVote('yes')" class="vote-yes-btn">Vote Yes</button>
+                        <button onclick="castVote('no')" class="vote-no-btn">Vote No</button>
+                    </div>
+                    <div id="vote-timer" class="vote-timer">45s remaining</div>
+                </div>
+            </div>
+        </div>
 
-            (function () {
-                'use strict';
-
-                let useJukebar = true;
-
-                const socket = io();
-
-                socket.on('auxiliaryPermission', (permission) => {
-                    if (permission <= userPermission) {
-                        useJukebar = true;
-                    } else {
-                        useJukebar = false;
-                    }
-                });
-
-                // Global payment status flag
-                let hasPaid = <%= JSON.stringify(hasPaid || false) %>;
-                let currentID = <%= JSON.stringify(userID || null) %>;
-                let pendingTrackUri = null;
-                let pendingAction = null;
-                const ownerID = <%= JSON.stringify(ownerID) %>;
-
-                function handleSearchSubmit(event) {
-                    event.preventDefault();
-                    searchSpotify();
-                }
-
-                async function checkPaymentAndPlay(uri) {
-                    // Check if Jukebar is enabled
-                    if (!useJukebar) {
-                        Notify('Jukebar is currently disabled by your teacher.', 'error');
-                        return;
-                    }
-
-                    if (currentID === ownerID) {
-                        const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
-                        addToQueue(uri, anonMode);
-                        return;
-                    }
-
-                    if (!hasPaid) {
-                        pendingTrackUri = uri;
-                        pendingAction = 'play';
-                        showPayment();
-                        return;
-                    }
-
-                    // Reset payment flag after using it
-                    hasPaid = false;
-                    addToQueue(uri);
-                }
-
-                async function checkPaymentAndSkip() {
-                    console.log('⏭️ Skip clicked - currentlyPlayingUri:', currentlyPlayingUri);
-                    
-                    // Check if Jukebar is enabled
-                    if (!useJukebar) {
-                        Notify('Jukebar is currently disabled by your teacher.', 'error');
-                        return;
-                    }
-
-                    // Build the full URI - add prefix only if not already present
-                    let skipUri = currentlyPlayingUri;
-                    if (currentlyPlayingUri && !currentlyPlayingUri.startsWith('spotify:track:')) {
-                        skipUri = `spotify:track:${currentlyPlayingUri}`;
-                    }
-
-                    console.log('⏭️ Final skipUri:', skipUri);
-                    
-                    if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
-                        skip(skipUri);
-                        return;
-                    }
-
-                    if (!hasPaid) {
-                        pendingTrackUri = skipUri;
-                        pendingAction = 'skip';
-                        showPayment();
-                        return;
-                    }
-
-                    // Reset payment flag after using it
-                    hasPaid = false;
-                    skip(skipUri);
-                }
-
-                async function skip(uri) {
-                    try {
-                        const response = await fetch('/skip', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ uri })
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.shieldBlocked) {
-                            // Skip was blocked by a shield
-                            Notify(data.message || 'Skip blocked by shield! 🛡️', 'error');
-                        } else if (data.ok) {
-                            // Skip succeeded
-                            Notify('Track skipped!', 'success');
-                        } else {
-                            // Other error
-                            Notify(data.error || 'Failed to skip', 'error');
-                            refund();
-                        }
-                    } catch (error) {
-                        console.error('Error skipping track:', error);
-                        Notify('Network error', 'error');
-                    }
-                }
-
-                function addToQueue(uri, anonMode = null) {
-                    if (anonMode === null) {
-                        anonMode = document.getElementById('anonMode')?.checked || false;
-                    }
-                    fetch('/addToQueue', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ uri, anonMode })
-                    })
-                        .then(response => {
-                            if (response.ok) {
-                                Notify('Track added to queue!', 'success');
-                            } else {
-                                return response.json().then(data => {
-                                    refund();
-                                });
-                            }
-                        })
-                        .catch(error => {
-                            //console.log('oopsies!')
-                            console.error('Error adding track to queue:', error);
-                            Notify('Network error', 'error');
-                        });
-                }
-
-                async function searchSpotify() {
-                    const query = document.getElementById('searchInput').value;
-                    if (!query) return;
-
-                    try {
-                        const response = await fetch('/search', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ query })
-                        });
-                        const data = await response.json();
-                        const resultsDiv = document.getElementById('searchResults');
-                        resultsDiv.innerHTML = '';
-
-                        if (data.tracks && data.tracks.items.length > 0) {
-                            data.tracks.items.forEach(track => {
-                                const trackDiv = document.createElement('div');
-                                trackDiv.className = 'search-result-item';
-                                trackDiv.innerHTML = `
-                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
-                        <div class="search-result-content">
-                            <div class="search-result-title">${track.name}</div>
-                            <div class="search-result-artist">${track.artist}</div>
-                        </div>
-                        <button class="play-button" data-uri="${track.uri}">Play</button>
-                    `;
-                                resultsDiv.appendChild(trackDiv);
-                            });
-                        } else {
-                            resultsDiv.innerHTML = '<p>No results found.</p>';
-                        }
-                    } catch (error) {
-                        console.error('Error searching Spotify:', error);
-                    }
-                }
-
-                async function getQueue() {
-                    try {
-                        const response = await fetch('/getQueue', {
-                            method: 'GET',
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-                        const data = await response.json();
-                        if (data.ok) {
-                            const queueDiv = document.getElementById('queue');
-                            queueDiv.innerHTML = '';
-                            if (data.tracks.items.length == 0) {
-                                queueDiv.innerHTML = '<p>No tracks in queue.</p>';
-                            } else {
-                                data.tracks.items.forEach((item, index) => {
-                                    const itemDiv = document.createElement('div');
-                                    itemDiv.className = 'queue-item';
-
-                                    // Handle anonymous mode
-                                    let addedByDisplay = item.addedBy;
-                                    if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
-                                        addedByDisplay = 'Spotify';
-                                    }
-
-                                    // Check if anonymous mode and user is not a teacher
-                                    if ((item.isAnon === 1 || item.isAnon === true) && userPermission < 4) {
-                                        addedByDisplay = 'Anonymous';
-                                    }
-
-                                    itemDiv.innerHTML = `
-                                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
-                                        <div class="queue-item-content">
-                                            <div class="queue-item-title">${item.name}</div>
-                                            <div class="queue-item-artist">${item.artist}</div>
-                                            <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
-                                        </div>
-                                    `;
-                                    queueDiv.appendChild(itemDiv);
-                                });
-                            }
-                        } else {
-                            console.error('Failed to get queue:', data.error);
-                        }
-                    } catch (error) {
-                        console.error('Error fetching queue:', error);
-                    }
-                }
-
-                async function currentlyPlaying() {
-                    try {
-                        const response = await fetch('/currentlyPlaying', {
-                            method: 'GET',
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-                        const data = await response.json();
-                        if (data.ok) {
-                            //console.log('Currently Playing:', data.tracks.items);
-                            const CurrentDiv = document.getElementById('currentlyPlaying');
-                            CurrentDiv.innerHTML = '';
-                            if (data.tracks.items.length == 0) {
-                                const CurrentDiv = document.getElementById('currentlyPlaying');
-                                CurrentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
-                                currentlyPlayingUri = null;
-                            }
-                            else {
-                                data.tracks.items.forEach((item, index) => {
-                                    const itemDiv = document.createElement('div');
-                                    itemDiv.className = 'current-item';
-                                    itemDiv.innerHTML = `
-                                    <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
-                                    <div class="current-item-content">
-                                        <div class="current-item-title">${item.name}</div>
-                                        <div class="current-item-artist">${item.artist}</div>
-                                    </div>`;
-                                    CurrentDiv.appendChild(itemDiv);
-                                    currentlyPlayingUri = item.id
-                                });
-                            }
-                        } else {
-                            console.error('Failed to get current track:', data.error);
-                        }
-                    } catch (error) {
-                        console.error('Error fetching current track:', error);
-                    }
-                }
-
-                function showPayment() {
-                    document.getElementById('paymentModal').style.display = 'block';
-                    document.querySelector('.main-content').classList.add('blurred');
-                    // Trigger getPrice via custom event
-                    window.dispatchEvent(new CustomEvent('updatePrice', { detail: { pendingAction } }));
-                }
-
-                function hidePayment() {
-                    document.getElementById('paymentModal').style.display = 'none';
-                    document.querySelector('.main-content').classList.remove('blurred');
-
-                    // Handle pending actions after payment
-                    if (hasPaid && pendingAction) {
-                        // Add a small delay to ensure session is saved on server
-                        setTimeout(() => {
-                            if (pendingAction === 'play' && pendingTrackUri) {
-                                const uri = pendingTrackUri;
-                                pendingTrackUri = null;
-                                pendingAction = null;
-                                checkPaymentAndPlay(uri);
-                            } else if (pendingAction === 'skip') {
-                                pendingAction = null;
-                                checkPaymentAndSkip();
-                            } else if (pendingAction === 'Skip Shield' && pendingTrackUri) {
-                                const uri = pendingTrackUri;
-                                pendingTrackUri = null;
-                                pendingAction = null;
-                                purchaseShieldAfterPayment(uri);
-                            }
-                        }, 100); // 100ms delay
-                    }
-                }
-
-                function onPaymentSuccess() {
-                    hasPaid = true;
-                    hidePayment();
-                }
-
-                function refund() {
-                    fetch('/refund', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ reason: "Jukebar refund" })
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.ok) {
-                                Notify('Spotify error occurred. Your digipogs have been refunded.', 'success');
-                                //console.log('Refund successful:', data);
-                            } else {
-                                Notify('Refund failed: ' + (data.error || 'Unknown error'), 'error');
-                                console.error('Refund failed:', data.error);
-                            }
-                        })
-                        .catch(error => {
-                            Notify('Network error during refund. Please contact support.', 'error');
-                            console.error('Error during refund:', error);
-                        });
-                }
-
-                // custom notifications taken from my other project
+            <script>
+                // Notification functions - MUST be defined FIRST before any includes
                 let notificationTimeout;
 
                 function Notify(message, type = 'info') {
@@ -439,187 +133,599 @@
                     setTimeout(() => notification.style.display = "none", 500);
                 }
 
+                const userPermission = <%= userPermission %>;
 
-                // Wire up event listeners
-                document.getElementById('searchForm')?.addEventListener('submit', handleSearchSubmit);
-                document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
-                document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
-                document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+                // Global payment status flags - MUST be at top for songMenu.ejs to access
+                var hasPaid = <%= JSON.stringify(hasPaid || false) %>;
+                var pendingTrackUri = null;
+                var pendingTrackAddedAt = null;
+                var pendingTrackName = null;
+                var pendingTrackArtist = null;
+                var pendingAction = null;
 
-                // Changelog button event listeners
-                document.getElementById('changelog-button')?.addEventListener('click', () => {
-                    document.getElementById('changelogModal').style.display = 'block';
-                });
+                // Global variables that need to be accessed by multiple functions
+                let currentlyPlayingUri = null;
+                let currentProgress = 0; // Current progress in ms
+                let currentDuration = 0; // Track duration in ms
+                let isCurrentlyPlaying = false;
+                let progressInterval = null;
+                let currentID = <%= JSON.stringify(userID || null) %>; // User ID - needed by ban votes
+                const ownerID = <%= JSON.stringify(ownerID) %>; // Owner ID
 
-                document.getElementById('close-changelog')?.addEventListener('click', () => {
-                    document.getElementById('changelogModal').style.display = 'none';
-                });
+                // Create socket globally ONCE and expose it immediately
+                const socket = io();
+                window.banVoteSocket = socket;
+            </script>
 
-                // Close modal when clicking outside of it
-                window.addEventListener('click', (event) => {
-                    const changelogModal = document.getElementById('changelogModal');
-                    if (event.target === changelogModal) {
-                        changelogModal.style.display = 'none';
+        <%- include('partials/songMenu') %>
+
+            <script>
+                (function () {
+                    'use strict';
+
+                    let useJukebar = true;
+
+                    socket.on('auxiliaryPermission', (permission) => {
+                        if (permission <= userPermission) {
+                            useJukebar = true;
+                        } else {
+                            useJukebar = false;
+                        }
+                    });
+
+                    // Update online user count
+                    socket.on('userCount', (count) => {
+                        const countElement = document.getElementById('onlineUserCount');
+                        if (countElement) {
+                            countElement.textContent = count;
+                        }
+                    });
+
+                    function handleSearchSubmit(event) {
+                        event.preventDefault();
+                        searchSpotify();
                     }
-                });
 
-                // Event delegation for dynamically created play buttons
-                document.getElementById('searchResults')?.addEventListener('click', (e) => {
-                    if (e.target.matches('.play-button') || e.target.closest('.play-button')) {
-                        const button = e.target.matches('.play-button') ? e.target : e.target.closest('.play-button');
-                        const uri = button.dataset.uri;
-                        if (uri) checkPaymentAndPlay(uri);
+                    async function checkPaymentAndPlay(uri) {
+                        // Check if Jukebar is enabled
+                        if (!useJukebar) {
+                            Notify('Jukebar is currently disabled by your teacher.', 'error');
+                            return;
+                        }
+
+                        if (currentID === ownerID) {
+                            const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
+                            addToQueue(uri, anonMode);
+                            return;
+                        }
+
+                        if (!hasPaid) {
+                            pendingTrackUri = uri;
+                            pendingAction = 'play';
+                            showPayment();
+                            return;
+                        }
+
+                        // Reset payment flag after using it
+                        hasPaid = false;
+                        addToQueue(uri);
                     }
-                });
 
-                // Expose minimal API via custom events for pay.ejs communication
-                window.addEventListener('paymentSuccess', () => {
-                    onPaymentSuccess();
-                });
+                    async function checkPaymentAndSkip() {
+                        console.log('⏭️ Skip clicked - currentlyPlayingUri:', currentlyPlayingUri);
 
-                window.addEventListener('hidePaymentModal', () => {
-                    hidePayment();
-                });
+                        // Check if Jukebar is enabled
+                        if (!useJukebar) {
+                            Notify('Jukebar is currently disabled by your teacher.', 'error');
+                            return;
+                        }
 
-                // Expose read-only state for pay.ejs (cannot be directly manipulated from console)
-                window.getPlayerState = function () {
-                    return {
-                        hasPaid: hasPaid,
-                        pendingAction: pendingAction,
-                        pendingTrackUri: pendingTrackUri,
-                        currentID: currentID
-                    };
-                };
+                        // Build the full URI - add prefix only if not already present
+                        let skipUri = currentlyPlayingUri;
+                        if (currentlyPlayingUri && !currentlyPlayingUri.startsWith('spotify:track:')) {
+                            skipUri = `spotify:track:${currentlyPlayingUri}`;
+                        }
 
-                window.setPlayerState = function (updates) {
-                    if (updates.hasPaid !== undefined) hasPaid = updates.hasPaid;
-                    if (updates.pendingAction !== undefined) pendingAction = updates.pendingAction;
-                };
+                        console.log('⏭️ Final skipUri:', skipUri);
 
-                window.purchaseShield = function (trackUri) {
-                    if (!useJukebar) {
-                        Notify('Jukebar is currently disabled by your teacher.', 'error');
-                        return;
+                        if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
+                            skip(skipUri);
+                            return;
+                        }
+
+                        if (!hasPaid) {
+                            pendingTrackUri = skipUri;
+                            pendingAction = 'skip';
+                            showPayment();
+                            return;
+                        }
+
+                        // Reset payment flag after using it
+                        hasPaid = false;
+                        skip(skipUri);
                     }
-                    
-                    // Owner can purchase shields for free without payment modal
-                    if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
-                        purchaseShieldAfterPayment(trackUri);
-                        return;
-                    }
-                    
-                    pendingTrackUri = trackUri;
-                    pendingAction = 'Skip Shield';
-                    showPayment();
-                };
 
-                async function purchaseShieldAfterPayment(trackUri) {
-                    try {
-                        const response = await fetch('/purchaseShield', {
+                    async function skip(uri) {
+                        try {
+                            const response = await fetch('/skip', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ uri })
+                            });
+
+                            const data = await response.json();
+
+                            if (data.shieldBlocked) {
+                                // Skip was blocked by a shield
+                                Notify(data.message || 'Skip blocked by shield! 🛡️', 'error');
+                            } else if (data.ok) {
+                                // Skip succeeded
+                                Notify('Track skipped!', 'success');
+                            } else {
+                                // Other error
+                                Notify(data.error || 'Failed to skip', 'error');
+                                refund();
+                            }
+                        } catch (error) {
+                            console.error('Error skipping track:', error);
+                            Notify('Network error', 'error');
+                        }
+                    }
+
+                    function addToQueue(uri, anonMode = null) {
+                        if (anonMode === null) {
+                            anonMode = document.getElementById('anonMode')?.checked || false;
+                        }
+                        fetch('/addToQueue', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ trackUri })
+                            body: JSON.stringify({ uri, anonMode })
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    Notify('Track added to queue!', 'success');
+                                } else {
+                                    return response.json().then(data => {
+                                        refund();
+                                    });
+                                }
+                            })
+                            .catch(error => {
+                                //console.log('oopsies!')
+                                console.error('Error adding track to queue:', error);
+                                Notify('Network error', 'error');
+                            });
+                    }
+
+                    async function searchSpotify() {
+                        const query = document.getElementById('searchInput').value;
+                        if (!query) return;
+
+                        try {
+                            const response = await fetch('/search', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ query })
+                            });
+                            const data = await response.json();
+                            const resultsDiv = document.getElementById('searchResults');
+                            resultsDiv.innerHTML = '';
+
+                            if (data.tracks && data.tracks.items.length > 0) {
+                                data.tracks.items.forEach(track => {
+                                    const trackDiv = document.createElement('div');
+                                    trackDiv.className = 'search-result-item';
+                                    trackDiv.innerHTML = `
+                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
+                        <div class="search-result-content">
+                            <div class="search-result-title">${track.name}</div>
+                            <div class="search-result-artist">${track.artist}</div>
+                        </div>
+                        <div class="search-result-actions">
+                            <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
+                                <img src="/img/play.png" alt="Play" class="play-icon">
+                            </button>
+                            <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
+                                <img src="/img/ban.png" alt="Ban" class="ban-icon">
+                            </button>
+                        </div>
+                    `;
+                                    resultsDiv.appendChild(trackDiv);
+                                });
+                            } else {
+                                resultsDiv.innerHTML = '<p>No results found.</p>';
+                            }
+                        } catch (error) {
+                            console.error('Error searching Spotify:', error);
+                        }
+                    }
+
+                    async function getQueue() {
+                        try {
+                            const response = await fetch('/getQueue', {
+                                method: 'GET',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            const data = await response.json();
+                            if (data.ok) {
+                                const queueDiv = document.getElementById('queue');
+                                queueDiv.innerHTML = '';
+                                if (data.tracks.items.length == 0) {
+                                    queueDiv.innerHTML = '<p>No tracks in queue.</p>';
+                                } else {
+                                    data.tracks.items.forEach((item, index) => {
+                                        const itemDiv = document.createElement('div');
+                                        itemDiv.className = 'queue-item';
+
+                                        // Handle anonymous mode
+                                        let addedByDisplay = item.addedBy;
+                                        if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
+                                            addedByDisplay = 'Spotify';
+                                        }
+
+                                        // Check if anonymous mode and user is not a teacher
+                                        if ((item.isAnon === 1 || item.isAnon === true) && userPermission < 4) {
+                                            addedByDisplay = 'Anonymous';
+                                        }
+
+                                        itemDiv.innerHTML = `
+                                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                                        <div class="queue-item-content">
+                                            <div class="queue-item-title">${item.name}</div>
+                                            <div class="queue-item-artist">${item.artist}</div>
+                                            <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
+                                        </div>
+                                    `;
+                                        queueDiv.appendChild(itemDiv);
+                                    });
+                                }
+                            } else {
+                                console.error('Failed to get queue:', data.error);
+                            }
+                        } catch (error) {
+                            console.error('Error fetching queue:', error);
+                        }
+                    }
+
+                    async function currentlyPlaying() {
+                        try {
+                            const response = await fetch('/currentlyPlaying', {
+                                method: 'GET',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            const data = await response.json();
+                            if (data.ok) {
+                                //console.log('Currently Playing:', data.tracks.items);
+                                const CurrentDiv = document.getElementById('currentlyPlaying');
+                                CurrentDiv.innerHTML = '';
+                                if (data.tracks.items.length == 0) {
+                                    const CurrentDiv = document.getElementById('currentlyPlaying');
+                                    CurrentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
+                                    currentlyPlayingUri = null;
+                                }
+                                else {
+                                    data.tracks.items.forEach((item, index) => {
+                                        const itemDiv = document.createElement('div');
+                                        itemDiv.className = 'current-item';
+                                        itemDiv.innerHTML = `
+                                    <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                                    <div class="current-item-content">
+                                        <div class="current-item-title">${item.name}</div>
+                                        <div class="current-item-artist">${item.artist}</div>
+                                    </div>`;
+                                        CurrentDiv.appendChild(itemDiv);
+                                        currentlyPlayingUri = item.id
+                                    });
+                                }
+                            } else {
+                                console.error('Failed to get current track:', data.error);
+                            }
+                        } catch (error) {
+                            console.error('Error fetching current track:', error);
+                        }
+                    }
+
+                    function showPayment() {
+                        document.getElementById('paymentModal').style.display = 'block';
+                        document.querySelector('.main-content').classList.add('blurred');
+                        // Trigger getPrice via custom event
+                        window.dispatchEvent(new CustomEvent('updatePrice', { detail: { pendingAction } }));
+                    }
+                    
+                    // Expose showPayment globally for external event handlers
+                    window.showPayment = showPayment;
+
+                    function hidePayment() {
+                        document.getElementById('paymentModal').style.display = 'none';
+                        document.querySelector('.main-content').classList.remove('blurred');
+
+                        // Handle pending actions after payment
+                        if (hasPaid && pendingAction) {
+                            // Add a small delay to ensure session is saved on server
+                            setTimeout(() => {
+                                if (pendingAction === 'play' && pendingTrackUri) {
+                                    const uri = pendingTrackUri;
+                                    pendingTrackUri = null;
+                                    pendingAction = null;
+                                    checkPaymentAndPlay(uri);
+                                } else if (pendingAction === 'skip') {
+                                    pendingAction = null;
+                                    checkPaymentAndSkip();
+                                } else if (pendingAction === 'Skip Shield' && pendingTrackUri) {
+                                    const uri = pendingTrackUri;
+                                    const addedAt = pendingTrackAddedAt || 0;
+                                    pendingTrackUri = null;
+                                    pendingTrackAddedAt = null;
+                                    pendingAction = null;
+                                    purchaseShieldAfterPayment(uri, addedAt);
+                                } else if (pendingAction === 'Ban Vote' && pendingTrackUri) {
+                                    const uri = pendingTrackUri;
+                                    const trackName = pendingTrackName || 'Unknown Track';
+                                    const trackArtist = pendingTrackArtist || 'Unknown Artist';
+                                    pendingTrackUri = null;
+                                    pendingTrackName = null;
+                                    pendingTrackArtist = null;
+                                    pendingAction = null;
+                                    startBanVote(uri, trackName, trackArtist);
+                                }
+                            }, 100); // 100ms delay
+                        }
+                    }
+
+                    function onPaymentSuccess() {
+                        hasPaid = true;
+                        hidePayment();
+                    }
+
+                    function refund() {
+                        fetch('/refund', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reason: "Jukebar refund" })
+                        })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.ok) {
+                                    Notify('Spotify error occurred. Your digipogs have been refunded.', 'success');
+                                    //console.log('Refund successful:', data);
+                                } else {
+                                    Notify('Refund failed: ' + (data.error || 'Unknown error'), 'error');
+                                    console.error('Refund failed:', data.error);
+                                }
+                            })
+                            .catch(error => {
+                                Notify('Network error during refund. Please contact support.', 'error');
+                                console.error('Error during refund:', error);
+                            });
+                    }
+
+                    // Wire up event listeners
+                    document.getElementById('searchForm')?.addEventListener('submit', handleSearchSubmit);
+                    document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
+                    document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
+                    document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+
+                    // Changelog button event listeners
+                    document.getElementById('changelog-button')?.addEventListener('click', () => {
+                        document.getElementById('changelogModal').style.display = 'block';
+                    });
+
+                    document.getElementById('close-changelog')?.addEventListener('click', () => {
+                        document.getElementById('changelogModal').style.display = 'none';
+                    });
+
+                    // Close modal when clicking outside of it
+                    window.addEventListener('click', (event) => {
+                        const changelogModal = document.getElementById('changelogModal');
+                        if (event.target === changelogModal) {
+                            changelogModal.style.display = 'none';
+                        }
+                    });
+
+                    // Event delegation for dynamically created play and ban buttons
+                    document.getElementById('searchResults')?.addEventListener('click', (e) => {
+                        // Handle play button
+                        if (e.target.matches('.play-button, .play-button-icon') || e.target.closest('.play-button, .play-button-icon')) {
+                            const button = e.target.matches('.play-button, .play-button-icon') ? e.target : e.target.closest('.play-button, .play-button-icon');
+                            const uri = button.dataset.uri;
+                            if (uri) checkPaymentAndPlay(uri);
+                        }
+                        
+                        // Handle ban button
+                        if (e.target.matches('.ban-button-icon') || e.target.closest('.ban-button-icon')) {
+                            const button = e.target.matches('.ban-button-icon') ? e.target : e.target.closest('.ban-button-icon');
+                            const uri = button.dataset.uri;
+                            const name = button.dataset.name;
+                            const artist = button.dataset.artist;
+                            
+                            if (uri && window.banVoteSocket) {
+                                const user = '<%= user %>';
+                                window.banVoteSocket.emit('initiateBanVote', {
+                                    trackUri: uri,
+                                    trackName: name,
+                                    trackArtist: artist,
+                                    initiator: user
+                                });
+                            }
+                        }
+                    });
+
+                    // Expose minimal API via custom events for pay.ejs communication
+                    window.addEventListener('paymentSuccess', () => {
+                        onPaymentSuccess();
+                    });
+
+                    window.addEventListener('hidePaymentModal', () => {
+                        hidePayment();
+                    });
+
+                    // Expose read-only state for pay.ejs (cannot be directly manipulated from console)
+                    window.getPlayerState = function () {
+                        return {
+                            hasPaid: hasPaid,
+                            pendingAction: pendingAction,
+                            pendingTrackUri: pendingTrackUri,
+                            currentID: currentID
+                        };
+                    };
+
+                    window.setPlayerState = function (updates) {
+                        if (updates.hasPaid !== undefined) hasPaid = updates.hasPaid;
+                        if (updates.pendingAction !== undefined) pendingAction = updates.pendingAction;
+                    };
+
+                    window.purchaseShield = function (trackUri, addedAt) {
+                        if (!useJukebar) {
+                            Notify('Jukebar is currently disabled by your teacher.', 'error');
+                            return;
+                        }
+
+                        // Owner can purchase shields for free without payment modal
+                        if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
+                            purchaseShieldAfterPayment(trackUri, addedAt);
+                            return;
+                        }
+
+                        pendingTrackUri = trackUri;
+                        pendingTrackAddedAt = addedAt;
+                        pendingAction = 'Skip Shield';
+                        showPayment();
+                    };
+
+                    async function purchaseShieldAfterPayment(trackUri, addedAt) {
+                        try {
+                            const response = await fetch('/purchaseShield', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ trackUri, addedAt })
+                            });
+
+                            const data = await response.json();
+
+                            if (response.ok && data.ok) {
+                                Notify(data.message || 'Skip Shield added successfully!', 'success');
+                                // Reset payment flag after successful purchase
+                                hasPaid = false;
+                                // Refresh queue to show updated shield count
+                                socket.emit('getQueue');
+                            } else {
+                                Notify(data.error || 'Failed to add Skip Shield', 'error');
+                            }
+                        } catch (err) {
+                            console.error('Error purchasing shield:', err);
+                            Notify('Network error purchasing Skip Shield', 'error');
+                        }
+                    }
+
+                    // Initialize WebSocket-based queue sync
+                    initializeQueueSync();
+
+                    // WebSocket-based queue synchronization
+                    function initializeQueueSync() {
+                        socket.on('connect', () => {
+                            socket.emit('requestQueueUpdate');
                         });
 
-                        const data = await response.json();
+                        // Handle initial state
+                        socket.on('initialState', (data) => {
+                            updateQueueDisplay(data.data);
+                            updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
+                        });
 
-                        if (response.ok && data.ok) {
-                            Notify(data.message || 'Skip Shield added successfully!', 'success');
-                            // Reset payment flag after successful purchase
-                            hasPaid = false;
-                            // Refresh queue to show updated shield count
-                            socket.emit('getQueue');
-                        } else {
-                            Notify(data.error || 'Failed to add Skip Shield', 'error');
-                        }
-                    } catch (err) {
-                        console.error('Error purchasing shield:', err);
-                        Notify('Network error purchasing Skip Shield', 'error');
+                        // Handle queue updates (when queue changes)
+                        socket.on('queueUpdate', (data) => {
+                            updateQueueDisplay(data);
+                            // Only update currently playing if we have valid current track data
+                            if (data.currentTrack) {
+                                updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
+                            }
+                        });
+
+                        // Handle playback state updates (playing/paused status)
+                        socket.on('playbackState', (data) => {
+                            updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
+                        });
+
+                        // Handle current track updates (from periodic sync)
+                        socket.on('currentTrack', (data) => {
+                            //console.log('currentTrack event received:', data);
+                            updateCurrentlyPlaying(data, true);
+                        });
+
+                        // Handle notifications only
+                        socket.on('queueAdd', (data) => {
+                            showNotification(`"${data.track.name}" added to queue`, 'success');
+                        });
+
+                        socket.on('skip', (data) => {
+                            showNotification('Track skipped', 'info');
+                        });
+
+                        // Handle shield purchase confirmation
+                        socket.on('shieldPurchased', (data) => {
+                            if (data.ok) {
+                                Notify(data.message || 'Skip Shield added! 🛡️', 'success');
+                                socket.emit('getQueue'); // Refresh queue
+                            } else {
+                                Notify(data.error || 'Failed to add Skip Shield', 'error');
+                            }
+                        });
+
+                        // Handle ban vote events
+                        socket.on('banVoteStarted', (data) => {
+                            console.log('banVoteStarted received:', data);
+                            showBanVote(data);
+                        });
+
+                        socket.on('banVoteUpdate', (data) => {
+                            console.log('banVoteUpdate received:', data);
+                            updateBanVoteDisplay(data);
+                        });
+
+                        socket.on('banVotePassed', (data) => {
+                            console.log('banVotePassed received:', data);
+                            hideBanVote();
+                            Notify(`Vote passed! "${data.trackName}" has been banned.`, 'success');
+                        });
+
+                        socket.on('banVoteFailed', (data) => {
+                            console.log('banVoteFailed received:', data);
+                            hideBanVote();
+                            const reason = data.reason ? ` (${data.reason})` : '';
+                            Notify(`Vote failed${reason}. "${data.trackName}" was not banned.`, 'error');
+                        });
+
+                        socket.on('banVoteError', (data) => {
+                            console.log('banVoteError received:', data);
+                            Notify(data.error || 'Ban vote error', 'error');
+                        });
                     }
-                }
+                })();
 
-                // Initialize WebSocket-based queue sync
-                initializeQueueSync();
-            })();
+                // Update queue display with WebSocket data
+                function updateQueueDisplay(data) {
+                    const queueDiv = document.getElementById('queue');
+                    if (!queueDiv) return;
 
-            // WebSocket-based queue synchronization
-            function initializeQueueSync() {
-                const socket = io();
+                    // Handle different data structures
+                    let queue = data.queue || data.data?.queue || [];
 
-                socket.on('connect', () => {
-                    socket.emit('requestQueueUpdate');
-                });
+                    if (queue && queue.length > 0) {
+                        //console.log('Displaying', queue.length, 'tracks');
+                        queueDiv.innerHTML = queue.map((track, index) => {
+                            // Safely convert addedBy to string, handling [object Object] cases
+                            let addedByDisplay = track.addedBy;
+                            if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
+                                addedByDisplay = 'Spotify';
+                            }
 
-                // Handle initial state
-                socket.on('initialState', (data) => {
-                    updateQueueDisplay(data.data);
-                    updateCurrentlyPlaying(data.data.currentTrack, data.data.isPlaying);
-                });
+                            if ((track.isAnon === 1 || track.isAnon === true) && userPermission < 3) {
+                                addedByDisplay = 'Anonymous';
+                            }
 
-                // Handle queue updates (when queue changes)
-                socket.on('queueUpdate', (data) => {
-                    updateQueueDisplay(data);
-                    // Only update currently playing if we have valid current track data
-                    if (data.currentTrack) {
-                        updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
-                    }
-                });
+                            const shieldCount = track.skipShields || 0;
 
-                // Handle playback state updates (playing/paused status)
-                socket.on('playbackState', (data) => {
-                    updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
-                });
-
-                // Handle current track updates (from periodic sync)
-                socket.on('currentTrack', (data) => {
-                    //console.log('currentTrack event received:', data);
-                    updateCurrentlyPlaying(data, true);
-                });
-
-                // Handle notifications only
-                socket.on('queueAdd', (data) => {
-                    showNotification(`"${data.track.name}" added to queue`, 'success');
-                });
-
-                socket.on('skip', (data) => {
-                    showNotification('Track skipped', 'info');
-                });
-
-                // Handle shield purchase confirmation
-                socket.on('shieldPurchased', (data) => {
-                    if (data.ok) {
-                        Notify(data.message || 'Skip Shield added! 🛡️', 'success');
-                        socket.emit('getQueue'); // Refresh queue
-                    } else {
-                        Notify(data.error || 'Failed to add Skip Shield', 'error');
-                    }
-                });
-            }
-
-            // Update queue display with WebSocket data
-            function updateQueueDisplay(data) {
-                const queueDiv = document.getElementById('queue');
-                if (!queueDiv) return;
-
-                // Handle different data structures
-                let queue = data.queue || data.data?.queue || [];
-
-                if (queue && queue.length > 0) {
-                    //console.log('Displaying', queue.length, 'tracks');
-                    queueDiv.innerHTML = queue.map((track, index) => {
-                        // Safely convert addedBy to string, handling [object Object] cases
-                        let addedByDisplay = track.addedBy;
-                        if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
-                            addedByDisplay = 'Spotify';
-                        }
-
-                        if ((track.isAnon === 1 || track.isAnon === true) && userPermission < 3) {
-                            addedByDisplay = 'Anonymous';
-                        }
-
-                        const shieldCount = track.skipShields || 0;
-                        
-                        return `
+                            return `
                         <div class="queue-item">
                             <img src="${track.image}" alt="${track.name}" class="album-cover-small">
                             <div class="queue-item-content">
@@ -628,133 +734,178 @@
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
                             </div>
-                            <button class="shield-button" onclick="purchaseShield('${track.uri}')" title="Add Skip Shield">
-                                <img src="/img/skipShield.png" alt="Skip Shield" class="shield-icon">
+                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${track.image}', ${track.addedAt || 0}, event)" title="More options">
+                                <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="2" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="8" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="14" cy="2" r="2" fill="currentColor"/>
+                                </svg>
                             </button>
                         </div>
                     `;
-                    }).join('');
-                } else {
-                    //console.log('QUEUE CLEARED - No tracks in queue, showing empty message');
-                    queueDiv.innerHTML = '<p class="no-queue">No tracks in queue</p>';
-                }
-            }
-
-            // Update currently playing with WebSocket data
-            function updateCurrentlyPlaying(track, isPlaying) {
-                const currentDiv = document.getElementById('currentlyPlaying');
-                if (!currentDiv) return;
-
-                if (track) {
-                    // Update global currentlyPlayingUri for skip functionality
-                    if (track.uri) {
-                        currentlyPlayingUri = track.uri.replace('spotify:track:', '');
-                        console.log('Now playing URI:', currentlyPlayingUri);
-                    } else if (track.id) {
-                        currentlyPlayingUri = track.id;
-                        console.log('Now playing ID:', currentlyPlayingUri);
+                        }).join('');
                     } else {
-                        console.log('WARNING: No URI in track:', track);
+                        //console.log('QUEUE CLEARED - No tracks in queue, showing empty message');
+                        queueDiv.innerHTML = '<p class="no-queue">No tracks in queue</p>';
                     }
-                    
-                    // Update global progress variables
-                    currentProgress = track.progress || 0;
-                    currentDuration = track.duration || 0;
-                    isCurrentlyPlaying = isPlaying;
-                    
-                    // Handle anonymous mode display
-                    let addedByDisplay = track.addedBy || 'Spotify';
-                    if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
-                        addedByDisplay = 'Spotify';
-                    }
-                    if ((track.isAnon === 1 || track.isAnon === true) && userPermission < 3) {
-                        addedByDisplay = 'Anonymous';
-                    }
+                }
 
-                    const shieldCount = track.skipShields || 0;
-                    
-                    // Format time as mm:ss
-                    const formatTime = (ms) => {
-                        const totalSeconds = Math.floor(ms / 1000);
-                        const minutes = Math.floor(totalSeconds / 60);
-                        const seconds = totalSeconds % 60;
-                        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                    };
-                    
-                    const currentTime = formatTime(currentProgress);
-                    const totalTime = formatTime(currentDuration);
-                    
-                    const imageUrl = track.image || track.album?.image || '/img/placeholder.png';
-                    
-                    currentDiv.innerHTML = `
+                // Track the last displayed track to avoid unnecessary re-renders
+                let lastDisplayedTrackUri = null;
+
+                // Update currently playing with WebSocket data
+                function updateCurrentlyPlaying(track, isPlaying) {
+                    const currentDiv = document.getElementById('currentlyPlaying');
+                    if (!currentDiv) return;
+
+                    if (track) {
+                        // Get the current track URI
+                        const trackUri = track.uri || track.id;
+
+                        // Update global currentlyPlayingUri for skip functionality
+                        if (track.uri) {
+                            currentlyPlayingUri = track.uri.replace('spotify:track:', '');
+                        } else if (track.id) {
+                            currentlyPlayingUri = track.id;
+                        }
+
+                        // Update global progress variables from server data
+                        // Only update progress if it's a different track or if we don't have progress yet
+                        if (lastDisplayedTrackUri !== trackUri) {
+                            // New track - accept server's progress data
+                            currentProgress = track.progress || 0;
+                            currentDuration = track.duration || 0;
+                        } else {
+                            // Same track - only update duration if we don't have it
+                            if (!currentDuration && track.duration) {
+                                currentDuration = track.duration;
+                            }
+                            // Don't update progress - let the interval handle it
+                        }
+                        isCurrentlyPlaying = isPlaying;
+
+                        // If same track, just update progress bar without re-rendering
+                        if (lastDisplayedTrackUri === trackUri) {
+                            updateProgressDisplay();
+                            return;
+                        }
+
+                        // Different track - do full re-render
+                        lastDisplayedTrackUri = trackUri;
+
+                        // Handle anonymous mode display
+                        let addedByDisplay = track.addedBy || 'Spotify';
+                        if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
+                            addedByDisplay = 'Spotify';
+                        }
+                        if ((track.isAnon === 1 || track.isAnon === true) && userPermission < 3) {
+                            addedByDisplay = 'Anonymous';
+                        }
+
+                        const shieldCount = track.skipShields || 0;
+
+                        // Format time as mm:ss
+                        const formatTime = (ms) => {
+                            const totalSeconds = Math.floor(ms / 1000);
+                            const minutes = Math.floor(totalSeconds / 60);
+                            const seconds = totalSeconds % 60;
+                            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        };
+
+                        const currentTime = formatTime(currentProgress);
+                        const totalTime = formatTime(currentDuration);
+
+                        const imageUrl = track.image || track.album?.image || '/img/placeholder.png';
+
+                        currentDiv.innerHTML = `
                         <div class="current-item queue-item">
                             <img src="${imageUrl}" alt="${track.name}" class="album-cover-small">
                             <div class="queue-item-content">
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay}</div>
-                                <div class="track-progress" id="track-progress-display">${currentTime} / ${totalTime}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
+                                <div class="progress-container">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="progress-fill"></div>
+                                    </div>
+                                    <div class="progress-time" id="track-progress-display">${currentTime} / ${totalTime}</div>
+                                </div>
                             </div>
-                            <button class="shield-button" onclick="purchaseShield('${track.uri}')" title="Add Skip Shield">
-                                <img src="/img/skipShield.png" alt="Skip Shield" class="shield-icon">
+                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${imageUrl}', ${track.addedAt || 0}, event)" title="More options">
+                                <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="2" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="8" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="14" cy="2" r="2" fill="currentColor"/>
+                                </svg>
                             </button>
                         </div>
                     `;
-                    
-                    // Start progress update interval
-                    startProgressInterval();
-                } else {
-                    currentlyPlayingUri = null;
-                    currentProgress = 0;
-                    currentDuration = 0;
-                    isCurrentlyPlaying = false;
-                    stopProgressInterval();
-                    currentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
-                }
-            }
-            
-            // Start interval to update progress every second
-            function startProgressInterval() {
-                stopProgressInterval(); // Clear any existing interval
-                
-                progressInterval = setInterval(() => {
-                    if (isCurrentlyPlaying && currentProgress < currentDuration) {
-                        currentProgress += 1000; // Increment by 1 second
-                        updateProgressDisplay();
-                    }
-                }, 1000);
-            }
-            
-            // Stop progress interval
-            function stopProgressInterval() {
-                if (progressInterval) {
-                    clearInterval(progressInterval);
-                    progressInterval = null;
-                }
-            }
-            
-            // Update just the progress display without re-rendering everything
-            function updateProgressDisplay() {
-                const progressDisplay = document.getElementById('track-progress-display');
-                if (progressDisplay) {
-                    const formatTime = (ms) => {
-                        const totalSeconds = Math.floor(ms / 1000);
-                        const minutes = Math.floor(totalSeconds / 60);
-                        const seconds = totalSeconds % 60;
-                        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                    };
-                    
-                    progressDisplay.textContent = `${formatTime(currentProgress)} / ${formatTime(currentDuration)}`;
-                }
-            }
 
-            function showNotification(message, type = 'info') {
-                // Simple notification system
-                const notification = document.createElement('div');
-                notification.className = `notification notification-${type}`;
-                notification.textContent = message;
-                notification.style.cssText = `
+                        // Update progress bar immediately after render
+                        updateProgressDisplay();
+
+                        // Start progress update interval
+                        startProgressInterval();
+                    } else {
+                        currentlyPlayingUri = null;
+                        lastDisplayedTrackUri = null;
+                        currentProgress = 0;
+                        currentDuration = 0;
+                        isCurrentlyPlaying = false;
+                        stopProgressInterval();
+                        currentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
+                    }
+                }
+
+                // Start interval to update progress every second
+                function startProgressInterval() {
+                    stopProgressInterval(); // Clear any existing interval
+
+                    progressInterval = setInterval(() => {
+                        if (isCurrentlyPlaying && currentProgress < currentDuration) {
+                            currentProgress += 1000; // Increment by 1 second
+                            updateProgressDisplay();
+                        }
+                    }, 1000);
+                }
+
+                // Stop progress interval
+                function stopProgressInterval() {
+                    if (progressInterval) {
+                        clearInterval(progressInterval);
+                        progressInterval = null;
+                    }
+                }
+
+                // Update just the progress display without re-rendering everything
+                function updateProgressDisplay() {
+                    const progressDisplay = document.getElementById('track-progress-display');
+                    const progressFill = document.getElementById('progress-fill');
+
+                    if (progressDisplay) {
+                        const formatTime = (ms) => {
+                            const totalSeconds = Math.floor(ms / 1000);
+                            const minutes = Math.floor(totalSeconds / 60);
+                            const seconds = totalSeconds % 60;
+                            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        };
+
+                        progressDisplay.textContent = `${formatTime(currentProgress)} / ${formatTime(currentDuration)}`;
+                    }
+
+                    if (progressFill && currentDuration > 0) {
+                        const percentage = (currentProgress / currentDuration) * 100;
+                        progressFill.style.width = `${percentage}%`;
+                    }
+                }
+
+                function showNotification(message, type = 'info') {
+                    // Simple notification system
+                    const notification = document.createElement('div');
+                    notification.className = `notification notification-${type}`;
+                    notification.textContent = message;
+                    notification.style.cssText = `
                     position: fixed;
                     top: 20px;
                     right: 20px;
@@ -766,13 +917,184 @@
                     animation: slideIn 0.3s ease-out;
                 `;
 
-                document.body.appendChild(notification);
+                    document.body.appendChild(notification);
 
-                setTimeout(() => {
-                    notification.remove();
-                }, 3000);
-            }
-        </script>
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+                }
+
+                function openSongMenu(uri, name, artist, imageUrl, addedAt, event) {
+                    // Prevent event bubbling
+                    if (event) {
+                        event.stopPropagation();
+                    }
+
+                    // Get button position
+                    const button = event?.target.closest('.ellipsis-button');
+                    const rect = button?.getBoundingClientRect();
+
+                    // Calculate dropdown position (below and to the left of button)
+                    const x = rect ? rect.left - 150 : 100; // Offset left to align with button
+                    const y = rect ? rect.bottom + 5 : 100; // Below button with small gap
+
+                    // Dispatch event to show dropdown at position
+                    window.dispatchEvent(new CustomEvent('updateSongMenu', {
+                        detail: { uri, name, artist, imageUrl, addedAt, x, y }
+                    }));
+                }
+
+                let voteTimerInterval = null;
+
+                function showBanVote(data) {
+                    const modal = document.getElementById('banVoteModal');
+                    const title = document.getElementById('banVoteTitle');
+                    const status = document.getElementById('banVoteStatus');
+
+                    // gives the name of the user that started the ban
+                    title.textContent = `${data.initiator} has started a vote to ban "${data.trackName}" by ${data.trackArtist}`;
+
+                    const onlineCount = data.onlineCount || data.totalOnline || 0;
+                    status.textContent = `Ban vote: "${data.trackName}" - Yes: ${data.yesVotes || 1}, No: ${data.noVotes || 0} (${onlineCount} online)`;
+
+                    document.getElementById('banVoteYes').textContent = data.yesVotes || 1;
+                    document.getElementById('banVoteNo').textContent = data.noVotes || 0;
+                    document.getElementById('banVoteOnline').textContent = onlineCount;
+
+                    modal.dataset.voteId = data.voteId;
+                    modal.dataset.trackName = data.trackName;
+                    modal.dataset.initiatorId = data.initiatorId;
+                    modal.classList.remove('minimized'); // Start expanded
+                    modal.style.display = 'block';
+
+                    // If current user is the initiator, disable voting buttons (they already voted yes)
+                    const currentUserId = <%= JSON.stringify(userID || null) %>;
+                    const voteButtons = modal.querySelectorAll('.vote-yes-btn, .vote-no-btn');
+                    if (currentUserId && data.initiatorId && String(currentUserId) === String(data.initiatorId)) {
+                        voteButtons.forEach(btn => {
+                            btn.disabled = true;
+                            btn.style.opacity = '0.5';
+                            btn.style.cursor = 'not-allowed';
+                        });
+                    } else {
+                        // Enable buttons for other users
+                        voteButtons.forEach(btn => {
+                            btn.disabled = false;
+                            btn.style.opacity = '1';
+                            btn.style.cursor = 'pointer';
+                        });
+                    }
+
+                    // Start countdown timer for everyone
+                    startVoteTimer(data.expiresIn || 60000);
+                }
+
+                function updateBanVoteDisplay(data) {
+                    const modal = document.getElementById('banVoteModal');
+                    if (!modal || modal.style.display === 'none') return;
+
+                    const status = document.getElementById('banVoteStatus');
+                    const onlineCount = data.onlineCount || data.totalOnline || document.getElementById('banVoteOnline').textContent || 0;
+                    status.textContent = `Ban vote: "${data.trackName}" - Yes: ${data.yesVotes}, No: ${data.noVotes} (${onlineCount} online)`;
+
+                    document.getElementById('banVoteYes').textContent = data.yesVotes;
+                    document.getElementById('banVoteNo').textContent = data.noVotes;
+                    if (data.onlineCount || data.totalOnline) {
+                        document.getElementById('banVoteOnline').textContent = onlineCount;
+                    }
+                }
+
+                function castVote(vote) {
+                    const modal = document.getElementById('banVoteModal');
+                    const voteId = modal.dataset.voteId;
+
+                    if (!voteId || !window.banVoteSocket) {
+                        if (typeof Notify === 'function') {
+                            Notify('Unable to cast vote', 'error');
+                        } else {
+                            Notify('Unable to cast vote');
+                        }
+                        return;
+                    }
+
+                    window.banVoteSocket.emit('castBanVote', { voteId, vote });
+
+                    // Disable vote buttons after voting
+                    const voteButtons = modal.querySelectorAll('.vote-yes-btn, .vote-no-btn');
+                    voteButtons.forEach(btn => {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                    });
+
+                    if (typeof Notify === 'function') {
+                        Notify(`You voted ${vote}`, 'info');
+                    }
+                }
+
+                function startVoteTimer(durationMs) {
+                    // Clear any existing timer
+                    if (voteTimerInterval) {
+                        clearInterval(voteTimerInterval);
+                    }
+
+                    const timerElement = document.getElementById('vote-timer');
+                    if (!timerElement) return;
+
+                    let remainingMs = durationMs;
+                    const startTime = Date.now();
+
+                    voteTimerInterval = setInterval(() => {
+                        remainingMs = durationMs - (Date.now() - startTime);
+
+                        if (remainingMs <= 0) {
+                            clearInterval(voteTimerInterval);
+                            timerElement.textContent = '0s remaining';
+                            // Hide modal after timer ends
+                            setTimeout(() => {
+                                const modal = document.getElementById('banVoteModal');
+                                const trackName = modal.dataset.trackName || 'this track';
+                                hideBanVote();
+                                Notify(`Vote expired for "${trackName}"`, 'info');
+                            }, 1000);
+                            return;
+                        }
+
+                        const seconds = Math.ceil(remainingMs / 1000);
+                        timerElement.textContent = `${seconds}s remaining`;
+                    }, 100);
+                }
+
+                function hideBanVote() {
+                    const modal = document.getElementById('banVoteModal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                        modal.classList.add('minimized');
+                    }
+
+                    // Clear timer
+                    if (voteTimerInterval) {
+                        clearInterval(voteTimerInterval);
+                        voteTimerInterval = null;
+                    }
+                }
+
+                function toggleBanVoteMinimize() {
+                    const modal = document.getElementById('banVoteModal');
+                    if (modal) {
+                        modal.classList.toggle('minimized');
+                        const btn = document.getElementById('banVoteMinimize');
+                        if (btn) {
+                            btn.textContent = modal.classList.contains('minimized') ? '+' : '−';
+                        }
+                    }
+                }
+
+                // Add event listeners for ban vote modal buttons
+                document.getElementById('banVoteMinimize')?.addEventListener('click', toggleBanVoteMinimize);
+
+
+            </script>
 </body>
 
 </html>

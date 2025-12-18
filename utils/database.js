@@ -126,4 +126,9 @@ db.run(`CREATE TABLE IF NOT EXISTS currently_playing (
     duration_ms INTEGER DEFAULT 0
     )`);
 
+db.run(`CREATE TABLE IF NOT EXISTS track_bans (
+    track_uri TEXT PRIMARY KEY,
+    banned_at INTEGER NOT NULL
+)`);
+
 module.exports = db;
