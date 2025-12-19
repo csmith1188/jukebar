@@ -47,6 +47,7 @@ class VoteManager {
 
         this.activeVotes.set(voteId, voteData);
 
+
         // Auto-cleanup after expiration with callback
         const timeoutId = setTimeout(() => {
             if (this.activeVotes.has(voteId)) {
@@ -54,15 +55,40 @@ class VoteManager {
                 const noVotes = voteData.noVotes.size;
                 console.log(`Vote expired: yesVotes=${yesVotes}, noVotes=${noVotes}, required=${voteData.requiredVotes}`);
                 this.activeVotes.delete(voteId);
-                
-                // Call the expiration callback if provided
-                if (onExpireCallback) {
-                    onExpireCallback({
-                        trackName: voteData.trackName,
+
+                // Decide result based on margin
+                let result;
+                if (yesVotes > noVotes) {
+                    result = {
+                        passed: true,
                         yesVotes,
                         noVotes,
-                        reason: 'time expired'
-                    });
+                        trackUri: voteData.trackUri,
+                        trackName: voteData.trackName,
+                        trackArtist: voteData.trackArtist,
+                        reason: 'more yes than no at expiration'
+                    };
+                } else if (noVotes > yesVotes) {
+                    result = {
+                        failed: true,
+                        yesVotes,
+                        noVotes,
+                        trackName: voteData.trackName,
+                        reason: 'more no than yes at expiration'
+                    };
+                } else {
+                    result = {
+                        failed: true,
+                        yesVotes,
+                        noVotes,
+                        trackName: voteData.trackName,
+                        reason: 'tie at expiration'
+                    };
+                }
+
+                // Call the expiration callback if provided
+                if (onExpireCallback) {
+                    onExpireCallback(result);
                 }
             } else {
                 console.log('Vote already completed, skipping expiration callback');

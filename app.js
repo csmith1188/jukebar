@@ -117,8 +117,20 @@ io.on('connection', (socket) => {
             const { trackUri, trackName, trackArtist, initiator } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
 
-            // Note: Payment verification happens before this event is emitted (in the frontend)
-            // Owner bypass is handled in songMenu.ejs before calling startBanVote()
+            // Check if user is owner (bypass payment)
+            const ownerId = Number(process.env.OWNER_ID);
+            const isOwner = userId === ownerId;
+
+            // Verify payment for non-owners
+            if (!isOwner) {
+                if (!socket.request?.session?.hasPaid) {
+                    socket.emit('banVoteError', { error: 'Payment required to start a ban vote' });
+                    return;
+                }
+                // Reset payment flag after verification
+                socket.request.session.hasPaid = false;
+                socket.request.session.save();
+            }
 
             // Get online user count
             const onlineCount = io.engine.clientsCount;
@@ -158,9 +170,25 @@ io.on('connection', (socket) => {
                 userId,
                 onlineCount,
                 (expiredData) => {
-                    // Broadcast that vote failed due to expiration
-                    console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
-                    io.emit('banVoteFailed', expiredData);
+                    if (expiredData.passed) {
+                        console.log('Vote expired, broadcasting banVotePassed:', expiredData);
+                        // Insert into banned_songs table
+                        db.run(
+                            'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
+                            [expiredData.trackName, expiredData.trackArtist],
+                            (err) => {
+                                if (err) {
+                                    console.error('Database insertion error (ban on expiration):', err);
+                                } else {
+                                    console.log('Successfully inserted ban into database (expiration)');
+                                }
+                            }
+                        );
+                        io.emit('banVotePassed', expiredData);
+                    } else {
+                        console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
+                        io.emit('banVoteFailed', expiredData);
+                    }
                 }
             );
 
