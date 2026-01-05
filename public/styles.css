@@ -914,6 +914,10 @@ p {
     width: 60%;
     height: 60%;
     object-fit: contain;
+    /* For SVG or image icons */
+    filter: brightness(0) invert(1);
+    /* For font icons (Font Awesome, etc.) */
+    color: #fff;
 }
 
 .progress-bar-container {
