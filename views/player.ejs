@@ -258,6 +258,8 @@
                             if (data.shieldBlocked) {
                                 // Skip was blocked by a shield
                                 Notify(data.message || 'Skip blocked by shield! 🛡️', 'error');
+                                // Request queue update to show updated shield count
+                                socket.emit('getQueue');
                             } else if (data.ok) {
                                 // Skip succeeded
                                 Notify('Track skipped!', 'success');

@@ -672,6 +672,7 @@ router.post('/skip', async (req, res) => {
             if (trackMetadata && trackMetadata.skip_shields > 0) {
                 console.log(`SHIELD DETECTED: ${trackMetadata.skip_shields} shields - BLOCKING SKIP`);
                 console.log('User will be charged but skip will be blocked');
+                const shieldsThatBlockedSkip = trackMetadata.skip_shields;
                 const remainingShields = trackMetadata.skip_shields - 1;
                 console.log(`Decrementing shield: ${trackMetadata.skip_shields} -> ${remainingShields}`);
 
@@ -721,7 +722,7 @@ router.post('/skip', async (req, res) => {
                         shieldBlocked: true,
                         remaining: remainingShields,
                         soundPlayed: soundFile,
-                        message: `SKIP BLOCKED! This song is protected by ${remainingShields} shield${remainingShields !== 1 ? 's' : ''}. You were charged ${process.env.SKIP_AMOUNT || 100} digipogs.`
+                        message: `SKIP BLOCKED! This song is protected by ${shieldsThatBlockedSkip} shield${shieldsThatBlockedSkip !== 1 ? 's' : ''}. You were charged ${process.env.SKIP_AMOUNT || 100} digipogs.`
                     });
                 });
             } else {
