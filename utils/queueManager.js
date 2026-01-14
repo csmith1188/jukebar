@@ -1,3 +1,5 @@
+const { isJukepixEnabled, displayTrack } = require('./jukepix');
+
 class QueueManager {
     constructor() {
         this.currentTrack = null;
@@ -335,6 +337,7 @@ class QueueManager {
                         duration_ms: currentData.item.duration_ms,
                         progress_ms: currentData.progress_ms
                     };
+                    if(isJukepixEnabled()) displayTrack(currentTrack);
                 }
             }
 
