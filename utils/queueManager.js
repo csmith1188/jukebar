@@ -195,7 +195,8 @@ class QueueManager {
                     uri: currentPlayback.body.item.uri,
                     duration: currentPlayback.body.item.duration_ms,
                     image: currentPlayback.body.item.album.images[0]?.url,
-                    addedBy: currentMetadata ? currentMetadata.added_by : 'Spotify',
+                    addedBy: currentMetadata ? (currentMetadata.is_anon ? 'Anonymous' : currentMetadata.added_by) : 'Spotify',
+                    displayName: currentMetadata ? (currentMetadata.is_anon ? 'Anonymous' : currentMetadata.display_name) : 'Spotify',
                     addedAt: currentMetadata ? currentMetadata.added_at : Date.now(),
                     isAnon: currentMetadata ? currentMetadata.is_anon : 0,
                     skipShields: currentMetadata ? currentMetadata.skip_shields : 0
@@ -422,8 +423,8 @@ class QueueManager {
                     uri: track.uri,
                     name: track.name,
                     artist: track.artists.map(a => a.name).join(', '),
-                    addedBy: metadata?.added_by || 'Spotify',
-                    displayName: metadata?.display_name || 'Spotify',
+                    addedBy: metadata?.is_anon ? 'Anonymous' : (metadata?.added_by || 'Spotify'),
+                    displayName: metadata?.is_anon ? 'Anonymous' : (metadata?.display_name || 'Spotify'),
                     addedAt: metadata?.added_at || Date.now(),
                     image: track.album?.images?.[0]?.url,
                     isAnon: metadata?.is_anon || 0,
@@ -439,8 +440,8 @@ class QueueManager {
                     // This should be the one with the oldest added_at that doesn't match any queue position
                     const metadata = metadataArray[0]; // First entry is the one currently playing
 
-                    currentTrack.addedBy = metadata.added_by;
-                    currentTrack.displayName = metadata.display_name;
+                    currentTrack.addedBy = metadata.is_anon ? 'Anonymous' : metadata.added_by;
+                    currentTrack.displayName = metadata.is_anon ? 'Anonymous' : metadata.display_name;
                     currentTrack.isAnon = metadata.is_anon;
                     currentTrack.skipShields = metadata.skip_shields;
                 }
