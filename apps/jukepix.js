@@ -2,6 +2,8 @@ const formpix = 'http://172.16.3.100:421';
 
 require('dotenv').config({quiet: true});
 
+console.log('🎵 Jukepix starting...');
+
 const clientId = process.env.SPOTIFY_CLIENT_ID;
 const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
