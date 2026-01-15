@@ -369,6 +369,7 @@ app.get('/teacher', isAuthenticated, (req, res) => {
             res.render('teacher.ejs', {
                 user: req.session.user,
                 userID: req.session.token?.id,
+                jukepixEnabled: require('./utils/jukepix').isJukepixEnabled(),
                 userPermission: req.session.permission || null,
                 ownerID: Number(process.env.OWNER_ID) || 4
             });
@@ -385,6 +386,7 @@ app.use('/', spotifyRoutes);
 app.use('/', paymentRoutes);
 app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
+app.use('/', require('./routes/jukepix'));
 
 server.listen(port, async () => {
     io.disconnectSockets();

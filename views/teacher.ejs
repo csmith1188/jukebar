@@ -6,16 +6,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jukebar - Teacher Panel</title>
     <link rel="icon" href="/img/favicon.png">
-    <link rel="stylesheet" href="/styles.css">
     <script src="/socket.io/socket.io.js"></script>
 </head>
 
 <body class="teacher-page">
     <%- include('partials/header', { page: 'teacher' }) %>
         <div class="main-content">
-            <p class="user-greeting">Logged in as: <strong>
-                    <%= user %>
-                </strong></p>
+            <div class="jukepix-toggle">
+                <div>
+                    <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
+                        <div class="switch-track">
+                            <div class="switch-thumb"></div>
+                        </div>
+                        <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%= jukepixEnabled ? 'checked' : '' %>
+                            style="display: none;">
+                    </div>
+                    <p>Enable Jukepix</p>
+                </div>
+                <p class="user-greeting">Logged in as: <strong>
+                        <%= user %>
+                    </strong></p>
+            </div>
             <div class="container teacher-layout">
                 <div id="queueHistory">
                     <div class="section-header">
@@ -73,6 +84,27 @@
         </div>
 </body>
 <script>
+    
+
+    document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
+        try {
+            const res = await fetch('/toggleJukepix', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: e.target.checked })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                alert(data.error || 'Failed to update Jukepix setting');
+                e.target.checked = !e.target.checked; // revert checkbox
+            }
+        } catch (err) {
+            console.error('Error updating Jukepix setting:', err);
+            alert('Network error updating Jukepix setting');
+            e.target.checked = !e.target.checked; // revert checkbox
+        }
+    });
+
     async function fetchUsers() {
         try {
             const res = await fetch('/api/users');
