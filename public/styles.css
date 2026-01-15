@@ -2507,3 +2507,57 @@ p {
     font-size: 14px;
     font-weight: 600;
 }
+
+.jukepix-toggle,
+.jukepix-toggle div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-direction: row;
+}
+
+.jukepix-toggle > div {
+    padding-left: 20px;
+    gap: 10px;
+    justify-content: center;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 50px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.toggle-switch > input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch-track {
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--inbetween2);
+    transition: background 0.3s;
+}
+
+.toggle-switch:has(input:checked) .switch-track {
+    background: var(--accent);
+}
+
+.switch-track .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--background);
+    transition: transform 0.3s;
+}
+
+.toggle-switch:has(input:checked) .switch-track .switch-thumb {
+    transform: translateX(26px);
+}
