@@ -624,9 +624,6 @@
                         }
                     }
 
-                    // Initialize WebSocket-based queue sync
-                    initializeQueueSync();
-
                     // WebSocket-based queue synchronization
                     function initializeQueueSync() {
                         socket.on('connect', () => {
@@ -642,10 +639,8 @@
                         // Handle queue updates (when queue changes)
                         socket.on('queueUpdate', (data) => {
                             updateQueueDisplay(data);
-                            // Only update currently playing if we have valid current track data
-                            if (data.currentTrack) {
-                                updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
-                            }
+                            // Always update currently playing (function handles null tracks properly)
+                            updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
                         });
 
                         // Handle playback state updates (playing/paused status)
@@ -707,6 +702,9 @@
                             Notify(data.error || 'Ban vote error', 'error');
                         });
                     }
+                    
+                    // Initialize WebSocket-based queue sync after defining the function
+                    initializeQueueSync();
                 })();
 
                 // Update queue display with WebSocket data
