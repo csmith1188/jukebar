@@ -364,7 +364,7 @@ router.post('/addToQueue', async (req, res) => {
             //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
-                `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                    `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
                  VALUES (?, ?, ?, ?, ?, ?)`,
                     [track.uri, username, Date.now(), username, isAnon, 0],
                     function (err) {
@@ -844,13 +844,13 @@ router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
     const { trackUri } = req.body;
     const db = require('../utils/database');
     const queueManager = require('../utils/queueManager');
-    
+
     try {
         // Check if it's currently playing
         const state = queueManager.getCurrentState();
         const currentTrack = state.currentTrack;
         const isCurrentlyPlaying = currentTrack && currentTrack.uri === trackUri;
-        
+
         // Check if track exists in queue metadata
         const track = await new Promise((resolve, reject) => {
             db.get("SELECT track_uri FROM queue_metadata WHERE track_uri = ?", [trackUri], (err, row) => {
@@ -858,7 +858,7 @@ router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
                 else resolve(row);
             });
         });
-        
+
         // Track exists if it's currently playing OR in the queue
         res.json({ exists: isCurrentlyPlaying || !!track });
     } catch (error) {
@@ -1053,5 +1053,19 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
     }
 });
 
+
+router.get('/api/currentTrack', async (req, res) => {
+    try {
+        await ensureSpotifyAccessToken();
+        const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+            headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
+        });
+        const data = await response.json();
+        res.json({ track: data.item });
+    } catch (err) {
+        console.error('Error fetching current track:', err);
+        res.status(500).json({ error: 'Failed to fetch current track' });
+    }
+});
 
 module.exports = router;
