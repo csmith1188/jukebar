@@ -23,31 +23,31 @@ const barEndColor = '#29ff29';
 let lastTrack = null;
 let lastProgress = 0;
 
-const barUpdateInterval = setInterval(async () => {
-    if(!jukepixEnabled) return;
-    fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${spotifyApi.getAccessToken()}`
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if(data.progress_ms < lastProgress) {
-            fetch(`${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`, reqOptions)
-                .then(response => response.json())
-                .catch((error) => console.error('Clear Error:', error));
-        }
-        const progress = data.progress_ms / data.item.duration_ms;
-        const fillLength = Math.floor(progress * jukepixLength);
+// const barUpdateInterval = setInterval(async () => {
+//     if(!jukepixEnabled) return;
+//     fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+//         method: 'GET',
+//         headers: {
+//             'Authorization': `Bearer ${spotifyApi.getAccessToken()}`
+//         }
+//     })
+//     .then(response => response.json())
+//     .then(data => {
+//         if(data.progress_ms < lastProgress) {
+//             fetch(`${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`, reqOptions)
+//                 .then(response => response.json())
+//                 .catch((error) => console.error('Clear Error:', error));
+//         }
+//         const progress = data.progress_ms / data.item.duration_ms;
+//         const fillLength = Math.floor(progress * jukepixLength);
         
-        fetch(`${jukepix}/api/gradient?startColor=${encodeURIComponent(barColor)}&endColor=${encodeURIComponent(barEndColor)}&length=${fillLength}`, reqOptions)
-            .then(response => response.json())
-            .catch((error) => console.error('Bar Error:', error));
+//         fetch(`${jukepix}/api/gradient?startColor=${encodeURIComponent(barColor)}&endColor=${encodeURIComponent(barEndColor)}&length=${fillLength}`, reqOptions)
+//             .then(response => response.json())
+//             .catch((error) => console.error('Bar Error:', error));
 
-        lastProgress = data.progress_ms;
-    });
-}, 1000); 
+//         lastProgress = data.progress_ms;
+//     });
+// }, 1000); 
 
 function displayTrack(track) {
     if (!jukepixEnabled || !track) return;
