@@ -22,32 +22,65 @@ const barEndColor = '#29ff29';
 
 let lastTrack = null;
 let lastProgress = 0;
+let currentTrackDuration = 0;
 
-// const barUpdateInterval = setInterval(async () => {
-//     if(!jukepixEnabled) return;
-//     fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-//         method: 'GET',
-//         headers: {
-//             'Authorization': `Bearer ${spotifyApi.getAccessToken()}`
-//         }
-//     })
-//     .then(response => response.json())
-//     .then(data => {
-//         if(data.progress_ms < lastProgress) {
-//             fetch(`${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`, reqOptions)
-//                 .then(response => response.json())
-//                 .catch((error) => console.error('Clear Error:', error));
-//         }
-//         const progress = data.progress_ms / data.item.duration_ms;
-//         const fillLength = Math.floor(progress * jukepixLength);
+const barUpdateInterval = setInterval(async () => {
+    if(!jukepixEnabled) return;
+    
+    try {
+        const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${spotifyApi.getAccessToken()}`
+            }
+        });
         
-//         fetch(`${jukepix}/api/gradient?startColor=${encodeURIComponent(barColor)}&endColor=${encodeURIComponent(barEndColor)}&length=${fillLength}`, reqOptions)
-//             .then(response => response.json())
-//             .catch((error) => console.error('Bar Error:', error));
-
-//         lastProgress = data.progress_ms;
-//     });
-// }, 1000); 
+        const data = await response.json();
+        
+        if (!data || !data.item) return;
+        
+        const progress = data.progress_ms;
+        const duration = data.item.duration_ms;
+        
+        // Check if track changed (reset progress bar)
+        if (duration !== currentTrackDuration || progress < lastProgress) {
+            currentTrackDuration = duration;
+            lastProgress = 0;
+            
+            // Clear the bar when track changes
+            await fetch(`${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${jukepixLength}`, reqOptions);
+        }
+        
+        // Calculate remaining time and fill percentage
+        const remainingMs = duration - progress;
+        const fillPercentage = Math.floor((progress / duration) * 100);
+        
+        // Send progress bar update with animation duration matching remaining track time
+        const progressBody = {
+            fg1: barColor,
+            fg2: barEndColor,
+            bg1: '#000000',
+            bg2: '#000000',
+            startingFill: fillPercentage,
+            duration: remainingMs,
+            interval: 100,
+            length: parseInt(jukepixLength)
+        };
+        
+        await fetch(`${jukepix}/api/progress`, {
+            method: 'POST',
+            headers: {
+                'API': apikey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(progressBody)
+        });
+        
+        lastProgress = progress;
+    } catch (error) {
+        console.error('Bar Update Error:', error);
+    }
+}, 5000); // Update every 5 seconds to keep animation in sync 
 
 function displayTrack(track) {
     if (!jukepixEnabled || !track) return;
