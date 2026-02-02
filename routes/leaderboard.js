@@ -2,26 +2,29 @@
 const express = require('express');
 const router = express.Router();
 
-// leaderboard reset function
+// Track if reset check interval is running
+let resetIntervalStarted = false;
+
+// leaderboard reset function - resets when timer has reached 0 (next Monday)
 async function checkAndResetLeaderboard(app) {
     try {
         const now = new Date();
         const lastReset = new Date(app.get('leaderboardLastReset') || 0);
         
-        // check if it's monday
-        const isMonday = now.getDay() === 1;
-        
-        // Calculate the start of the week
+        // Calculate the start of this week (Monday at midnight)
         const startOfThisWeek = new Date(now);
-        startOfThisWeek.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
+        const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        const daysToSubtract = currentDay === 0 ? 6 : currentDay - 1;
+        startOfThisWeek.setDate(now.getDate() - daysToSubtract);
         startOfThisWeek.setHours(0, 0, 0, 0);
         
+        // Reset is needed if last reset was before this week's Monday
         const needsReset = lastReset < startOfThisWeek;
         
-        if (isMonday && needsReset) {
+        if (needsReset) {
             const resetTime = Date.now();
             app.set('leaderboardLastReset', resetTime);
-            //console.log('Auto-resetting leaderboard for new week...');
+            console.log('Auto-resetting leaderboard - timer reached 0!');
 
             const db = require('../utils/database');
             await new Promise((resolve, reject) => {
@@ -41,6 +44,22 @@ async function checkAndResetLeaderboard(app) {
         console.error('Error resetting leaderboard:', error);
         return false;
     }
+}
+
+// Start periodic reset check (runs every minute on the server)
+function startResetScheduler(app) {
+    if (resetIntervalStarted) return;
+    resetIntervalStarted = true;
+    
+    // Check immediately on startup
+    checkAndResetLeaderboard(app);
+    
+    // Then check every minute
+    setInterval(() => {
+        checkAndResetLeaderboard(app);
+    }, 60000); // Check every minute
+    
+    console.log('Leaderboard auto-reset scheduler started');
 }
 
 
@@ -72,22 +91,20 @@ router.get('/api/leaderboard/update', async (req, res) => {
         const now = new Date();
         const lastReset = new Date(req.app.get('leaderboardLastReset') || 0);
         
-        // Check if it's Monday (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
-        const isMonday = now.getDay() === 1;
-        
-        // Check if we haven't reset yet this week
-        // Calculate the start of this week (Monday)
+        // Calculate the start of this week (Monday at midnight)
         const startOfThisWeek = new Date(now);
-        startOfThisWeek.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1)); // Get Monday
-        startOfThisWeek.setHours(0, 0, 0, 0); // Set to start of day
+        const currentDay = now.getDay();
+        const daysToSubtract = currentDay === 0 ? 6 : currentDay - 1;
+        startOfThisWeek.setDate(now.getDate() - daysToSubtract);
+        startOfThisWeek.setHours(0, 0, 0, 0);
         
-        // Check if last reset was before this week's Monday
+        // Reset is needed if last reset was before this week's Monday
         const needsReset = lastReset < startOfThisWeek;
         
-        if (isMonday && needsReset) {
+        if (needsReset) {
             const resetTime = Date.now();
             req.app.set('leaderboardLastReset', resetTime);
-            //console.log('Resetting leaderboard for new week...');
+            console.log('Resetting leaderboard via update endpoint...');
 
             const db = require('../utils/database');
             await new Promise((resolve, reject) => {
@@ -101,6 +118,7 @@ router.get('/api/leaderboard/update', async (req, res) => {
 
             res.json({ ok: true, message: "Leaderboard has been reset for the new week." });
         } else {
+            // Calculate next Monday
             const nextMonday = new Date(startOfThisWeek);
             nextMonday.setDate(startOfThisWeek.getDate() + 7);
             res.json({ 
@@ -108,7 +126,6 @@ router.get('/api/leaderboard/update', async (req, res) => {
                 message: "Leaderboard reset not needed at this time.",
                 nextReset: nextMonday.toDateString()
             });
-            // console.log('Leaderboard reset not needed. Next reset:', nextMonday.toDateString());
         }
     } catch (error) {
         res.status(500).json({ ok: false, message: error.message });
@@ -150,4 +167,4 @@ router.get('/api/leaderboard/auto-check', async (req, res) => {
     }
 });
 
-module.exports = { router, checkAndResetLeaderboard };
+module.exports = { router, checkAndResetLeaderboard, startResetScheduler };

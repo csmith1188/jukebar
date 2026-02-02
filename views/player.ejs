@@ -258,6 +258,8 @@
                             if (data.shieldBlocked) {
                                 // Skip was blocked by a shield
                                 Notify(data.message || 'Skip blocked by shield! 🛡️', 'error');
+                                // Request queue update to show updated shield count
+                                socket.emit('getQueue');
                             } else if (data.ok) {
                                 // Skip succeeded
                                 Notify('Track skipped!', 'success');
@@ -538,14 +540,19 @@
                             const name = button.dataset.name;
                             const artist = button.dataset.artist;
                             
-                            if (uri && window.banVoteSocket) {
-                                const user = '<%= user %>';
-                                window.banVoteSocket.emit('initiateBanVote', {
-                                    trackUri: uri,
-                                    trackName: name,
-                                    trackArtist: artist,
-                                    initiator: user
-                                });
+                            // Check if user is owner (owners can start votes for free)
+                            const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
+                            
+                            if (isOwner) {
+                                // Owner bypass - start vote immediately
+                                startBanVote(uri, name, artist);
+                            } else {
+                                // Regular user - show payment modal first
+                                pendingAction = 'Ban Vote';
+                                pendingTrackUri = uri;
+                                pendingTrackName = name;
+                                pendingTrackArtist = artist;
+                                showPayment();
                             }
                         }
                     });
@@ -617,9 +624,6 @@
                         }
                     }
 
-                    // Initialize WebSocket-based queue sync
-                    initializeQueueSync();
-
                     // WebSocket-based queue synchronization
                     function initializeQueueSync() {
                         socket.on('connect', () => {
@@ -635,10 +639,8 @@
                         // Handle queue updates (when queue changes)
                         socket.on('queueUpdate', (data) => {
                             updateQueueDisplay(data);
-                            // Only update currently playing if we have valid current track data
-                            if (data.currentTrack) {
-                                updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
-                            }
+                            // Always update currently playing (function handles null tracks properly)
+                            updateCurrentlyPlaying(data.currentTrack, data.isPlaying);
                         });
 
                         // Handle playback state updates (playing/paused status)
@@ -700,6 +702,9 @@
                             Notify(data.error || 'Ban vote error', 'error');
                         });
                     }
+                    
+                    // Initialize WebSocket-based queue sync after defining the function
+                    initializeQueueSync();
                 })();
 
                 // Update queue display with WebSocket data

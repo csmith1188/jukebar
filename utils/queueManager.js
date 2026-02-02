@@ -1,3 +1,5 @@
+const { isJukepixEnabled, displayTrack } = require('./jukepix');
+
 class QueueManager {
     constructor() {
         this.currentTrack = null;
@@ -40,6 +42,52 @@ class QueueManager {
         const removed = this.queue.splice(index, 1)[0];
         this.broadcastUpdate('queueRemove', { removed, queue: this.queue });
         return removed;
+    }
+
+    // Remove all tracks matching a specific URI from queue
+    removeByUri(trackUri) {
+        const originalLength = this.queue.length;
+        this.queue = this.queue.filter(track => track.uri !== trackUri);
+        const removedCount = originalLength - this.queue.length;
+        
+        if (removedCount > 0) {
+            console.log(`Removed ${removedCount} track(s) with URI ${trackUri} from queue`);
+            this.broadcastUpdate('queueUpdate', this.getCurrentState());
+        }
+        
+        return removedCount;
+    }
+
+    // Remove tracks by name and artist (for ban matching)
+    removeByNameAndArtist(trackName, artistName) {
+        const originalLength = this.queue.length;
+        const normalizedTrackName = trackName.toLowerCase().trim();
+        const normalizedArtistName = artistName.toLowerCase().trim();
+        
+        this.queue = this.queue.filter(track => {
+            const queueTrackName = (track.name || '').toLowerCase().trim();
+            const queueArtistName = (track.artist || '').toLowerCase().trim();
+            return !(queueTrackName === normalizedTrackName && queueArtistName === normalizedArtistName);
+        });
+        
+        const removedCount = originalLength - this.queue.length;
+        
+        if (removedCount > 0) {
+            console.log(`Removed ${removedCount} track(s) matching "${trackName}" by "${artistName}" from queue`);
+            this.broadcastUpdate('queueUpdate', this.getCurrentState());
+        }
+        
+        return removedCount;
+    }
+
+    // Check if currently playing track matches name and artist
+    isCurrentlyPlaying(trackName, artistName) {
+        if (!this.currentTrack) return false;
+        const normalizedTrackName = trackName.toLowerCase().trim();
+        const normalizedArtistName = artistName.toLowerCase().trim();
+        const currentName = (this.currentTrack.name || '').toLowerCase().trim();
+        const currentArtist = (this.currentTrack.artist || '').toLowerCase().trim();
+        return currentName === normalizedTrackName && currentArtist === normalizedArtistName;
     }
 
     // Skip to next track
@@ -195,7 +243,8 @@ class QueueManager {
                     uri: currentPlayback.body.item.uri,
                     duration: currentPlayback.body.item.duration_ms,
                     image: currentPlayback.body.item.album.images[0]?.url,
-                    addedBy: currentMetadata ? currentMetadata.added_by : 'Spotify',
+                    addedBy: currentMetadata ? (currentMetadata.is_anon ? 'Anonymous' : currentMetadata.added_by) : 'Spotify',
+                    displayName: currentMetadata ? (currentMetadata.is_anon ? 'Anonymous' : currentMetadata.display_name) : 'Spotify',
                     addedAt: currentMetadata ? currentMetadata.added_at : Date.now(),
                     isAnon: currentMetadata ? currentMetadata.is_anon : 0,
                     skipShields: currentMetadata ? currentMetadata.skip_shields : 0
@@ -229,41 +278,79 @@ class QueueManager {
 
                         // 🆕 Create default metadata for tracks that don't have it
                         const db = require('./database');
+                        
+                        // Count how many times each URI appears in the queue
+                        const uriCounts = {};
                         for (const item of queueData.queue) {
-                            if (!metadataMap[item.uri]) {
-                                console.log('Creating metadata for:', item.name, '(URI:', item.uri, ')');
-                                // Track exists in Spotify queue but not in our database
-                                await new Promise((resolve, reject) => {
-                                    db.run(
-                                        `INSERT OR REPLACE INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
-                                         VALUES (?, ?, ?, ?, ?, ?)`,
-                                        [item.uri, 'Spotify', Date.now(), 'Spotify', 0, 0],
-                                        function (err) {
-                                            if (err) {
-                                                console.error('Failed to create default metadata:', err);
-                                                reject(err);
-                                            } else {
-                                                console.log(`Created default metadata (changes: ${this.changes}, lastID: ${this.lastID})`);
-                                                // Add to metadataMap so it's available immediately
-                                                metadataMap[item.uri] = {
-                                                    added_by: 'Spotify',
-                                                    added_at: Date.now(),
-                                                    is_anon: 0,
-                                                    skip_shields: 0
-                                                };
-                                                resolve();
+                            uriCounts[item.uri] = (uriCounts[item.uri] || 0) + 1;
+                        }
+                        
+                        for (const item of queueData.queue) {
+                            const metadataArray = metadataMap[item.uri] || [];
+                            const queueCount = uriCounts[item.uri];
+                            
+                            // If we have fewer metadata entries than queue entries for this URI, create default ones
+                            if (metadataArray.length < queueCount) {
+                                const missingCount = queueCount - metadataArray.length;
+                                console.log(`Creating ${missingCount} default metadata entries for: ${item.name} (URI: ${item.uri})`);
+                                
+                                for (let i = 0; i < missingCount; i++) {
+                                    await new Promise((resolve, reject) => {
+                                        const addedAt = Date.now() + i; // Ensure unique timestamps
+                                        db.run(
+                                            `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) 
+                                             VALUES (?, ?, ?, ?, ?, ?)`,
+                                            [item.uri, 'Spotify', addedAt, 'Spotify', 0, 0],
+                                            function (err) {
+                                                if (err) {
+                                                    console.error('Failed to create default metadata:', err);
+                                                    reject(err);
+                                                } else {
+                                                    console.log(`Created default metadata (changes: ${this.changes}, lastID: ${this.lastID})`);
+                                                    // Add to metadataMap array
+                                                    if (!metadataMap[item.uri]) {
+                                                        metadataMap[item.uri] = [];
+                                                    }
+                                                    metadataMap[item.uri].push({
+                                                        added_by: 'Spotify',
+                                                        display_name: 'Spotify',
+                                                        added_at: addedAt,
+                                                        is_anon: 0,
+                                                        skip_shields: 0
+                                                    });
+                                                    resolve();
+                                                }
                                             }
-                                        }
-                                    );
-                                });
-                            } else {
-                                console.log('Metadata already exists for:', item.name);
+                                        );
+                                    });
+                                }
+                                // Only create metadata once per URI
+                                uriCounts[item.uri] = metadataArray.length + missingCount;
                             }
                         }
 
+                        // Track which metadata entries we've used
+                        const usedMetadataKeys = new Set();
+
                         // Convert Spotify queue items to our format, merging with metadata
                         this.queue = queueData.queue.map(item => {
-                            const metadata = metadataMap[item.uri];
+                            const metadataArray = metadataMap[item.uri] || [];
+                            let metadata = null;
+                            
+                            // Find the first unused metadata entry for this track
+                            for (const entry of metadataArray) {
+                                const key = `${item.uri}_${entry.added_at}`;
+                                if (!usedMetadataKeys.has(key)) {
+                                    metadata = entry;
+                                    usedMetadataKeys.add(key);
+                                    break;
+                                }
+                            }
+                            
+                            // Fallback to first entry if all are used
+                            if (!metadata && metadataArray.length > 0) {
+                                metadata = metadataArray[0];
+                            }
 
                             return {
                                 name: item.name,
@@ -271,7 +358,8 @@ class QueueManager {
                                 uri: item.uri,
                                 duration: item.duration_ms,
                                 image: item.album.images[0]?.url,
-                                addedBy: metadata ? metadata.added_by : 'Spotify',
+                                addedBy: metadata ? (metadata.is_anon ? 'Anonymous' : metadata.added_by) : 'Spotify',
+                                displayName: metadata ? (metadata.is_anon ? 'Anonymous' : metadata.display_name) : 'Spotify',
                                 addedAt: metadata ? metadata.added_at : Date.now(),
                                 isAnon: metadata ? metadata.is_anon : 0,
                                 skipShields: metadata ? metadata.skip_shields : 0
@@ -335,6 +423,7 @@ class QueueManager {
                         duration_ms: currentData.item.duration_ms,
                         progress_ms: currentData.progress_ms
                     };
+                    if(isJukepixEnabled()) displayTrack(currentTrack);
                 }
             }
 
@@ -422,8 +511,8 @@ class QueueManager {
                     uri: track.uri,
                     name: track.name,
                     artist: track.artists.map(a => a.name).join(', '),
-                    addedBy: metadata?.added_by || 'Spotify',
-                    displayName: metadata?.display_name || 'Spotify',
+                    addedBy: metadata?.is_anon ? 'Anonymous' : (metadata?.added_by || 'Spotify'),
+                    displayName: metadata?.is_anon ? 'Anonymous' : (metadata?.display_name || 'Spotify'),
                     addedAt: metadata?.added_at || Date.now(),
                     image: track.album?.images?.[0]?.url,
                     isAnon: metadata?.is_anon || 0,
@@ -439,8 +528,8 @@ class QueueManager {
                     // This should be the one with the oldest added_at that doesn't match any queue position
                     const metadata = metadataArray[0]; // First entry is the one currently playing
 
-                    currentTrack.addedBy = metadata.added_by;
-                    currentTrack.displayName = metadata.display_name;
+                    currentTrack.addedBy = metadata.is_anon ? 'Anonymous' : metadata.added_by;
+                    currentTrack.displayName = metadata.is_anon ? 'Anonymous' : metadata.display_name;
                     currentTrack.isAnon = metadata.is_anon;
                     currentTrack.skipShields = metadata.skip_shields;
                 }
