@@ -43,10 +43,33 @@ const { isAuthenticated } = require('./middleware/auth');
 const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
-const { router: leaderboardRoutes, checkAndResetLeaderboard } = require('./routes/leaderboard');
+const { router: leaderboardRoutes, checkAndResetLeaderboard, startResetScheduler } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
+const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
+
+// Helper function to handle ban - removes from queue and skips if currently playing
+async function handleBanPassed(trackName, trackArtist, trackUri) {
+    console.log(`=== HANDLING BAN FOR: "${trackName}" by "${trackArtist}" ===`);
+    
+    // Remove matching tracks from the queue
+    const removedCount = queueManager.removeByNameAndArtist(trackName, trackArtist);
+    console.log(`Removed ${removedCount} matching track(s) from queue`);
+    
+    // Check if the banned song is currently playing - if so, skip it
+    if (queueManager.isCurrentlyPlaying(trackName, trackArtist)) {
+        console.log('Banned song is currently playing - skipping it');
+        try {
+            await ensureSpotifyAccessToken();
+            await spotifyApi.skipToNext();
+            await queueManager.skipTrack();
+            console.log('Successfully skipped banned song');
+        } catch (skipError) {
+            console.error('Failed to skip banned song:', skipError.message);
+        }
+    }
+}
 
 // Formbar Socket.IO connection
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
@@ -169,18 +192,20 @@ io.on('connection', (socket) => {
                 trackArtist,
                 userId,
                 onlineCount,
-                (expiredData) => {
+                async (expiredData) => {
                     if (expiredData.passed) {
-                        console.log('Vote expired, broadcasting banVotePassed:', expiredData);
+                        console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
                         // Insert into banned_songs table
                         db.run(
                             'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
                             [expiredData.trackName, expiredData.trackArtist],
-                            (err) => {
+                            async (err) => {
                                 if (err) {
                                     console.error('Database insertion error (ban on expiration):', err);
                                 } else {
                                     console.log('Successfully inserted ban into database (expiration)');
+                                    // Handle ban - remove from queue and skip if playing
+                                    await handleBanPassed(expiredData.trackName, expiredData.trackArtist, expiredData.trackUri);
                                 }
                             }
                         );
@@ -244,6 +269,10 @@ io.on('connection', (socket) => {
                             }
                         );
                     });
+                    
+                    // Handle ban - remove from queue and skip if playing
+                    await handleBanPassed(result.trackName, result.trackArtist, result.trackUri);
+                    
                 } catch (dbError) {
                     console.error('Failed to insert ban into database:', dbError);
                 }
@@ -252,6 +281,7 @@ io.on('connection', (socket) => {
                 io.emit('banVotePassed', {
                     trackUri: result.trackUri,
                     trackName: result.trackName,
+                    trackArtist: result.trackArtist,
                     yesVotes: result.yesVotes,
                     noVotes: result.noVotes
                 });
@@ -419,6 +449,9 @@ app.use('/', require('./routes/jukepix'));
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
+    
+    // Start the leaderboard auto-reset scheduler
+    startResetScheduler(app);
 });
 
 module.exports = { app, io, formbarSocket };

@@ -6,20 +6,14 @@
 
     <section class="version-block">
         <div class="version-header">
-            <h2>v1.1.0</h2>
-            <span class="release-date">12/08/25</span>
+            <h2>v1.2.0</h2>
+            <span class="release-date">02/03/26</span>
         </div>
         <div class="changes">
             <h3>What's new?</h3>
             <ul>
-                <li>Added vote banning which allows users to start a ban on a song the class collectively hates. At
-                    least 5 users must be online for it to start it costs 500 digipogs to start</li>
-                <li>added a progress bar that displays the current playback progress of the song</li>
-                <li>Fixed duplicate song metadata issues (added by names, shield targeting)</li>
-                <li>Fixed progress bar initialization and sync issues</li>
-                <li>Fixed server stability issues with Spotify API timeouts</li>
-                <li>Fixed ban vote system bugs (result notifications, timer expiration, user participation)</li>
-                <li>Fixed queue metadata cleanup when songs finish playing</li>
+                <li>Ban votes now automatically remove the song from the queue and skip it if currently playing</li>
+                <li>Leaderboard now automatically resets when the countdown timer hits 0</li>
             </ul>
         </div>
     </section>
