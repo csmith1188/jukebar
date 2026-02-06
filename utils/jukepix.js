@@ -168,7 +168,7 @@ function setJukepix(enabled) {
 
     try {
         if(jukepixEnabled) {
-        console.log('[JUKEPIX] Enabling Jukepix display.');
+        console.log('[JUKEPIX] ========== JUKEPIX ENABLED ==========');
         console.log('[JUKEPIX] Sending clear request to:', `${jukepix}/api/fill`);
         
         const enableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
@@ -217,6 +217,12 @@ function setJukepix(enabled) {
         }, 500);
     } else {
         console.log('[JUKEPIX] Disabling Jukepix display.');
+        console.log('[JUKEPIX] ========== JUKEPIX DISABLED - CLEARING TRACK DATA ==========');
+        
+        // Clear current and last track
+        currentTrack = null;
+        lastTrack = null;
+        console.log('[JUKEPIX] Track data cleared');
         
         const disableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
         
