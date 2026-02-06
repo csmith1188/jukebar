@@ -2,7 +2,7 @@
 require('dotenv').config({quiet: true});
 
 const spotifyApi = require('./spotify').spotifyApi;
-const apikey = process.env.API_KEY;
+const apikey = process.env.JUKEPIX_API_KEY;
 const jukepix = process.env.JUKEPIX_URL;
 const jukepixLength = process.env.JUKEPIX_LENGTH;
 
