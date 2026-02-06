@@ -90,9 +90,6 @@ const trackCheckInterval = setInterval(async () => {
             
             console.log('[JUKEPIX] Sending new track to formpix:', JSON.stringify(progressBody, null, 2));
             
-            const progressController = new AbortController();
-            const progressTimeout = setTimeout(() => progressController.abort(), 10000);
-            
             const params = new URLSearchParams(progressBody);
             const progressUrl = `${jukepix}/api/progress?${params.toString()}`;
             console.log('[JUKEPIX] Progress Request Details:', {
@@ -106,8 +103,7 @@ const trackCheckInterval = setInterval(async () => {
                 method: 'POST',
                 headers: {
                     'API': apikey
-                },
-                signal: progressController.signal
+                }
             })
                 .then(async response => {
                     console.log('[JUKEPIX] New track progress response status:', response.status);
@@ -128,8 +124,7 @@ const trackCheckInterval = setInterval(async () => {
                     }
                     return response;
                 })
-                .catch((error) => console.error('[JUKEPIX] Progress Error:', { url: progressUrl, error: error.message, type: error.name }))
-                .finally(() => clearTimeout(progressTimeout));
+                .catch((error) => console.error('[JUKEPIX] Progress Error:', { url: progressUrl, error: error.message, type: error.name }));
             
             lastTrack = currentTrack;
         } else {
@@ -143,43 +138,43 @@ const trackCheckInterval = setInterval(async () => {
 function displayTrack(track) {
     if (!jukepixEnabled || !track) return;
 
-    const trackName = track.name || "No Track Playing";
-    const artistName = track.artist || "Unknown Artist";
-    const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
-    const sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#ffffff")}&backgroundColor=${encodeURIComponent("#000000")}`;
+    try {
+        const trackName = track.name || "No Track Playing";
+        const artistName = track.artist || "Unknown Artist";
+        const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
+        const sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#ffffff")}&backgroundColor=${encodeURIComponent("#000000")}`;
 
-    fetch(sayUrl, reqOptions)
-        .then(async response => {
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unable to read error body');
-                console.error('[JUKEPIX] Display track failed:', {
-                    url: sayUrl,
-                    status: response.status,
-                    statusText: response.statusText,
-                    errorBody: errorText,
-                    sentApiKey: apikey ? `${apikey.substring(0, 8)}...` : 'none'
-                });
-            }
-            return response.json();
-        })
-        .catch((error) => console.error('[JUKEPIX] Display track error:', { url: sayUrl, error: error.message, type: error.name }));
+        fetch(sayUrl, reqOptions)
+            .then(async response => {
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => 'Unable to read error body');
+                    console.error('[JUKEPIX] Display track failed:', {
+                        url: sayUrl,
+                        status: response.status,
+                        statusText: response.statusText,
+                        errorBody: errorText,
+                        sentApiKey: apikey ? `${apikey.substring(0, 8)}...` : 'none'
+                    });
+                }
+            })
+            .catch((error) => console.error('[JUKEPIX] Display track error:', { url: sayUrl, error: error.message, type: error.name }));
+    } catch (error) {
+        console.error('[JUKEPIX] displayTrack exception:', { error: error.message, type: error.name });
+    }
 }
 
 function setJukepix(enabled) {
     jukepixEnabled = enabled;
 
-    if(jukepixEnabled) {
+    try {
+        if(jukepixEnabled) {
         console.log('[JUKEPIX] Enabling Jukepix display.');
         console.log('[JUKEPIX] Sending clear request to:', `${jukepix}/api/fill`);
         
-        // Use non-blocking requests with timeout to prevent blocking Formbar
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         const enableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
         
         fetch(enableClearUrl, {
-            ...reqOptions,
-            signal: controller.signal
+            ...reqOptions
         })
             .then(async response => {
                 console.log('[JUKEPIX] Clear request response status:', response.status);
@@ -195,19 +190,14 @@ function setJukepix(enabled) {
                 }
                 return response.json();
             })
-            .catch((error) => console.error('[JUKEPIX] Clear Error:', { url: enableClearUrl, error: error.message, type: error.name }))
-            .finally(() => clearTimeout(timeout));
+            .catch((error) => console.error('[JUKEPIX] Clear Error:', { url: enableClearUrl, error: error.message, type: error.name }));
 
         // Delay the "enabled" message slightly
         setTimeout(() => {
-            const msgController = new AbortController();
-            const msgTimeout = setTimeout(() => msgController.abort(), 10000);
-            
             const enableMsgUrl = `${jukepix}/api/say?text=Jukepix%20Enabled&textColor=${encodeURIComponent('#00ff00')}&backgroundColor=${encodeURIComponent('#000000')}`;
             console.log('[JUKEPIX] Sending "enabled" message to:', enableMsgUrl);
             fetch(enableMsgUrl, {
-                ...reqOptions,
-                signal: msgController.signal
+                ...reqOptions
             })
                 .then(async response => {
                     console.log('[JUKEPIX] "Enabled" message response status:', response.status);
@@ -223,19 +213,15 @@ function setJukepix(enabled) {
                     }
                     return response.json();
                 })
-                .catch((error) => console.error('[JUKEPIX] Say Error:', { url: enableMsgUrl, error: error.message, type: error.name }))
-                .finally(() => clearTimeout(msgTimeout));
+                .catch((error) => console.error('[JUKEPIX] Say Error:', { url: enableMsgUrl, error: error.message, type: error.name }));
         }, 500);
     } else {
         console.log('[JUKEPIX] Disabling Jukepix display.');
         
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
         const disableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
         
         fetch(disableClearUrl, {
-            ...reqOptions,
-            signal: controller.signal
+            ...reqOptions
         })
             .then(async response => {
                 if (!response.ok) {
@@ -250,17 +236,13 @@ function setJukepix(enabled) {
                 }
                 return response.json();
             })
-            .catch((error) => console.error('[JUKEPIX] Clear Error:', { url: disableClearUrl, error: error.message, type: error.name }))
-            .finally(() => clearTimeout(timeout));
+            .catch((error) => console.error('[JUKEPIX] Clear Error:', { url: disableClearUrl, error: error.message, type: error.name }));
 
         setTimeout(() => {
-            const msgController = new AbortController();
-            const msgTimeout = setTimeout(() => msgController.abort(), 10000);
             const disableMsgUrl = `${jukepix}/api/say?text=Jukepix%20Disabled&textColor=${encodeURIComponent('#ff0000')}&backgroundColor=${encodeURIComponent('#000000')}`;
             
             fetch(disableMsgUrl, {
-                ...reqOptions,
-                signal: msgController.signal
+                ...reqOptions
             })
                 .then(async response => {
                     if (!response.ok) {
@@ -275,18 +257,14 @@ function setJukepix(enabled) {
                     }
                     return response.json();
                 })
-                .catch((error) => console.error('[JUKEPIX] Say Error:', { url: disableMsgUrl, error: error.message, type: error.name }))
-                .finally(() => clearTimeout(msgTimeout));
+                .catch((error) => console.error('[JUKEPIX] Say Error:', { url: disableMsgUrl, error: error.message, type: error.name }));
         }, 500);
 
         setTimeout(() => {
-            const clearController = new AbortController();
-            const clearTimeout2 = setTimeout(() => clearController.abort(), 10000);
             const clearTextUrl = `${jukepix}/api/say?text=${encodeURIComponent(' ')}&textColor=${encodeURIComponent('#ffffff')}&backgroundColor=${encodeURIComponent('#000000')}`;
             
             fetch(clearTextUrl, {
-                ...reqOptions,
-                signal: clearController.signal
+                ...reqOptions
             })
                 .then(async response => {
                     if (!response.ok) {
@@ -301,12 +279,15 @@ function setJukepix(enabled) {
                     }
                     return response.json();
                 })
-                .catch((error) => console.error('[JUKEPIX] Clear Text Error:', { url: clearTextUrl, error: error.message, type: error.name }))
-                .finally(() => clearTimeout(clearTimeout2));
+                .catch((error) => console.error('[JUKEPIX] Clear Text Error:', { url: clearTextUrl, error: error.message, type: error.name }));
         }, 2000);
     }
 
     return jukepixEnabled;
+    } catch (error) {
+        console.error('[JUKEPIX] setJukepix exception:', { error: error.message, type: error.name });
+        return jukepixEnabled;
+    }
 }
 
 function isJukepixEnabled() {
