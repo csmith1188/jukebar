@@ -1,4 +1,4 @@
-const { isJukepixEnabled, displayTrack } = require('./jukepix');
+const { isJukepixEnabled } = require('./jukepix');
 
 class QueueManager {
     constructor() {
@@ -423,7 +423,8 @@ class QueueManager {
                         duration_ms: currentData.item.duration_ms,
                         progress_ms: currentData.progress_ms
                     };
-                    if(isJukepixEnabled()) displayTrack(currentTrack);
+                    // Note: displayTrack is now called from jukepix.js when a new track is detected
+                    // This prevents duplicate requests for the same track
                 }
             }
 
