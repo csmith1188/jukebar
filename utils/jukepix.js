@@ -71,7 +71,8 @@ const trackCheckInterval = setInterval(async () => {
             id: data.item.id,
             name: data.item.name,
             artist: data.item.artists?.[0]?.name || 'Unknown Artist',
-            duration: data.item.duration_ms
+            duration: data.item.duration_ms,
+            progress: data.progress_ms || 0
         };
         
         // Check if this is a new track
@@ -82,7 +83,7 @@ const trackCheckInterval = setInterval(async () => {
             const progressBody = {
                 fg1: '00ff00',
                 fg2: '29ff29',
-                startingFill: 0,
+                startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
                 duration: currentTrack.duration,
                 interval: 100,
                 length: parseInt(jukepixLength)
@@ -224,26 +225,32 @@ function setJukepix(enabled) {
         lastTrack = null;
         console.log('[JUKEPIX] Track data cleared');
         
+        // Send fill black to clear the display
         const disableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
+        console.log('[JUKEPIX] Sending fill black to clear display:', disableClearUrl);
         
         fetch(disableClearUrl, {
             ...reqOptions
         })
             .then(async response => {
+                console.log('[JUKEPIX] Fill black response status:', response.status);
                 if (!response.ok) {
                     const errorText = await response.text().catch(() => 'Unable to read error body');
-                    console.error('[JUKEPIX] Disable clear failed:', {
+                    console.error('[JUKEPIX] Fill black failed:', {
                         url: disableClearUrl,
                         status: response.status,
                         statusText: response.statusText,
                         errorBody: errorText,
                         sentApiKey: apikey ? `${apikey.substring(0, 8)}...` : 'none'
                     });
+                } else {
+                    console.log('[JUKEPIX] Display cleared successfully');
                 }
-                return response.json();
             })
-            .catch((error) => console.error('[JUKEPIX] Clear Error:', { url: disableClearUrl, error: error.message, type: error.name }));
-
+            .catch((error) => console.error('[JUKEPIX] Fill black error:', { url: disableClearUrl, error: error.message, type: error.name }));
+        
+        const disableClearUrl2 = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
+        
         setTimeout(() => {
             const disableMsgUrl = `${jukepix}/api/say?text=Jukepix%20Disabled&textColor=${encodeURIComponent('#ff0000')}&backgroundColor=${encodeURIComponent('#000000')}`;
             
