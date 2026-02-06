@@ -82,8 +82,6 @@ const trackCheckInterval = setInterval(async () => {
             const progressBody = {
                 fg1: '00ff00',
                 fg2: '29ff29',
-                bg1: '000000',
-                bg2: '000000',
                 startingFill: 0,
                 duration: currentTrack.duration,
                 interval: 100,
@@ -95,14 +93,20 @@ const trackCheckInterval = setInterval(async () => {
             const progressController = new AbortController();
             const progressTimeout = setTimeout(() => progressController.abort(), 3000);
             
-            const progressUrl = `${jukepix}/api/progress`;
+            const params = new URLSearchParams(progressBody);
+            const progressUrl = `${jukepix}/api/progress?${params.toString()}`;
+            console.log('[JUKEPIX] Progress Request Details:', {
+                url: progressUrl,
+                method: 'POST',
+                headers: {
+                    'API': apikey ? `${apikey.substring(0, 8)}...` : 'none'
+                }
+            });
             fetch(progressUrl, {
                 method: 'POST',
                 headers: {
-                    'API': apikey,
-                    'Content-Type': 'application/json'
+                    'API': apikey
                 },
-                body: JSON.stringify(progressBody),
                 signal: progressController.signal
             })
                 .then(async response => {
@@ -118,7 +122,9 @@ const trackCheckInterval = setInterval(async () => {
                             sentApiKey: apikey ? `${apikey.substring(0, 8)}...` : 'none'
                         });
                     } else {
-                        console.log('[JUKEPIX] New track sent successfully');
+                        console.log('[JUKEPIX] New track progress sent successfully');
+                        // Display track text after progress is sent
+                        displayTrack(currentTrack);
                     }
                     return response;
                 })
