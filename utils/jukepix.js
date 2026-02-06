@@ -91,7 +91,7 @@ const trackCheckInterval = setInterval(async () => {
             console.log('[JUKEPIX] Sending new track to formpix:', JSON.stringify(progressBody, null, 2));
             
             const progressController = new AbortController();
-            const progressTimeout = setTimeout(() => progressController.abort(), 3000);
+            const progressTimeout = setTimeout(() => progressController.abort(), 10000);
             
             const params = new URLSearchParams(progressBody);
             const progressUrl = `${jukepix}/api/progress?${params.toString()}`;
@@ -174,7 +174,7 @@ function setJukepix(enabled) {
         
         // Use non-blocking requests with timeout to prevent blocking Formbar
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+        const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         const enableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
         
         fetch(enableClearUrl, {
@@ -201,7 +201,7 @@ function setJukepix(enabled) {
         // Delay the "enabled" message slightly
         setTimeout(() => {
             const msgController = new AbortController();
-            const msgTimeout = setTimeout(() => msgController.abort(), 3000);
+            const msgTimeout = setTimeout(() => msgController.abort(), 10000);
             
             const enableMsgUrl = `${jukepix}/api/say?text=Jukepix%20Enabled&textColor=${encodeURIComponent('#00ff00')}&backgroundColor=${encodeURIComponent('#000000')}`;
             console.log('[JUKEPIX] Sending "enabled" message to:', enableMsgUrl);
@@ -230,7 +230,7 @@ function setJukepix(enabled) {
         console.log('[JUKEPIX] Disabling Jukepix display.');
         
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), 10000);
         const disableClearUrl = `${jukepix}/api/fill?color=${encodeURIComponent('#000000')}&length=${process.env.JUKEPIX_LENGTH}`;
         
         fetch(disableClearUrl, {
@@ -255,7 +255,7 @@ function setJukepix(enabled) {
 
         setTimeout(() => {
             const msgController = new AbortController();
-            const msgTimeout = setTimeout(() => msgController.abort(), 3000);
+            const msgTimeout = setTimeout(() => msgController.abort(), 10000);
             const disableMsgUrl = `${jukepix}/api/say?text=Jukepix%20Disabled&textColor=${encodeURIComponent('#ff0000')}&backgroundColor=${encodeURIComponent('#000000')}`;
             
             fetch(disableMsgUrl, {
@@ -281,7 +281,7 @@ function setJukepix(enabled) {
 
         setTimeout(() => {
             const clearController = new AbortController();
-            const clearTimeout2 = setTimeout(() => clearController.abort(), 3000);
+            const clearTimeout2 = setTimeout(() => clearController.abort(), 10000);
             const clearTextUrl = `${jukepix}/api/say?text=${encodeURIComponent(' ')}&textColor=${encodeURIComponent('#ffffff')}&backgroundColor=${encodeURIComponent('#000000')}`;
             
             fetch(clearTextUrl, {
