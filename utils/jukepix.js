@@ -166,7 +166,7 @@ function displayTrack(track) {
         const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
         let sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#ffffff")}&backgroundColor=${encodeURIComponent("#000000")}`;
         if (artistName === 'Pierce The Veil') {
-            sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#87ceeb")}&backgroundColor=${encodeURIComponent("#000000")}`;
+            sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#008080")}&backgroundColor=${encodeURIComponent("#000000")}`;
         } else if (trackName === 'Golden') {
             sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#fcc200")}&backgroundColor=${encodeURIComponent("#000000")}`;
         }
