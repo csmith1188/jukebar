@@ -79,7 +79,17 @@ const trackCheckInterval = setInterval(async () => {
         if (!lastTrack || currentTrack.id !== lastTrack.id) {
             console.log('[JUKEPIX] New track detected:', currentTrack.name);
             let progressBody;
-            if (currentTrack.name === 'Golden') {
+            if (currentTrack.artist === 'Pierce The Veil') {
+                // Pierce The Veil - darkish yellow bar
+                progressBody = {
+                    fg1: 'b8860b',
+                    fg2: 'c9972e',
+                    startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
+                    duration: currentTrack.duration,
+                    interval: 100,
+                    length: parseInt(jukepixLength)
+                };
+            } else if (currentTrack.name === 'Golden') {
                 // Send track info to formpix
                 progressBody = {
                     fg1: 'fcc200',
@@ -155,7 +165,9 @@ function displayTrack(track) {
         const artistName = track.artist || "Unknown Artist";
         const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
         let sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#ffffff")}&backgroundColor=${encodeURIComponent("#000000")}`;
-        if (trackName === 'Golden') {
+        if (artistName === 'Pierce The Veil') {
+            sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#008080")}&backgroundColor=${encodeURIComponent("#000000")}`;
+        } else if (trackName === 'Golden') {
             sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#fcc200")}&backgroundColor=${encodeURIComponent("#000000")}`;
         }
 
