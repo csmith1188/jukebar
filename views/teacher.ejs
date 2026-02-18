@@ -11,17 +11,23 @@
 
 <body class="teacher-page">
     <%- include('partials/header', { page: 'teacher' }) %>
+        <%- include('partials/jukePixSettings') %>
+
         <div class="main-content">
             <div class="jukepix-toggle">
-                <div>
+                <div style="display:flex; align-items:center; gap:12px;">
                     <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
                         <div class="switch-track">
                             <div class="switch-thumb"></div>
                         </div>
-                        <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%= jukepixEnabled ? 'checked' : '' %>
-                            style="display: none;">
+                        <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%=jukepixEnabled
+                            ? 'checked' : '' %>
+                        style="display: none;">
                     </div>
                     <p>Enable Jukepix</p>
+                    <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
+                        <img src="/img/settings.png" alt="JukePix Settings">
+                    </button>
                 </div>
                 <p class="user-greeting">Logged in as: <strong>
                         <%= user %>
@@ -67,8 +73,7 @@
                                 class="user-search-input">
                         </div>
                     </div>
-                    <div class="table-container">
-                        <table class="user-table">
+                    <table class="user-table">
                             <thead>
                                 <tr>
                                     <th>Username</th>
@@ -78,30 +83,55 @@
                             <tbody id="userTableBody">
                             </tbody>
                         </table>
-                    </div>
                 </div>
             </div>
         </div>
 </body>
 <script>
-    
+    function showNotification(message, type = 'info') {
+        console.log('showNotification called:', message, type);
+        const notification = document.createElement('div');
+        notification.className = `notification ${type === 'success' ? 'notification-success' : type === 'error' ? 'notification-error' : ''}`;
+        notification.textContent = message;
+        notification.style.display = 'block';
+        notification.style.opacity = '1';
 
-    document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
+        document.body.appendChild(notification);
+        console.log('Notification appended to body:', notification);
+
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, 3000);
+    }
+
+        document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
         try {
-            const res = await fetch('/toggleJukepix', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: e.target.checked })
-            });
-            const data = await res.json();
-            if (!res.ok || data.error) {
-                alert(data.error || 'Failed to update Jukepix setting');
-                e.target.checked = !e.target.checked; // revert checkbox
+            const trackRes = await fetch('/api/currentTrack');
+            const data = await trackRes.json();
+            if (data.track) {
+                const res = await fetch('/toggleJukepix', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: e.target.checked })
+                });
+                const responseData = await res.json();
+                if (!res.ok || responseData.error) {
+                    showNotification(responseData.error || 'Failed to update Jukepix setting', 'error');
+                    e.target.checked = !e.target.checked;
+                } else {
+                    showNotification('Jukepix ' + (e.target.checked ? 'enabled' : 'disabled'), 'success');
+                }
+            } else {
+                showNotification('No track is currently playing. Cannot toggle Jukepix.', 'error');
+                e.target.checked = !e.target.checked;
             }
         } catch (err) {
             console.error('Error updating Jukepix setting:', err);
-            alert('Network error updating Jukepix setting');
-            e.target.checked = !e.target.checked; // revert checkbox
+            showNotification('Network error updating Jukepix setting', 'error');
+            e.target.checked = !e.target.checked;
         }
     });
 
@@ -121,8 +151,9 @@
 
                 const actionsTd = document.createElement('td');
                 const btn = document.createElement('button');
-                btn.textContent = 'View Transactions';
-                btn.className = 'view-transactions-button';
+                btn.innerHTML = '<img src="/img/search.png" alt="Transactions">';
+                btn.title = 'View Transactions';
+                btn.className = 'jp-icon-btn';
                 btn.addEventListener('click', async () => {
                     try {
                         await showUserTransactions(user.displayName);
@@ -207,27 +238,27 @@
     // this function fetches the queue history and appends it to the history list
     async function fetchQueueHistory(reset = false) {
         if (reset) historyOffset = 0;
-        
+
         try {
             const res = await fetch(`/api/queueHistory?limit=${historyLimit}&offset=${historyOffset}`);
             if (!res.ok) throw new Error('Failed to fetch queue history');
             const data = await res.json();
-            
+
             const historyList = document.getElementById('historyList');
-            
+
             if (reset) {
                 historyList.innerHTML = '';
             }
-            
+
             if (data.plays && data.plays.length > 0) {
                 data.plays.forEach(play => {
                     const playDiv = document.createElement('div');
                     playDiv.className = 'queue-item';
                     playDiv.style.cssText = 'display: flex; align-items: center; border-radius: 12px; padding: 12px; margin-bottom: 8px; transition: background 0.2s ease; border: 1px solid rgba(255, 255, 255, 0.15);';
-                    
+
                     const date = new Date(play.timestamp);
                     const timeAgo = getTimeAgo(date);
-                    
+
                     // Constructs inner HTML
                     playDiv.innerHTML = `
                         <img src="${play.albumImage || '/img/placeholder.png'}" alt="${play.track_name}" class="album-cover" style="width: 60px; height: 60px; border-radius: 8px; margin-right: 16px; object-fit: cover;" />
@@ -240,19 +271,19 @@
                             <div style="color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; margin-top: 2px;">${timeAgo}</div>
                         </div>
                     `;
-                    
+
                     playDiv.addEventListener('mouseenter', () => {
                         playDiv.style.background = 'rgba(255, 255, 255, 0.1)';
                     });
                     playDiv.addEventListener('mouseleave', () => {
                         playDiv.style.background = 'transparent';
                     });
-                    
+
                     historyList.appendChild(playDiv);
                 });
-                
+
                 historyOffset += data.plays.length;
-                
+
                 // Hide "Load More" if there's fewer results than requested
                 if (data.plays.length < historyLimit) {
                     document.getElementById('loadMoreHistory').style.display = 'none';
@@ -397,29 +428,7 @@
         }
     }
 
-    function showNotification(message, type = 'info') {
-        // Simple notification system
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 10px 20px;
-            background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
-            color: white;
-            border-radius: 4px;
-            z-index: 1000;
-            animation: slideIn 0.3s ease-out;
-        `;
 
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
-    }
 
     const searchInput = document.getElementById('userSearchInput');
     searchInput?.addEventListener('input', () => {

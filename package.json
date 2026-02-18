@@ -11,6 +11,12 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "nodemon": "^3.1.11"
+  },
+  "scripts": {
+    "start": "concurrently \"node apps/main.js\" \"node apps/jukepix.js\"",
+    "dev": "concurrently \"nodemon apps/main.js\" \"nodemon apps/jukepix.js\"",
+    "app": "concurrently \"node apps/main.js\" \"node apps/jukepix.js\""
   }
 }

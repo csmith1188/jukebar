@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { io: ioClient } = require('socket.io-client');
 const db = require('./utils/database');
+const { isOwner, getOwnerIds } = require('./utils/owners');
 
 dotenv.config();
 
@@ -43,10 +44,33 @@ const { isAuthenticated } = require('./middleware/auth');
 const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
-const { router: leaderboardRoutes, checkAndResetLeaderboard } = require('./routes/leaderboard');
+const { router: leaderboardRoutes, checkAndResetLeaderboard, startResetScheduler } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
+const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
+
+// Helper function to handle ban - removes from queue and skips if currently playing
+async function handleBanPassed(trackName, trackArtist, trackUri) {
+    console.log(`=== HANDLING BAN FOR: "${trackName}" by "${trackArtist}" ===`);
+    
+    // Remove matching tracks from the queue
+    const removedCount = queueManager.removeByNameAndArtist(trackName, trackArtist);
+    console.log(`Removed ${removedCount} matching track(s) from queue`);
+    
+    // Check if the banned song is currently playing - if so, skip it
+    if (queueManager.isCurrentlyPlaying(trackName, trackArtist)) {
+        console.log('Banned song is currently playing - skipping it');
+        try {
+            await ensureSpotifyAccessToken();
+            await spotifyApi.skipToNext();
+            await queueManager.skipTrack();
+            console.log('Successfully skipped banned song');
+        } catch (skipError) {
+            console.error('Failed to skip banned song:', skipError.message);
+        }
+    }
+}
 
 // Formbar Socket.IO connection
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
@@ -117,8 +141,18 @@ io.on('connection', (socket) => {
             const { trackUri, trackName, trackArtist, initiator } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
 
-            // Note: Payment verification happens before this event is emitted (in the frontend)
-            // Owner bypass is handled in songMenu.ejs before calling startBanVote()
+            // Check if user is an owner (bypass payment)
+            const userIsOwner = isOwner(userId);
+
+            // Verify payment for non-owners (but DON'T consume it yet)
+            if (!userIsOwner) {
+                if (!socket.request?.session?.hasPaid) {
+                    socket.emit('banVoteError', { error: 'Payment required to start a ban vote' });
+                    return;
+                }
+            }
+
+            // --- Run ALL validation checks BEFORE consuming payment ---
 
             // Get online user count
             const onlineCount = io.engine.clientsCount;
@@ -126,13 +160,13 @@ io.on('connection', (socket) => {
             // Check minimum users requirement
             if (onlineCount < 5) {
                 socket.emit('banVoteError', { error: 'At least 5 users must be online to start a ban vote' });
-                return;
+                return; // Payment NOT consumed – user keeps their digipogs
             }
 
             // Check if there's already an active vote
             if (voteManager.hasActiveVote()) {
                 socket.emit('banVoteError', { error: 'Please wait for the current ban vote to complete before starting a new one' });
-                return;
+                return; // Payment NOT consumed
             }
 
             // Check if track is already banned
@@ -145,7 +179,13 @@ io.on('connection', (socket) => {
 
             if (isBanned) {
                 socket.emit('banVoteError', { error: 'This track is already banned' });
-                return;
+                return; // Payment NOT consumed
+            }
+
+            // --- All checks passed – NOW consume the payment ---
+            if (!userIsOwner) {
+                socket.request.session.hasPaid = false;
+                socket.request.session.save();
             }
 
             // Start the vote with expiration callback
@@ -157,10 +197,28 @@ io.on('connection', (socket) => {
                 trackArtist,
                 userId,
                 onlineCount,
-                (expiredData) => {
-                    // Broadcast that vote failed due to expiration
-                    console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
-                    io.emit('banVoteFailed', expiredData);
+                async (expiredData) => {
+                    if (expiredData.passed) {
+                        console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
+                        // Insert into banned_songs table
+                        db.run(
+                            'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
+                            [expiredData.trackName, expiredData.trackArtist],
+                            async (err) => {
+                                if (err) {
+                                    console.error('Database insertion error (ban on expiration):', err);
+                                } else {
+                                    console.log('Successfully inserted ban into database (expiration)');
+                                    // Handle ban - remove from queue and skip if playing
+                                    await handleBanPassed(expiredData.trackName, expiredData.trackArtist, expiredData.trackUri);
+                                }
+                            }
+                        );
+                        io.emit('banVotePassed', expiredData);
+                    } else {
+                        console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
+                        io.emit('banVoteFailed', expiredData);
+                    }
                 }
             );
 
@@ -216,6 +274,10 @@ io.on('connection', (socket) => {
                             }
                         );
                     });
+                    
+                    // Handle ban - remove from queue and skip if playing
+                    await handleBanPassed(result.trackName, result.trackArtist, result.trackUri);
+                    
                 } catch (dbError) {
                     console.error('Failed to insert ban into database:', dbError);
                 }
@@ -224,6 +286,7 @@ io.on('connection', (socket) => {
                 io.emit('banVotePassed', {
                     trackUri: result.trackUri,
                     trackName: result.trackName,
+                    trackArtist: result.trackArtist,
                     yesVotes: result.yesVotes,
                     noVotes: result.noVotes
                 });
@@ -291,7 +354,7 @@ app.get('/', isAuthenticated, (req, res) => {
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
             userPermission: req.session.permission || 2,
-            ownerID: Number(process.env.OWNER_ID) || 4,
+            ownerIDs: getOwnerIds(),
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
@@ -311,7 +374,7 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
             userPermission: req.session.permission || 2,
-            ownerID: Number(process.env.OWNER_ID) || 4,
+            ownerIDs: getOwnerIds(),
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
@@ -355,7 +418,7 @@ app.get('/leaderboard', isAuthenticated, (req, res) => {
             userID: req.session.token?.id,
             userPermission: req.session.permission || null,
             resetDate: req.app.get('leaderboardLastReset'),
-            ownerID: Number(process.env.OWNER_ID) || 4
+            ownerIDs: getOwnerIds()
         });
     }
     catch (error) {
@@ -365,13 +428,13 @@ app.get('/leaderboard', isAuthenticated, (req, res) => {
 
 app.get('/teacher', isAuthenticated, (req, res) => {
     try {
-        if (req.session.permission >= 4 || req.session.token?.id === Number(process.env.OWNER_ID)) {
+        if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
             res.render('teacher.ejs', {
                 user: req.session.user,
                 userID: req.session.token?.id,
                 jukepixEnabled: require('./utils/jukepix').isJukepixEnabled(),
                 userPermission: req.session.permission || null,
-                ownerID: Number(process.env.OWNER_ID) || 4
+                ownerIDs: getOwnerIds()
             });
         } else {
             res.redirect('/');
@@ -387,10 +450,14 @@ app.use('/', paymentRoutes);
 app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 app.use('/', require('./routes/jukepix'));
+app.use('/', require('./routes/settings'));
 
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
+    
+    // Start the leaderboard auto-reset scheduler
+    startResetScheduler(app);
 });
 
 module.exports = { app, io, formbarSocket };

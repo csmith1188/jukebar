@@ -914,6 +914,10 @@ p {
     width: 60%;
     height: 60%;
     object-fit: contain;
+    /* For SVG or image icons */
+    filter: brightness(0) invert(1);
+    /* For font icons (Font Awesome, etc.) */
+    color: #fff;
 }
 
 .progress-bar-container {
@@ -1219,10 +1223,6 @@ p {
 }
 
 .table-container {
-    background: var(--inbetween1);
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     flex: 1;
     overflow-y: auto;
     min-height: 0;
@@ -1302,7 +1302,7 @@ p {
 }
 
 .user-table th {
-    padding: 16px 20px;
+    padding: 10px 16px;
     text-align: left;
     font-weight: 600;
     color: var(--text);
@@ -1320,10 +1320,11 @@ p {
 .user-table th:last-child {
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
+    text-align: right;
 }
 
 .user-table td {
-    padding: 16px 20px;
+    padding: 8px 16px;
     color: var(--text);
     font-size: 15px;
     border-bottom: 1px solid var(--inbetween2);
@@ -1348,6 +1349,11 @@ p {
 
 .user-table tbody tr td:nth-child(2) {
     position: relative;
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 6px 16px;
 }
 
 /* Action buttons */
@@ -2557,3 +2563,267 @@ p {
 .toggle-switch:has(input:checked) .switch-track .switch-thumb {
     transform: translateX(26px);
 }
+
+/* ── JukePix Settings Drawer ── */
+.jp-drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 3000;
+}
+.jp-drawer-overlay.open { display: block; }
+
+.jp-drawer {
+    position: fixed;
+    top: 0; right: 0;
+    width: 480px;
+    max-width: 100vw;
+    height: 100vh;
+    background: #181818;
+    border-left: 1px solid #282828;
+    z-index: 3001;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.jp-drawer.open { transform: translateX(0); }
+
+.jp-drawer-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #282828;
+    flex-shrink: 0;
+}
+.jp-drawer-header h2 {
+    font-size: 1.2em;
+    color: #1db954;
+    margin: 0;
+    text-align: center;
+}
+.jp-close-btn {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #b3b3b3;
+    font-size: 1.3em;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+}
+.jp-close-btn:hover { color: #fff; background: #282828; }
+
+.jp-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 20px 40px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.jp-section {
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #282828;
+}
+.jp-section:last-child { border-bottom: none; margin-bottom: 0; }
+.jp-section h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: #1db954;
+    margin-bottom: 8px;
+}
+.jp-hint {
+    font-size: 0.82em;
+    color: #b3b3b3;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+.jp-hint strong { color: #1db954; }
+
+.jp-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.jp-form-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.jp-form-group.jp-full-width { grid-column: 1 / -1; }
+.jp-form-group label {
+    font-size: 0.8em;
+    color: #b3b3b3;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+.jp-form-group input[type="text"],
+.jp-form-group input[type="number"],
+.jp-form-group select {
+    padding: 7px 9px;
+    font-size: 0.9em;
+    border: 1px solid #535353;
+    border-radius: 6px;
+    background: #121212;
+    color: #fff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.jp-form-group input:focus, .jp-form-group select:focus { border-color: #1db954; }
+
+.jp-color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.jp-color-row input[type="color"] {
+    width: 36px;
+    height: 32px;
+    border: 1px solid #535353;
+    border-radius: 5px;
+    background: #121212;
+    cursor: pointer;
+    padding: 2px;
+    flex-shrink: 0;
+}
+.jp-color-row input[type="text"] { flex: 1; font-family: monospace; min-width: 0; }
+
+.jp-range-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.jp-range-row input[type="range"] { flex: 1; accent-color: #1db954; }
+.jp-range-val { color: #1db954; font-weight: 600; min-width: 32px; text-align: right; font-size: 0.9em; }
+
+.jp-preview-wrap { margin-top: 16px; }
+.jp-preview-wrap > label { font-size: 0.8em; color: #b3b3b3; font-weight: 500; display: block; margin-bottom: 6px; }
+.jp-preview-text {
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    text-align: center;
+    transition: all 0.3s;
+    margin-bottom: 8px;
+}
+.jp-preview-bar {
+    height: 12px;
+    border-radius: 6px;
+    background: #282828;
+    overflow: hidden;
+}
+.jp-preview-fill {
+    height: 100%;
+    width: 60%;
+    border-radius: 6px;
+    transition: background 0.3s;
+}
+
+.jp-btn-row { display: flex; gap: 8px; margin-top: 14px; }
+.jp-btn {
+    border: none;
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.jp-btn-primary { background: #1db954; color: #fff; }
+.jp-btn-primary:hover { background: #1ed760; }
+.jp-btn-danger { background: #e74c3c; color: #fff; }
+.jp-btn-danger:hover { background: #ff5252; }
+.jp-btn-secondary { background: #282828; color: #b3b3b3; border: 1px solid #535353; }
+.jp-btn-secondary:hover { background: #333; color: #fff; }
+.jp-btn-sm { padding: 6px 13px; font-size: 0.82em; }
+
+.jp-table-wrap { overflow-x: auto; width: 100%; }
+.jp-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 0.82em;
+    table-layout: fixed;
+}
+.jp-table th, .jp-table td {
+    text-align: left;
+    padding: 7px 6px;
+    border-bottom: 1px solid #282828;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.jp-table th { color: #b3b3b3; font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.4px; }
+.jp-table td { color: #fff; }
+.jp-table col.col-type  { width: 52px; }
+.jp-table col.col-match { width: auto; }
+.jp-table col.col-swatch { width: 32px; }
+.jp-table col.col-spd  { width: 36px; }
+.jp-table col.col-act  { width: 80px; }
+.jp-swatch {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border-radius: 3px;
+    border: 1px solid #535353;
+    vertical-align: middle;
+}
+.jp-empty { text-align: center; color: #535353; padding: 16px; }
+.jp-override-actions { display: flex; gap: 4px; }
+
+.jp-icon-btn {
+    background: none;
+    border: 1px solid #535353;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 5px;
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+}
+.jp-icon-btn img { width: 14px; height: 14px; opacity: 0.7; transition: opacity 0.2s; filter: invert(1); }
+.jp-icon-btn:hover { background: #282828; border-color: #888; }
+.jp-icon-btn:hover img { opacity: 1; }
+.jp-icon-btn-danger:hover { background: rgba(231,76,60,0.15); border-color: #e74c3c; }
+.jp-icon-btn-danger:hover img { filter: invert(40%) sepia(80%) saturate(600%) hue-rotate(320deg); opacity: 1; }
+
+.jp-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 4000;
+    align-items: center;
+    justify-content: center;
+}
+.jp-modal-overlay.active { display: flex; }
+.jp-modal {
+    background: #1a1a1a;
+    border: 1px solid #282828;
+    border-radius: 12px;
+    padding: 24px;
+    width: 460px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+.jp-modal h3 { color: #1db954; font-size: 1.1em; margin-bottom: 16px; }
+
