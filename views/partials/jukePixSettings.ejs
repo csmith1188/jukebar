@@ -73,6 +73,7 @@
 
             <div class="jp-btn-row">
                 <button class="jp-btn jp-btn-primary" onclick="jpSaveDefaults()">Save Defaults</button>
+                <button class="jp-btn jp-btn-secondary" onclick="jpResetDefaults()">Reset to Default</button>
             </div>
         </div>
 
@@ -325,6 +326,15 @@
             });
             showNotification('JukePix defaults saved!', 'success');
         } catch (e) { showNotification('Save failed: ' + e.message, 'error'); }
+    }
+
+    async function jpResetDefaults() {
+        if (!confirm('Reset all JukePix defaults back to the original values?')) return;
+        try {
+            await jpApi('/api/settings/defaults/reset', { method: 'POST' });
+            await jpLoadDefaults();
+            showNotification('JukePix defaults reset!', 'success');
+        } catch (e) { showNotification('Reset failed: ' + e.message, 'error'); }
     }
 
     /* ── Overrides ── */

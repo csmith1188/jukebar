@@ -73,16 +73,11 @@
                                 class="user-search-input">
                         </div>
                     </div>
-                    <table class="user-table">
-                            <thead>
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="userTableBody">
-                            </tbody>
-                        </table>
+                    <div class="user-list-header">
+                        <span class="user-col-name">Username</span>
+                        <span class="user-col-actions">Actions</span>
+                    </div>
+                    <div id="userList"></div>
                 </div>
             </div>
         </div>
@@ -140,16 +135,23 @@
             const res = await fetch('/api/users');
             if (!res.ok) throw new Error('Failed to fetch users');
             const users = await res.json();
-            const tbody = document.getElementById('userTableBody');
-            tbody.innerHTML = '';
+            const list = document.getElementById('userList');
+            list.innerHTML = '';
+
+            if (!users.length) {
+                list.innerHTML = '<div class="user-empty">No users found.</div>';
+                return;
+            }
 
             users.forEach(user => {
-                const tr = document.createElement('tr');
+                const row = document.createElement('div');
+                row.className = 'user-row';
+                row.dataset.username = (user.displayName || user.username || '').toLowerCase();
 
-                const nameTd = document.createElement('td');
-                nameTd.textContent = user.displayName || user.username || '';
+                const name = document.createElement('span');
+                name.className = 'user-name';
+                name.textContent = user.displayName || user.username || '';
 
-                const actionsTd = document.createElement('td');
                 const btn = document.createElement('button');
                 btn.innerHTML = '<img src="/img/search.png" alt="Transactions">';
                 btn.title = 'View Transactions';
@@ -163,14 +165,13 @@
                     }
                 });
 
-                actionsTd.appendChild(btn);
-                tr.appendChild(nameTd);
-                tr.appendChild(actionsTd);
-                tbody.appendChild(tr);
+                row.appendChild(name);
+                row.appendChild(btn);
+                list.appendChild(row);
             });
         } catch (err) {
             console.error('Error loading users:', err);
-            document.getElementById('userTableBody').innerHTML = '<tr><td colspan="3">Unable to load users.</td></tr>';
+            document.getElementById('userList').innerHTML = '<div class="user-empty">Unable to load users.</div>';
         }
     }
 
@@ -433,19 +434,9 @@
     const searchInput = document.getElementById('userSearchInput');
     searchInput?.addEventListener('input', () => {
         const filter = searchInput.value.toLowerCase();
-        const tbody = document.getElementById('userTableBody');
-        const rows = tbody.getElementsByTagName('tr');
-
-        Array.from(rows).forEach(row => {
-            const usernameCell = row.getElementsByTagName('td')[0];
-            if (usernameCell) {
-                const username = usernameCell.textContent || usernameCell.innerText;
-                if (username.toLowerCase().indexOf(filter) > -1) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            }
+        const rows = document.getElementById('userList').querySelectorAll('.user-row');
+        rows.forEach(row => {
+            row.style.display = row.dataset.username.includes(filter) ? '' : 'none';
         });
     });
 
