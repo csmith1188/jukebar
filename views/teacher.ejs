@@ -11,9 +11,11 @@
 
 <body class="teacher-page">
     <%- include('partials/header', { page: 'teacher' }) %>
+        <%- include('partials/jukePixSettings') %>
+
         <div class="main-content">
             <div class="jukepix-toggle">
-                <div>
+                <div style="display:flex; align-items:center; gap:12px;">
                     <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
                         <div class="switch-track">
                             <div class="switch-thumb"></div>
@@ -23,6 +25,9 @@
                         style="display: none;">
                     </div>
                     <p>Enable Jukepix</p>
+                    <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
+                        <img src="/img/settings.png" alt="JukePix Settings">
+                    </button>
                 </div>
                 <p class="user-greeting">Logged in as: <strong>
                         <%= user %>
@@ -68,8 +73,7 @@
                                 class="user-search-input">
                         </div>
                     </div>
-                    <div class="table-container">
-                        <table class="user-table">
+                    <table class="user-table">
                             <thead>
                                 <tr>
                                     <th>Username</th>
@@ -79,7 +83,6 @@
                             <tbody id="userTableBody">
                             </tbody>
                         </table>
-                    </div>
                 </div>
             </div>
         </div>
@@ -148,8 +151,9 @@
 
                 const actionsTd = document.createElement('td');
                 const btn = document.createElement('button');
-                btn.textContent = 'View Transactions';
-                btn.className = 'view-transactions-button';
+                btn.innerHTML = '<img src="/img/search.png" alt="Transactions">';
+                btn.title = 'View Transactions';
+                btn.className = 'jp-icon-btn';
                 btn.addEventListener('click', async () => {
                     try {
                         await showUserTransactions(user.displayName);

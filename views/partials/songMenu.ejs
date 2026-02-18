@@ -105,9 +105,9 @@ document.getElementById('contextBanBtn').addEventListener('click', function() {
             }
             
             // Check if user is owner (owners can start votes for free)
-            const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
+            const userIsOwner = (typeof isOwnerClient === 'function') ? isOwnerClient(currentID) : false;
             
-            if (isOwner) {
+            if (userIsOwner) {
                 // Owner bypass - start vote immediately
                 startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist);
             } else {

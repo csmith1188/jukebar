@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { io: ioClient } = require('socket.io-client');
 const db = require('./utils/database');
+const { isOwner, getOwnerIds } = require('./utils/owners');
 
 dotenv.config();
 
@@ -140,20 +141,18 @@ io.on('connection', (socket) => {
             const { trackUri, trackName, trackArtist, initiator } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
 
-            // Check if user is owner (bypass payment)
-            const ownerId = Number(process.env.OWNER_ID);
-            const isOwner = userId === ownerId;
+            // Check if user is an owner (bypass payment)
+            const userIsOwner = isOwner(userId);
 
-            // Verify payment for non-owners
-            if (!isOwner) {
+            // Verify payment for non-owners (but DON'T consume it yet)
+            if (!userIsOwner) {
                 if (!socket.request?.session?.hasPaid) {
                     socket.emit('banVoteError', { error: 'Payment required to start a ban vote' });
                     return;
                 }
-                // Reset payment flag after verification
-                socket.request.session.hasPaid = false;
-                socket.request.session.save();
             }
+
+            // --- Run ALL validation checks BEFORE consuming payment ---
 
             // Get online user count
             const onlineCount = io.engine.clientsCount;
@@ -161,13 +160,13 @@ io.on('connection', (socket) => {
             // Check minimum users requirement
             if (onlineCount < 5) {
                 socket.emit('banVoteError', { error: 'At least 5 users must be online to start a ban vote' });
-                return;
+                return; // Payment NOT consumed – user keeps their digipogs
             }
 
             // Check if there's already an active vote
             if (voteManager.hasActiveVote()) {
                 socket.emit('banVoteError', { error: 'Please wait for the current ban vote to complete before starting a new one' });
-                return;
+                return; // Payment NOT consumed
             }
 
             // Check if track is already banned
@@ -180,7 +179,13 @@ io.on('connection', (socket) => {
 
             if (isBanned) {
                 socket.emit('banVoteError', { error: 'This track is already banned' });
-                return;
+                return; // Payment NOT consumed
+            }
+
+            // --- All checks passed – NOW consume the payment ---
+            if (!userIsOwner) {
+                socket.request.session.hasPaid = false;
+                socket.request.session.save();
             }
 
             // Start the vote with expiration callback
@@ -349,7 +354,7 @@ app.get('/', isAuthenticated, (req, res) => {
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
             userPermission: req.session.permission || 2,
-            ownerID: Number(process.env.OWNER_ID) || 4,
+            ownerIDs: getOwnerIds(),
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
@@ -369,7 +374,7 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             hasPaid: !!req.session.hasPaid,
             payment: req.session.payment || null,
             userPermission: req.session.permission || 2,
-            ownerID: Number(process.env.OWNER_ID) || 4,
+            ownerIDs: getOwnerIds(),
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
@@ -413,7 +418,7 @@ app.get('/leaderboard', isAuthenticated, (req, res) => {
             userID: req.session.token?.id,
             userPermission: req.session.permission || null,
             resetDate: req.app.get('leaderboardLastReset'),
-            ownerID: Number(process.env.OWNER_ID) || 4
+            ownerIDs: getOwnerIds()
         });
     }
     catch (error) {
@@ -423,13 +428,13 @@ app.get('/leaderboard', isAuthenticated, (req, res) => {
 
 app.get('/teacher', isAuthenticated, (req, res) => {
     try {
-        if (req.session.permission >= 4 || req.session.token?.id === Number(process.env.OWNER_ID)) {
+        if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
             res.render('teacher.ejs', {
                 user: req.session.user,
                 userID: req.session.token?.id,
                 jukepixEnabled: require('./utils/jukepix').isJukepixEnabled(),
                 userPermission: req.session.permission || null,
-                ownerID: Number(process.env.OWNER_ID) || 4
+                ownerIDs: getOwnerIds()
             });
         } else {
             res.redirect('/');
@@ -445,6 +450,7 @@ app.use('/', paymentRoutes);
 app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 app.use('/', require('./routes/jukepix'));
+app.use('/', require('./routes/settings'));
 
 server.listen(port, async () => {
     io.disconnectSockets();

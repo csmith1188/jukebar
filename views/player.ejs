@@ -32,7 +32,7 @@
                             </button>
                         </div>
                     </form>
-                    <% if (userID===ownerID) { %>
+                    <% if (ownerIDs.includes(userID)) { %>
                         <div class="owner-anon-container">
                             <label class="owner-anon-label">
                                 <input type="checkbox" id="owner-anon-mode">
@@ -150,7 +150,12 @@
                 let isCurrentlyPlaying = false;
                 let progressInterval = null;
                 let currentID = <%= JSON.stringify(userID || null) %>; // User ID - needed by ban votes
-                const ownerID = <%= JSON.stringify(ownerID) %>; // Owner ID
+                const ownerIDs = <%= JSON.stringify(ownerIDs) %>; // Array of owner IDs
+
+                // Helper: check if a user ID is an owner
+                function isOwnerClient(uid) {
+                    return ownerIDs.includes(Number(uid));
+                }
 
                 // Create socket globally ONCE and expose it immediately
                 const socket = io();
@@ -193,7 +198,7 @@
                             return;
                         }
 
-                        if (currentID === ownerID) {
+                        if (isOwnerClient(currentID)) {
                             const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
                             addToQueue(uri, anonMode);
                             return;
@@ -228,7 +233,7 @@
 
                         console.log('⏭️ Final skipUri:', skipUri);
 
-                        if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
+                        if (isOwnerClient(currentID)) {
                             skip(skipUri);
                             return;
                         }
@@ -440,43 +445,37 @@
                     function hidePayment() {
                         document.getElementById('paymentModal').style.display = 'none';
                         document.querySelector('.main-content').classList.remove('blurred');
-
-                        // Handle pending actions after payment
-                        if (hasPaid && pendingAction) {
-                            // Add a small delay to ensure session is saved on server
-                            setTimeout(() => {
-                                if (pendingAction === 'play' && pendingTrackUri) {
-                                    const uri = pendingTrackUri;
-                                    pendingTrackUri = null;
-                                    pendingAction = null;
-                                    checkPaymentAndPlay(uri);
-                                } else if (pendingAction === 'skip') {
-                                    pendingAction = null;
-                                    checkPaymentAndSkip();
-                                } else if (pendingAction === 'Skip Shield' && pendingTrackUri) {
-                                    const uri = pendingTrackUri;
-                                    const addedAt = pendingTrackAddedAt || 0;
-                                    pendingTrackUri = null;
-                                    pendingTrackAddedAt = null;
-                                    pendingAction = null;
-                                    purchaseShieldAfterPayment(uri, addedAt);
-                                } else if (pendingAction === 'Ban Vote' && pendingTrackUri) {
-                                    const uri = pendingTrackUri;
-                                    const trackName = pendingTrackName || 'Unknown Track';
-                                    const trackArtist = pendingTrackArtist || 'Unknown Artist';
-                                    pendingTrackUri = null;
-                                    pendingTrackName = null;
-                                    pendingTrackArtist = null;
-                                    pendingAction = null;
-                                    startBanVote(uri, trackName, trackArtist);
-                                }
-                            }, 100); // 100ms delay
-                        }
                     }
 
                     function onPaymentSuccess() {
                         hasPaid = true;
                         hidePayment();
+
+                        // Directly trigger the pending action now that payment is confirmed
+                        const action = pendingAction;
+                        pendingAction = null;
+
+                        if (action === 'play' && pendingTrackUri) {
+                            const uri = pendingTrackUri;
+                            pendingTrackUri = null;
+                            checkPaymentAndPlay(uri);
+                        } else if (action === 'skip') {
+                            checkPaymentAndSkip();
+                        } else if (action === 'Skip Shield' && pendingTrackUri) {
+                            const uri = pendingTrackUri;
+                            const addedAt = pendingTrackAddedAt || 0;
+                            pendingTrackUri = null;
+                            pendingTrackAddedAt = null;
+                            purchaseShieldAfterPayment(uri, addedAt);
+                        } else if (action === 'Ban Vote' && pendingTrackUri) {
+                            const uri = pendingTrackUri;
+                            const trackName = pendingTrackName || 'Unknown Track';
+                            const trackArtist = pendingTrackArtist || 'Unknown Artist';
+                            pendingTrackUri = null;
+                            pendingTrackName = null;
+                            pendingTrackArtist = null;
+                            startBanVote(uri, trackName, trackArtist);
+                        }
                     }
 
                     function refund() {
@@ -541,9 +540,9 @@
                             const artist = button.dataset.artist;
                             
                             // Check if user is owner (owners can start votes for free)
-                            const isOwner = currentID === ownerID || Number(currentID) === Number(ownerID);
+                            const userIsOwner = isOwnerClient(currentID);
                             
-                            if (isOwner) {
+                            if (userIsOwner) {
                                 // Owner bypass - start vote immediately
                                 startBanVote(uri, name, artist);
                             } else {
@@ -560,10 +559,6 @@
                     // Expose minimal API via custom events for pay.ejs communication
                     window.addEventListener('paymentSuccess', () => {
                         onPaymentSuccess();
-                    });
-
-                    window.addEventListener('hidePaymentModal', () => {
-                        hidePayment();
                     });
 
                     // Expose read-only state for pay.ejs (cannot be directly manipulated from console)
@@ -588,7 +583,7 @@
                         }
 
                         // Owner can purchase shields for free without payment modal
-                        if (currentID === ownerID || Number(currentID) === Number(ownerID)) {
+                        if (isOwnerClient(currentID)) {
                             purchaseShieldAfterPayment(trackUri, addedAt);
                             return;
                         }
