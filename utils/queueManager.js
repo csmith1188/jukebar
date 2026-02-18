@@ -333,6 +333,7 @@ class QueueManager {
                         const usedMetadataKeys = new Set();
 
                         // Convert Spotify queue items to our format, merging with metadata
+                        // Use added_at from metadata for proper ordering of duplicate tracks
                         this.queue = queueData.queue.map(item => {
                             const metadataArray = metadataMap[item.uri] || [];
                             let metadata = null;
@@ -365,6 +366,9 @@ class QueueManager {
                                 skipShields: metadata ? metadata.skip_shields : 0
                             };
                         });
+
+                        // Sort the queue by addedAt so earliest additions appear first
+                        this.queue.sort((a, b) => a.addedAt - b.addedAt);
 
                         console.log('Initialized queue with', this.queue.length, 'tracks');
                     } else {
@@ -486,7 +490,9 @@ class QueueManager {
                 currentTrack.duration = currentTrack.duration_ms;
             }
 
-            // Build queue with metadata, matching by position for duplicates
+            // Build queue with metadata, matching by position for duplicates.
+            // Preserve existing addedAt values for tracks already in our queue
+            // so they don't get reset to Date.now() on every sync cycle.
             const newQueue = queueTracks.map((track, index) => {
                 const metadataArray = metadataMap[track.uri];
                 let metadata = null;
@@ -508,13 +514,20 @@ class QueueManager {
                     }
                 }
 
+                // Use metadata added_at; fall back to existing queue item's addedAt;
+                // last resort: Date.now() (only for truly new tracks with no metadata)
+                const existingItem = this.queue[index];
+                const fallbackAddedAt = (existingItem && existingItem.uri === track.uri)
+                    ? existingItem.addedAt
+                    : Date.now();
+
                 return {
                     uri: track.uri,
                     name: track.name,
                     artist: track.artists.map(a => a.name).join(', '),
                     addedBy: metadata?.is_anon ? 'Anonymous' : (metadata?.added_by || 'Spotify'),
                     displayName: metadata?.is_anon ? 'Anonymous' : (metadata?.display_name || 'Spotify'),
-                    addedAt: metadata?.added_at || Date.now(),
+                    addedAt: metadata?.added_at || fallbackAddedAt,
                     image: track.album?.images?.[0]?.url,
                     isAnon: metadata?.is_anon || 0,
                     skipShields: metadata?.skip_shields || 0

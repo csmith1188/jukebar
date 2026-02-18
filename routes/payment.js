@@ -1,12 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../utils/database');
+const { isOwner } = require('../utils/owners');
+const { transfer, refund: poolRefund } = require('../utils/transferManager');
 
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const POOL_ID = Number(process.env.POOL_ID);
+
+if (!POOL_ID || isNaN(POOL_ID)) {
+    console.error('[payment.js] FATAL: POOL_ID is not set or invalid in .env. Payments will be rejected.');
+}
 
 router.post('/transfer', async (req, res) => {
     try {
-        const to = process.env.OWNER_ID;
+        const to = POOL_ID;
+        if (!to || isNaN(to)) {
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: POOL_ID is not set. Contact your administrator.' });
+        }
         let { pin, reason } = req.body || {};
         const pendingAction = req.body?.pendingAction;
         
@@ -14,12 +24,11 @@ router.post('/transfer', async (req, res) => {
         console.log('pendingAction:', pendingAction);
         console.log('reason:', reason);
 
-        //gets the top 3 users to apply a discount
+        //gets the top 3 users to apply a discount (filter out ALL owners)
         const topUsers = await new Promise((resolve, reject) => {
             db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
-                // if it gets the owner ID skip it
                 if (rows) {
-                    rows = rows.filter(r => Number(r.id) !== Number(process.env.OWNER_ID));
+                    rows = rows.filter(r => !isOwner(r.id));
                 }
                 if (err) return reject(err);
                 resolve(rows.map(r => Number(r.id)));
@@ -88,22 +97,21 @@ router.post('/transfer', async (req, res) => {
 
         console.log('=== FORMBAR TRANSFER REQUEST ===');
         console.log('Transfer payload being sent to Formbar:', payload);
-        console.log('Formbar address:', FORMBAR_ADDRESS);
         
-        const transferResult = await fetch(`${FORMBAR_ADDRESS}/api/digipogs/transfer`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
+        try {
+            // Use socket-based pool transfer
+            const responseJson = await transfer({
+                from: payload.from,
+                to: payload.to,
+                amount: payload.amount,
+                pin: payload.pin,
+                reason: payload.reason
+            });
 
-        const responseJson = await transferResult.json();
-        console.log('Formbar response status:', transferResult.status);
-        console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
-        console.log('================================');
+            console.log('Transfer response:', JSON.stringify(responseJson, null, 2));
+            console.log('================================');
 
-        // Check if the transfer was successful based on the response
-        if (transferResult.ok && responseJson) {
-            //console.log('Setting hasPaid = true for user:', req.session.token?.id);
+            // Transfer succeeded
             req.session.hasPaid = true;
             req.session.payment = {
                 from: Number(userRow.id),
@@ -111,57 +119,22 @@ router.post('/transfer', async (req, res) => {
                 amount: Number(amount),
                 at: Date.now()
             };
-            //console.log('Session before save:', { id: req.session.token?.id, hasPaid: req.session.hasPaid });
             return req.session.save((err) => {
                 if (err) {
                     console.error('Session save error:', err);
                     return res.status(500).json({ ok: false, error: 'Session save failed' });
                 }
-                //console.log('Session saved successfully, hasPaid should be true');
                 res.json({ ok: true, message: 'Transfer successful', response: responseJson });
             });
-        } else {
-            //console.log('Transfer failed with status:', transferResult.status);
-            //console.log('Full Formbar error response:', JSON.stringify(responseJson, null, 2));
+        } catch (transferError) {
+            // Transfer failed - extract error message
+            const specificError = transferError.message || 'Transfer failed';
+            console.log('Transfer error:', specificError);
 
-            // Extract the specific error message from Formbar response
-            let specificError = 'Transfer failed';
-
-            // Check if there's a JWT token that needs to be decoded
-            if (responseJson && responseJson.token) {
-                try {
-                    // Decode the JWT token to get the actual error message
-                    const jwt = require('jsonwebtoken');
-                    const decoded = jwt.decode(responseJson.token);
-                    //console.log('Decoded JWT:', decoded);
-
-                    if (decoded && decoded.message) {
-                        specificError = decoded.message;
-                    }
-                } catch (err) {
-                    console.error('Failed to decode JWT token:', err);
-                }
-            }
-
-            // Try other possible error message locations if no JWT
-            if (specificError === 'Transfer failed' && responseJson) {
-                if (responseJson.message) {
-                    specificError = responseJson.message;
-                } else if (responseJson.error) {
-                    specificError = responseJson.error;
-                } else if (responseJson.details && responseJson.details.message) {
-                    specificError = responseJson.details.message;
-                } else if (responseJson.data && responseJson.data.message) {
-                    specificError = responseJson.data.message;
-                }
-            }
-
-            //console.log('Extracted error message:', specificError);
-
-            res.status(transferResult.status || 400).json({
+            res.status(400).json({
                 ok: false,
                 error: specificError,
-                details: responseJson
+                details: transferError.details || null
             });
         }
     } catch (err) {
@@ -171,8 +144,11 @@ router.post('/transfer', async (req, res) => {
 
 router.post('/refund', async (req, res) => {
     try {
-        const from = Number(process.env.OWNER_ID);
+        const from = POOL_ID;
         const reason = "Jukebar refund";
+        if (!from || isNaN(from)) {
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: POOL_ID is not set. Contact your administrator.' });
+        }
         const pin = process.env.PIN;
         const userRow = await new Promise((resolve, reject) => {
             db.get("SELECT id FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
@@ -228,56 +204,33 @@ router.post('/refund', async (req, res) => {
             reason: String(reason),
         };
 
-        //console.log('Refund payload being sent to Formbar:', payload);
-        const transferResult = await fetch(`${FORMBAR_ADDRESS}/api/digipogs/transfer`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
+        try {
+            // Use socket-based pool transfer for refund
+            const responseJson = await poolRefund({
+                from: payload.from,
+                to: payload.to,
+                amount: payload.amount,
+                pin: payload.pin,
+                reason: payload.reason
+            });
 
-        const responseJson = await transferResult.json();
-        //console.log('Formbar response status:', transferResult.status);
-        //console.log('Formbar response JSON:', JSON.stringify(responseJson, null, 2));
-
-        // Check if the transfer was successful based on the response
-        if (transferResult.ok && responseJson) {
-            // Mark refunded and reset payment flag
+            // Refund succeeded
             req.session.payment.refundedAt = Date.now();
             req.session.hasPaid = false;
             return req.session.save(() => {
                 res.json({ ok: true, message: 'Refund successful', response: responseJson });
             });
-        } else {
-            //console.log('Refund failed with status:', transferResult.status);
-            //console.log('Full Formbar error response:', JSON.stringify(responseJson, null, 2));
-
-            // Extract the specific error message from Formbar response
-            let specificError = 'Refund failed';
-
-            // Try other possible error message locations if no JWT
-            if (specificError === 'Refund failed' && responseJson) {
-                if (responseJson.message) {
-                    specificError = responseJson.message;
-                } else if (responseJson.error) {
-                    specificError = responseJson.error;
-                } else if (responseJson.details && responseJson.details.message) {
-                    specificError = responseJson.details.message;
-                } else if (responseJson.data && responseJson.data.message) {
-                    specificError = responseJson.data.message;
-                }
-            }
-
-            //console.log('Extracted error message:', specificError);
-
-            res.status(transferResult.status || 400).json({
+        } catch (transferError) {
+            const specificError = transferError.message || 'Refund failed';
+            res.status(400).json({
                 ok: false,
                 error: specificError,
-                details: responseJson
+                details: transferError.details || null
             });
         }
     } catch (err) {
         console.error('Refund error:', err);
-        res.status(502).json({ ok: false, error: 'HTTP request to Formbar failed', details: err?.message || String(err) });
+        res.status(502).json({ ok: false, error: 'Transfer to Formbar failed', details: err?.message || String(err) });
     }
 });
 
@@ -361,8 +314,8 @@ router.post('/getAmount', async (req, res) => {
             const topUsers = await new Promise((resolve, reject) => {
                 db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
                     if (err) return reject(err);
-                    // Filter out owner ID and ensure we have numbers for comparison
-                    const filteredRows = rows.filter(r => Number(r.id) !== Number(process.env.OWNER_ID));
+                    // Filter out ALL owner IDs
+                    const filteredRows = rows.filter(r => !isOwner(r.id));
                     resolve(filteredRows.map(r => Number(r.id)));
                 });
             });

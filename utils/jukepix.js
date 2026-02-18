@@ -2,6 +2,7 @@
 require('dotenv').config({ quiet: true });
 
 const spotifyApi = require('./spotify').spotifyApi;
+const db = require('./database');
 const apikey = process.env.JUKEPIX_API_KEY;
 const jukepix = process.env.JUKEPIX_URL;
 const jukepixLength = process.env.JUKEPIX_LENGTH;
@@ -25,6 +26,73 @@ const reqOptions =
 
 let currentTrack = null;
 let lastTrack = null;
+
+/**
+ * Resolve effective JukePix display settings for a track.
+ * Priority: song override > artist override > global defaults.
+ * @param {string} trackName
+ * @param {string} artistName
+ * @returns {Promise<object>} Effective settings
+ */
+async function resolveTrackSettings(trackName, artistName) {
+    // Start with global defaults from DB
+    const defaults = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM jukepix_defaults WHERE id = 1', (err, row) => {
+            if (err) reject(err);
+            else resolve(row || {});
+        });
+    });
+
+    let effective = {
+        text_color: defaults.text_color || '#ffffff',
+        bg_color: defaults.bg_color || '#000000',
+        progress_fg1: defaults.progress_fg1 || '#00ff00',
+        progress_fg2: defaults.progress_fg2 || '#29ff29',
+        scroll_speed: defaults.scroll_speed || 50,
+        skip_sound: defaults.skip_sound || null,
+        shield_sound: defaults.shield_sound || null
+    };
+
+    // Layer 1: Artist override
+    if (artistName) {
+        const artistOverride = await new Promise((resolve, reject) => {
+            db.get(
+                "SELECT * FROM jukepix_settings WHERE match_type = 'artist' AND LOWER(TRIM(match_value)) = LOWER(TRIM(?))",
+                [artistName],
+                (err, row) => { if (err) reject(err); else resolve(row); }
+            );
+        });
+        if (artistOverride) {
+            if (artistOverride.text_color) effective.text_color = artistOverride.text_color;
+            if (artistOverride.progress_fg1) effective.progress_fg1 = artistOverride.progress_fg1;
+            if (artistOverride.progress_fg2) effective.progress_fg2 = artistOverride.progress_fg2;
+            if (artistOverride.scroll_speed) effective.scroll_speed = artistOverride.scroll_speed;
+            if (artistOverride.skip_sound) effective.skip_sound = artistOverride.skip_sound;
+            if (artistOverride.shield_sound) effective.shield_sound = artistOverride.shield_sound;
+        }
+    }
+
+    // Layer 2: Song override (higher priority)
+    if (trackName) {
+        const songOverride = await new Promise((resolve, reject) => {
+            db.get(
+                "SELECT * FROM jukepix_settings WHERE match_type = 'song' AND LOWER(TRIM(match_value)) = LOWER(TRIM(?)) AND (match_artist IS NULL OR LOWER(TRIM(match_artist)) = LOWER(TRIM(?)))",
+                [trackName, artistName || ''],
+                (err, row) => { if (err) reject(err); else resolve(row); }
+            );
+        });
+        if (songOverride) {
+            if (songOverride.text_color) effective.text_color = songOverride.text_color;
+            if (songOverride.progress_fg1) effective.progress_fg1 = songOverride.progress_fg1;
+            if (songOverride.progress_fg2) effective.progress_fg2 = songOverride.progress_fg2;
+            if (songOverride.scroll_speed) effective.scroll_speed = songOverride.scroll_speed;
+            if (songOverride.skip_sound) effective.skip_sound = songOverride.skip_sound;
+            if (songOverride.shield_sound) effective.shield_sound = songOverride.shield_sound;
+        }
+    }
+
+    return effective;
+}
 
 const trackCheckInterval = setInterval(async () => {
     if (!jukepixEnabled) {
@@ -78,28 +146,24 @@ const trackCheckInterval = setInterval(async () => {
         // Check if this is a new track
         if (!lastTrack || currentTrack.id !== lastTrack.id) {
             console.log('[JUKEPIX] New track detected:', currentTrack.name);
-            let progressBody;
-            if (currentTrack.name === 'Golden') {
-                // Send track info to formpix
-                progressBody = {
-                    fg1: 'fcc200',
-                    fg2: 'ffc627',
-                    startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
-                    duration: currentTrack.duration,
-                    interval: 100,
-                    length: parseInt(jukepixLength)
-                };
-            } else {
-                // Send track info to formpix
-                progressBody = {
-                    fg1: '00ff00',
-                    fg2: '29ff29',
-                    startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
-                    duration: currentTrack.duration,
-                    interval: 100,
-                    length: parseInt(jukepixLength)
-                };
-            }
+
+            // Resolve settings from DB (song > artist > defaults)
+            const settings = await resolveTrackSettings(currentTrack.name, currentTrack.artist);
+            console.log('[JUKEPIX] Resolved settings:', settings);
+
+            // Strip '#' from hex colors for the API
+            const fg1 = (settings.progress_fg1 || '#00ff00').replace('#', '');
+            const fg2 = (settings.progress_fg2 || '#29ff29').replace('#', '');
+
+            const progressBody = {
+                fg1: fg1,
+                fg2: fg2,
+                startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
+                duration: currentTrack.duration,
+                interval: 100,
+                length: parseInt(jukepixLength)
+            };
+
             console.log('[JUKEPIX] Sending new track to formpix:', JSON.stringify(progressBody, null, 2));
 
             const params = new URLSearchParams(progressBody);
@@ -131,8 +195,8 @@ const trackCheckInterval = setInterval(async () => {
                         });
                     } else {
                         console.log('[JUKEPIX] New track progress sent successfully');
-                        // Display track text after progress is sent
-                        displayTrack(currentTrack);
+                        // Display track text with resolved settings
+                        displayTrack(currentTrack, settings);
                     }
                     return response;
                 })
@@ -147,17 +211,19 @@ const trackCheckInterval = setInterval(async () => {
     }
 }, 2000); // Check every 2 seconds for new tracks 
 
-function displayTrack(track) {
+function displayTrack(track, settings = null) {
     if (!jukepixEnabled || !track) return;
 
     try {
         const trackName = track.name || "No Track Playing";
         const artistName = track.artist || "Unknown Artist";
         const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
-        let sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#ffffff")}&backgroundColor=${encodeURIComponent("#000000")}`;
-        if (trackName === 'Golden') {
-            sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#fcc200")}&backgroundColor=${encodeURIComponent("#000000")}`;
-        }
+
+        // Use resolved settings if provided, otherwise fall back to defaults
+        const textColor = (settings?.text_color || '#ffffff');
+        const bgColor = (settings?.bg_color || '#000000');
+
+        const sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent(textColor)}&backgroundColor=${encodeURIComponent(bgColor)}`;
 
         fetch(sayUrl, reqOptions)
             .then(async response => {

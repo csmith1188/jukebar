@@ -131,7 +131,6 @@
                     // Notify player.ejs via custom event
                     window.setPlayerState?.({ hasPaid: true });
                     window.dispatchEvent(new CustomEvent('paymentSuccess'));
-                    window.dispatchEvent(new CustomEvent('hidePaymentModal'));
                     return;
                 } else {
                     let errorMessage = result.error || result.message || 'Unknown error';

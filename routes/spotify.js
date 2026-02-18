@@ -5,6 +5,8 @@ const db = require('../utils/database');
 const { logTransaction } = require('./logging');
 const queueManager = require('../utils/queueManager');
 const { isAuthenticated } = require('../middleware/auth');
+const { isOwner } = require('../utils/owners');
+const { refund: poolRefund } = require('../utils/transferManager');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -48,7 +50,7 @@ function playRandomBlockedSound() {
 
 // Middleware to check if user has teacher permissions (owner or permission >= 4)
 const requireTeacherAccess = (req, res, next) => {
-    if (req.session?.permission >= 4 || req.session?.token?.id === Number(process.env.OWNER_ID)) {
+    if (req.session?.permission >= 4 || isOwner(req.session?.token?.id)) {
         return next();
     }
     return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
@@ -149,7 +151,7 @@ router.post('/search', async (req, res) => {
 
         // if the song is banned hide it
         const isTeacherPanel = source === 'teacher';
-        const isTeacher = (req.session?.permission >= 4 || req.session?.token?.id === Number(process.env.OWNER_ID));
+        const isTeacher = (req.session?.permission >= 4 || isOwner(req.session?.token?.id));
         try {
             const banned = await getBannedSongs();
             // Use function to check if track name starts with banned name and artist matches
@@ -319,8 +321,7 @@ router.post('/addToQueue', async (req, res) => {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
 
-    const ownerId = Number(process.env.OWNER_ID);
-    if (req.session.token.id === ownerId) {
+    if (isOwner(req.session.token.id)) {
         try {
             await ensureSpotifyAccessToken();
 
@@ -580,8 +581,7 @@ router.post('/skip', async (req, res) => {
     console.log('User ID:', req.session.token.id);
     console.log('User:', req.session.user);
 
-    const ownerId = Number(process.env.OWNER_ID);
-    if (req.session.token.id === ownerId) {
+    if (isOwner(req.session.token.id)) {
         console.log('Owner detected - checking for shields');
         try {
             await ensureSpotifyAccessToken();
@@ -814,7 +814,7 @@ router.post('/queue/add', async (req, res) => {
 router.post('/queue/skip', async (req, res) => {
     try {
         // Check permissions
-        if (req.session.permission < 4 && req.session.token?.id !== Number(process.env.OWNER_ID)) {
+        if (req.session.permission < 4 && !isOwner(req.session.token?.id)) {
             return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
         }
 
@@ -891,9 +891,42 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
     }
 
     // Owner bypass - they can add shields for free
-    const ownerId = Number(process.env.OWNER_ID);
-    const isOwner = userId === ownerId;
-    console.log('Is owner:', isOwner, '(userId:', userId, 'ownerId:', ownerId, ')');
+    const userIsOwner = isOwner(userId);
+    console.log('Is owner:', userIsOwner, '(userId:', userId, ')');
+
+    // Check payment FIRST before touching anything else
+    if (!userIsOwner) {
+        if (!req.session.hasPaid) {
+            console.error('Payment required but not received');
+            return res.status(402).json({ ok: false, error: 'Payment required' });
+        }
+        console.log('Payment verified');
+    } else {
+        console.log('Owner bypass - no payment required');
+    }
+
+    // Helper: consume hasPaid and attempt an automatic refund, then respond with the error
+    const failAndConsume = async (statusCode, payload) => {
+        req.session.hasPaid = false;
+        const lastPayment = req.session.payment;
+        const pin = process.env.PIN;
+        if (lastPayment && !lastPayment.refundedAt && lastPayment.amount > 0 && pin != null) {
+            try {
+                await poolRefund({
+                    from: Number(lastPayment.to),
+                    to: Number(lastPayment.from),
+                    amount: Number(lastPayment.amount),
+                    pin: Number(pin),
+                    reason: 'Jukebar refund - shield purchase failed'
+                });
+                req.session.payment.refundedAt = Date.now();
+                console.log('[purchaseShield] Auto-refund issued for failed shield purchase');
+            } catch (refundErr) {
+                console.error('[purchaseShield] Auto-refund failed:', refundErr.message);
+            }
+        }
+        return req.session.save(() => res.status(statusCode).json(payload));
+    };
 
     try {
         // Step 1: Verify track exists in queue
@@ -946,35 +979,21 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                     });
                     if (updateResult === 0) {
                         console.error('No rows updated for currently playing track');
-                        return res.status(404).json({ ok: false, error: 'Track no longer in queue or playing' });
+                        return failAndConsume(404, { ok: false, error: 'Track no longer in queue or playing' });
                     }
                 } else {
                     console.error('Track not found in queue or as currently playing');
-                    return res.status(404).json({ ok: false, error: 'Track not found in queue or playing' });
+                    return failAndConsume(404, { ok: false, error: 'Track not found in queue or playing' });
                 }
             } else {
                 console.error('Track not found in queue or as currently playing');
-                return res.status(404).json({ ok: false, error: 'Track not found in queue or playing' });
+                return failAndConsume(404, { ok: false, error: 'Track not found in queue or playing' });
             }
         } else {
             console.log('Track found:', track.track_name, 'by', track.artist_name);
 
-            // Step 2: Verify payment for non-owner
-            if (!isOwner) {
-                console.log('Step 2: Checking payment status...');
-                console.log('hasPaid:', req.session.hasPaid);
-
-                if (!req.session.hasPaid) {
-                    console.error('Payment required but not received');
-                    return res.status(402).json({ ok: false, error: 'Payment required' });
-                }
-                console.log('Payment verified');
-            } else {
-                console.log('Step 2: Skipped (owner bypass)');
-            }
-
-            // Step 3: Update shield count for specific track instance
-            console.log('Step 3: Incrementing shield count...');
+            // Step 2: Update shield count for specific track instance
+            console.log('Step 2: Incrementing shield count...');
             const addedAt = req.body.addedAt;
             const updateResult = await new Promise((resolve, reject) => {
                 const query = addedAt && addedAt !== '0'
@@ -994,12 +1013,12 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
 
             if (updateResult === 0) {
                 console.error('No rows updated - track may have been removed from queue');
-                return res.status(404).json({ ok: false, error: 'Track no longer in queue' });
+                return failAndConsume(404, { ok: false, error: 'Track no longer in queue' });
             }
         }
 
-        // Step 4: Log transaction
-        console.log('Step 4: Logging transaction...');
+        // Step 3: Log transaction
+        console.log('Step 3: Logging transaction...');
         try {
             await logTransaction({
                 userID: userId,
@@ -1008,7 +1027,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 trackURI: trackUri,
                 trackName: track.track_name,
                 artistName: track.artist_name,
-                cost: isOwner ? 0 : (Number(process.env.SKIP_SHIELD_AMOUNT) || 75)
+                cost: userIsOwner ? 0 : (Number(process.env.SKIP_SHIELD_AMOUNT) || 75)
             });
             console.log('Transaction logged');
         } catch (logErr) {
@@ -1016,15 +1035,15 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
             // Continue anyway - shield was added
         }
 
-        // Step 5: Clear payment flag for non-owner
-        if (!isOwner) {
-            console.log('Step 5: Clearing payment flag...');
+        // Step 4: Clear payment flag for non-owner
+        if (!userIsOwner) {
+            console.log('Step 4: Clearing payment flag...');
             req.session.hasPaid = false;
             console.log('Payment flag cleared');
         }
 
-        // Step 6: Broadcast queue update
-        console.log('Step 6: Broadcasting queue update...');
+        // Step 5: Broadcast queue update
+        console.log('Step 5: Broadcasting queue update...');
         try {
             // Force re-sync from Spotify to get updated metadata
             await queueManager.syncWithSpotify(spotifyApi);
@@ -1034,8 +1053,8 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
             // Continue anyway - shield was added
         }
 
-        // Step 7: Save session and respond
-        console.log('Step 7: Saving session and responding...');
+        // Step 6: Save session and respond
+        console.log('Step 6: Saving session and responding...');
         req.session.save((saveErr) => {
             if (saveErr) {
                 console.error('WARNING: Session save error (non-fatal):', saveErr);

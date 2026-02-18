@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { isAuthenticated } = require('../middleware/auth');
 const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
+const { isOwner } = require('../utils/owners');
 
 // Middleware to check if user has teacher permissions
 const requireTeacherAccess = (req, res, next) => {
-    if (req.session.permission >= 4 || req.session.token?.id === Number(process.env.OWNER_ID)) {
+    if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
         next();
     } else {
         return res.status(403).json({ error: 'Insufficient permissions' });
