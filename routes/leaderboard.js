@@ -1,6 +1,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { getOwnerIds } = require('../utils/owners');
 
 // Track if reset check interval is running
 let resetIntervalStarted = false;
@@ -71,13 +72,19 @@ router.get('/api/leaderboard/last-reset', (req, res) => {
 router.get('/api/leaderboard', async (req, res) => {
     try {
         const db = require('../utils/database');
+        const ownerIds = getOwnerIds();
+        const exclusion = ownerIds.length
+            ? `WHERE id NOT IN (${ownerIds.map(() => '?').join(',')})`
+            : '';
         const leaderboardData = await new Promise((resolve, reject) => {
-            db.all("SELECT displayName, COALESCE(songsPlayed, 0) as songsPlayed FROM users WHERE id != 4 ORDER BY songsPlayed DESC", (err, rows) => {
-                if (err) {
-                    return reject(err);
+            db.all(
+                `SELECT displayName, COALESCE(songsPlayed, 0) as songsPlayed FROM users ${exclusion} ORDER BY songsPlayed DESC`,
+                ownerIds,
+                (err, rows) => {
+                    if (err) return reject(err);
+                    resolve(rows);
                 }
-                resolve(rows);
-            });
+            );
         });
 
         res.json({ ok: true, leaderboard: leaderboardData });
