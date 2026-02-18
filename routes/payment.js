@@ -1,14 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../utils/database');
-const { isOwner, getFirstOwnerId } = require('../utils/owners');
+const { isOwner } = require('../utils/owners');
 const { transfer, refund: poolRefund } = require('../utils/transferManager');
 
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const POOL_ID = Number(process.env.POOL_ID);
+
+if (!POOL_ID || isNaN(POOL_ID)) {
+    console.error('[payment.js] FATAL: POOL_ID is not set or invalid in .env. Payments will be rejected.');
+}
 
 router.post('/transfer', async (req, res) => {
     try {
-        const to = getFirstOwnerId();
+        const to = POOL_ID;
+        if (!to || isNaN(to)) {
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: POOL_ID is not set. Contact your administrator.' });
+        }
         let { pin, reason } = req.body || {};
         const pendingAction = req.body?.pendingAction;
         
@@ -136,8 +144,11 @@ router.post('/transfer', async (req, res) => {
 
 router.post('/refund', async (req, res) => {
     try {
-        const from = getFirstOwnerId();
+        const from = POOL_ID;
         const reason = "Jukebar refund";
+        if (!from || isNaN(from)) {
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: POOL_ID is not set. Contact your administrator.' });
+        }
         const pin = process.env.PIN;
         const userRow = await new Promise((resolve, reject) => {
             db.get("SELECT id FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
