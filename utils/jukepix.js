@@ -146,24 +146,28 @@ const trackCheckInterval = setInterval(async () => {
         // Check if this is a new track
         if (!lastTrack || currentTrack.id !== lastTrack.id) {
             console.log('[JUKEPIX] New track detected:', currentTrack.name);
-
-            // Resolve settings from DB (song > artist > defaults)
-            const settings = await resolveTrackSettings(currentTrack.name, currentTrack.artist);
-            console.log('[JUKEPIX] Resolved settings:', settings);
-
-            // Strip '#' from hex colors for the API
-            const fg1 = (settings.progress_fg1 || '#00ff00').replace('#', '');
-            const fg2 = (settings.progress_fg2 || '#29ff29').replace('#', '');
-
-            const progressBody = {
-                fg1: fg1,
-                fg2: fg2,
-                startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
-                duration: currentTrack.duration,
-                interval: 100,
-                length: parseInt(jukepixLength)
-            };
-
+            let progressBody;
+            if (currentTrack.name === 'Golden') {
+                // Send track info to formpix
+                progressBody = {
+                    fg1: 'fcc200',
+                    fg2: 'ffc627',
+                    startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
+                    duration: currentTrack.duration,
+                    interval: 100,
+                    length: parseInt(jukepixLength)
+                };
+            } else {
+                // Send track info to formpix
+                progressBody = {
+                    fg1: '00ff00',
+                    fg2: '29ff29',
+                    startingFill: Math.round((currentTrack.progress / currentTrack.duration) * 100),
+                    duration: currentTrack.duration,
+                    interval: 100,
+                    length: parseInt(jukepixLength)
+                };
+            }
             console.log('[JUKEPIX] Sending new track to formpix:', JSON.stringify(progressBody, null, 2));
 
             const params = new URLSearchParams(progressBody);
@@ -218,12 +222,10 @@ function displayTrack(track, settings = null) {
         const trackName = track.name || "No Track Playing";
         const artistName = track.artist || "Unknown Artist";
         const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
-
-        // Use resolved settings if provided, otherwise fall back to defaults
-        const textColor = (settings?.text_color || '#ffffff');
-        const bgColor = (settings?.bg_color || '#000000');
-
-        const sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent(textColor)}&backgroundColor=${encodeURIComponent(bgColor)}`;
+        let sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#ffffff")}&backgroundColor=${encodeURIComponent("#000000")}`;
+        if (trackName === 'Golden') {
+            sayUrl = `${jukepix}/api/say?text=${encodeURIComponent(displayText)}&textColor=${encodeURIComponent("#fcc200")}&backgroundColor=${encodeURIComponent("#000000")}`;
+        }
 
         fetch(sayUrl, reqOptions)
             .then(async response => {
