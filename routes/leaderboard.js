@@ -78,7 +78,7 @@ router.get('/api/leaderboard', async (req, res) => {
             : '';
         const leaderboardData = await new Promise((resolve, reject) => {
             db.all(
-                `SELECT displayName, COALESCE(songsPlayed, 0) as songsPlayed FROM users ${exclusion} ORDER BY songsPlayed DESC`,
+                `SELECT displayName, COALESCE(songsPlayed, 0) as songsPlayed, COALESCE(isBanned, 0) as isBanned FROM users ${exclusion} ORDER BY songsPlayed DESC`,
                 ownerIds,
                 (err, rows) => {
                     if (err) return reject(err);

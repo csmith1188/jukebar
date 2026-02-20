@@ -145,6 +145,14 @@
                 return;
             }
 
+            // Create a table with tbody for the user rows
+            const table = document.createElement('table');
+            table.className = 'user-table';
+            table.style.width = '100%';
+            const tbody = document.createElement('tbody');
+            table.appendChild(tbody);
+            list.appendChild(table);
+
             users.forEach(user => {
                 const tr = document.createElement('tr');
                 const isBanned = !!(user.isBanned);
