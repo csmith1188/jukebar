@@ -388,7 +388,7 @@ router.post('/addToQueue', async (req, res) => {
                 );
             });
 
-            if (anonMode !== 1) {
+            if (anonMode !== 1 && !isOwner(req.session.token?.id)) {
                 db.run(
                     "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
                     (err) => {
@@ -450,11 +450,6 @@ router.post('/addToQueue', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
         }
 
-        // Check banned songs
-        if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
-            return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
-        }
-
         await spotifyApi.addToQueue(uri);
 
         // Also add to queueManager for WebSocket updates
@@ -498,7 +493,7 @@ router.post('/addToQueue', async (req, res) => {
             );
         });
 
-        if (anonMode !== 1) {
+        if (anonMode !== 1 && !isOwner(req.session.token?.id)) {
             db.run(
                 "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
                 (err) => {

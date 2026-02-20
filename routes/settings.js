@@ -92,6 +92,38 @@ router.put('/api/settings/defaults', isAuthenticated, requireTeacher, async (req
     }
 });
 
+/**
+ * POST /api/settings/defaults/reset
+ * Reset global JukePix defaults back to their original values.
+ */
+router.post('/api/settings/defaults/reset', isAuthenticated, requireTeacher, async (req, res) => {
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`
+                UPDATE jukepix_defaults SET
+                    text_color = '#ffffff',
+                    bg_color = '#000000',
+                    progress_fg1 = '#00ff00',
+                    progress_fg2 = '#29ff29',
+                    gradient_start = '#1ed760',
+                    gradient_end = '#0c4d22',
+                    scroll_speed = 50,
+                    skip_sound = NULL,
+                    shield_sound = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = 1
+            `, function (err) {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        res.json({ ok: true, message: 'Defaults reset' });
+    } catch (error) {
+        console.error('Error resetting defaults:', error);
+        res.status(500).json({ ok: false, error: 'Failed to reset defaults' });
+    }
+});
+
 // ─── PER-ARTIST / PER-SONG OVERRIDES ────────────────────────────────────────
 
 /**
