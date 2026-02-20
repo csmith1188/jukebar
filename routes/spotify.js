@@ -406,6 +406,17 @@ router.post('/addToQueue', async (req, res) => {
         }
     }
 
+    // For non-admin users, check if banned
+    const userBanned = await new Promise((resolve, reject) => {
+        db.get("SELECT COALESCE(isBanned, 0) as isBanned FROM users WHERE id = ?", [req.session.token.id], (err, row) => {
+            if (err) reject(err);
+            else resolve(row && row.isBanned === 1);
+        });
+    });
+    if (userBanned) {
+        return res.status(403).json({ ok: false, error: 'You have been banned from using Jukebar. Contact your teacher.' });
+    }
+
     // For non-admin users, check payment
     if (!req.session.hasPaid) {
         //console.log('addToQueue - Payment required. User ID:', req.session.token.id, 'hasPaid:', req.session.hasPaid);
@@ -433,11 +444,6 @@ router.post('/addToQueue', async (req, res) => {
             uri: track.uri,
             cover: track.album.images[0].url,
         };
-
-        // Check banned songs
-        if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
-            return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
-        }
 
         // Check banned songs
         if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
@@ -640,6 +646,17 @@ router.post('/skip', async (req, res) => {
             }
             return res.status(500).json({ ok: false, error: 'Failed to skip', details: error.message });
         }
+    }
+
+    // For non-admin users, check if banned
+    const skipUserBanned = await new Promise((resolve, reject) => {
+        db.get("SELECT COALESCE(isBanned, 0) as isBanned FROM users WHERE id = ?", [req.session.token.id], (err, row) => {
+            if (err) reject(err);
+            else resolve(row && row.isBanned === 1);
+        });
+    });
+    if (skipUserBanned) {
+        return res.status(403).json({ ok: false, error: 'You have been banned from using Jukebar. Contact your teacher.' });
     }
 
     // For non-admin users, check payment and claim it
@@ -893,6 +910,19 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
     // Owner bypass - they can add shields for free
     const userIsOwner = isOwner(userId);
     console.log('Is owner:', userIsOwner, '(userId:', userId, ')');
+
+    // Check if user is banned (non-owners only)
+    if (!userIsOwner) {
+        const shieldUserBanned = await new Promise((resolve, reject) => {
+            db.get("SELECT COALESCE(isBanned, 0) as isBanned FROM users WHERE id = ?", [userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row && row.isBanned === 1);
+            });
+        });
+        if (shieldUserBanned) {
+            return res.status(403).json({ ok: false, error: 'You have been banned from using Jukebar. Contact your teacher.' });
+        }
+    }
 
     // Check payment FIRST before touching anything else
     if (!userIsOwner) {
