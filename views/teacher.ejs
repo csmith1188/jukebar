@@ -88,6 +88,8 @@
         </div>
 </body>
 <script>
+    const ownerIDs = <%- JSON.stringify(ownerIDs) %>;
+
     function showNotification(message, type = 'info') {
         console.log('showNotification called:', message, type);
         const notification = document.createElement('div');
@@ -145,16 +147,32 @@
 
             users.forEach(user => {
                 const tr = document.createElement('tr');
+                const isBanned = !!(user.isBanned);
+                const isTeacherOrOwner = (user.permission >= 4) || ownerIDs.includes(user.id);
 
                 const nameTd = document.createElement('td');
-                nameTd.textContent = user.displayName || user.username || '';
+                const displayName = user.displayName || user.username || '';
+                let nameHtml = `<span>${displayName}</span>`;
+                if (isBanned) {
+                    nameHtml += '<span style="color:#ff4444;font-size:0.8em;font-weight:600;margin-left:4px;">BANNED</span>';
+                }
+                if (isTeacherOrOwner) {
+                    nameHtml += '<span style="color:#1db954;font-size:0.8em;font-weight:600;margin-left:4px;">TEACHER</span>';
+                }
+                nameTd.innerHTML = nameHtml;
 
                 const actionsTd = document.createElement('td');
-                const btn = document.createElement('button');
-                btn.innerHTML = '<img src="/img/search.png" alt="Transactions">';
-                btn.title = 'View Transactions';
-                btn.className = 'jp-icon-btn';
-                btn.addEventListener('click', async () => {
+
+                // Wrap action buttons in a flex container inside the td
+                const actionsWrapper = document.createElement('div');
+                actionsWrapper.style.cssText = 'display:flex;gap:6px;align-items:center;justify-content:flex-end;';
+
+                // Transactions button
+                const txnBtn = document.createElement('button');
+                txnBtn.innerHTML = '<img src="/img/search.png" alt="Transactions">';
+                txnBtn.title = 'View Transactions';
+                txnBtn.className = 'jp-icon-btn';
+                txnBtn.addEventListener('click', async () => {
                     try {
                         await showUserTransactions(user.displayName);
                     } catch (err) {
@@ -163,7 +181,49 @@
                     }
                 });
 
-                actionsTd.appendChild(btn);
+                // Ban/Unban button
+                const banBtn = document.createElement('button');
+                banBtn.textContent = isBanned ? 'Unban' : 'Ban';
+                banBtn.className = isBanned ? 'unban-button user-ban-btn' : 'ban-button user-ban-btn';
+                banBtn.style.cssText = 'padding:4px 12px;font-size:0.85em;border-radius:6px;cursor:pointer;border:none;font-weight:600;';
+                if (isBanned) {
+                    banBtn.style.background = '#1db954';
+                    banBtn.style.color = '#fff';
+                } else {
+                    banBtn.style.background = '#ff4444';
+                    banBtn.style.color = '#fff';
+                }
+                banBtn.addEventListener('click', async () => {
+                    const action = isBanned ? 'unban' : 'ban';
+                    const confirmMsg = isBanned
+                        ? `Unban ${user.displayName}? They will be able to use Jukebar again.`
+                        : `Ban ${user.displayName}? They will not be able to queue songs, skip, or start ban votes.`;
+                    if (!confirm(confirmMsg)) return;
+
+                    try {
+                        const r = await fetch(`/api/users/${action}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: user.displayName })
+                        });
+                        const data = await r.json();
+                        if (r.ok && (data.success || data.ok)) {
+                            showNotification(`${user.displayName} has been ${action === 'ban' ? 'banned' : 'unbanned'}`, 'success');
+                            fetchUsers(); // Refresh the list
+                        } else {
+                            showNotification(data.error || `Failed to ${action} user`, 'error');
+                        }
+                    } catch (err) {
+                        console.error(`Error ${action}ning user:`, err);
+                        showNotification(`Network error: could not ${action} user`, 'error');
+                    }
+                });
+
+                actionsWrapper.appendChild(txnBtn);
+                if (!isTeacherOrOwner) {
+                    actionsWrapper.appendChild(banBtn);
+                }
+                actionsTd.appendChild(actionsWrapper);
                 tr.appendChild(nameTd);
                 tr.appendChild(actionsTd);
                 tbody.appendChild(tr);

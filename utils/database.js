@@ -24,6 +24,34 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     songsPlayed INTEGER DEFAULT 0
 );`);
 
+// Migrate: add isBanned column if it doesn't exist
+db.all("PRAGMA table_info(users)", (err, columns) => {
+    if (err) {
+        console.error('Error checking users schema:', err);
+        return;
+    }
+    const hasIsBanned = columns && columns.some(c => c.name === 'isBanned');
+    if (!hasIsBanned) {
+        db.run("ALTER TABLE users ADD COLUMN isBanned INTEGER DEFAULT 0", (alterErr) => {
+            if (alterErr) {
+                console.error('Error adding isBanned column:', alterErr);
+            } else {
+                console.log('Added isBanned column to users table');
+            }
+        });
+    }
+    const hasPermission = columns && columns.some(c => c.name === 'permission');
+    if (!hasPermission) {
+        db.run("ALTER TABLE users ADD COLUMN permission INTEGER DEFAULT 2", (alterErr) => {
+            if (alterErr) {
+                console.error('Error adding permission column:', alterErr);
+            } else {
+                console.log('Added permission column to users table');
+            }
+        });
+    }
+});
+
 db.run(`CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL,

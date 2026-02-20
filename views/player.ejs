@@ -169,6 +169,55 @@
                     'use strict';
 
                     let useJukebar = true;
+                    let userIsBanned = false;
+
+                    // Check if user is banned on page load
+                    async function checkBanStatus() {
+                        try {
+                            const res = await fetch('/api/me/banned', { headers: { 'Accept': 'application/json' } });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (data.banned) {
+                                    userIsBanned = true;
+                                    showBanBanner();
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Error checking ban status:', err);
+                        }
+                    }
+
+                    function showBanBanner() {
+                        // Remove existing banner if any
+                        const existing = document.getElementById('ban-banner');
+                        if (existing) existing.remove();
+
+                        const banner = document.createElement('div');
+                        banner.id = 'ban-banner';
+                        banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:10000;background:#ff4444;color:#fff;text-align:center;padding:12px 16px;font-weight:600;font-size:1rem;box-shadow:0 -2px 8px rgba(0,0,0,0.3);';
+                        banner.textContent = '🚫 You have been banned from Jukebar. LOL COULD NOT BE ME AHAHAHAHAHAH';
+                        document.body.appendChild(banner);
+                    }
+
+                    checkBanStatus();
+
+                    // Real-time ban/unban via WebSocket
+                    socket.on('userBanned', (data) => {
+                        if (data.userId == currentID) {
+                            userIsBanned = true;
+                            showBanBanner();
+                            Notify('You have been banned from Jukebar by your teacher.', 'error');
+                        }
+                    });
+
+                    socket.on('userUnbanned', (data) => {
+                        if (data.userId == currentID) {
+                            userIsBanned = false;
+                            const banner = document.getElementById('ban-banner');
+                            if (banner) banner.remove();
+                            Notify('You have been unbanned! You can use Jukebar again.', 'success');
+                        }
+                    });
 
                     socket.on('auxiliaryPermission', (permission) => {
                         if (permission <= userPermission) {
@@ -192,6 +241,12 @@
                     }
 
                     async function checkPaymentAndPlay(uri) {
+                        // Check if user is banned
+                        if (userIsBanned) {
+                            Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
+                            return;
+                        }
+
                         // Check if Jukebar is enabled
                         if (!useJukebar) {
                             Notify('Jukebar is currently disabled by your teacher.', 'error');
@@ -218,6 +273,12 @@
 
                     async function checkPaymentAndSkip() {
                         console.log('⏭️ Skip clicked - currentlyPlayingUri:', currentlyPlayingUri);
+
+                        // Check if user is banned
+                        if (userIsBanned) {
+                            Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
+                            return;
+                        }
 
                         // Check if Jukebar is enabled
                         if (!useJukebar) {
@@ -538,6 +599,12 @@
                             const uri = button.dataset.uri;
                             const name = button.dataset.name;
                             const artist = button.dataset.artist;
+
+                            // Check if user is banned
+                            if (userIsBanned) {
+                                Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
+                                return;
+                            }
                             
                             // Check if user is owner (owners can start votes for free)
                             const userIsOwner = isOwnerClient(currentID);
@@ -577,6 +644,11 @@
                     };
 
                     window.purchaseShield = function (trackUri, addedAt) {
+                        if (userIsBanned) {
+                            Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
+                            return;
+                        }
+
                         if (!useJukebar) {
                             Notify('Jukebar is currently disabled by your teacher.', 'error');
                             return;

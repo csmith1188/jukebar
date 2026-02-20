@@ -27,6 +27,9 @@ router.get('/login', (req, res) => {
         // console.log('Token data:', tokenData);
 //console.log('User permission:', req.session.permission);
         
+        // Update permission level on every login so it's available for ban checks
+        db.run("UPDATE users SET permission = ? WHERE id = ?", [tokenData.permissions || 2, tokenData.id]);
+
         db.run("INSERT INTO users (id, displayName, pin) VALUES (?, ?, ?)", [tokenData.id, tokenData.displayName, null], (err) => {
             // if the table doesnt exist, create it
             if (err && err.message.includes('no such table')) {

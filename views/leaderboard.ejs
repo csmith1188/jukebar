@@ -39,12 +39,14 @@
                     else if (rank === 2) rankClass = 'second';
                     else if (rank === 3) rankClass = 'third';
                     
+                    const bannedBadge = user.isBanned ? '<span style="color:#ff4444;font-size:0.75em;font-weight:600;margin-left:6px;">😂 BANNED LOL 😂</span>' : '';
+
                     const item = document.createElement('div');
                     item.className = 'leaderboard-item';
                     item.innerHTML = `
                         <div class="rank ${rankClass}">#${rank}</div>
                         <div class="user-info">
-                            <div class="user-name">${user.displayName}</div>
+                            <div class="user-name">${user.displayName}${bannedBadge}</div>
                         </div>
                         `;
                         if (user.songsPlayed === 1) {

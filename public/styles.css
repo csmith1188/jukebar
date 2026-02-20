@@ -1321,6 +1321,8 @@ p {
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
     text-align: right;
+    width: 1%;
+    white-space: nowrap;
 }
 
 .user-table td {
@@ -1345,15 +1347,14 @@ p {
 /* Status indicators */
 .user-table td:nth-child(2) {
     font-weight: 500;
+    width: 1%;
+    white-space: nowrap;
 }
 
 .user-table tbody tr td:nth-child(2) {
     position: relative;
     text-align: right;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 6px 16px;
+    vertical-align: middle;
 }
 
 /* Action buttons */

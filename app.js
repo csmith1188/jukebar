@@ -16,6 +16,9 @@ const port = process.env.PORT || 5000;
 const server = http.createServer(app);
 const io = new Server(server);
 
+// Make io accessible from routes via req.app.get('io')
+app.set('io', io);
+
 app.set('view engine', 'ejs');
 app.set('leaderboardLastReset', Date.now());
 app.use(express.json());
@@ -140,6 +143,18 @@ io.on('connection', (socket) => {
         try {
             const { trackUri, trackName, trackArtist, initiator } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
+
+            // Check if user is banned
+            const userBanRow = await new Promise((resolve, reject) => {
+                db.get("SELECT COALESCE(isBanned, 0) as isBanned FROM users WHERE id = ?", [userId], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                });
+            });
+            if (userBanRow && userBanRow.isBanned === 1) {
+                socket.emit('banVoteError', { error: 'You have been banned from using Jukebar. Contact your teacher.' });
+                return;
+            }
 
             // Check if user is an owner (bypass payment)
             const userIsOwner = isOwner(userId);
