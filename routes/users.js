@@ -20,7 +20,7 @@ router.get('/api/users', isAuthenticated, requireTeacherAccess, async (req, res)
         
         // Get all users from database
         const users = await new Promise((resolve, reject) => {
-            db.all("SELECT id, displayName FROM users ORDER BY displayName COLLATE NOCASE", (err, rows) => {
+            db.all("SELECT id, displayName, COALESCE(isBanned, 0) as isBanned, COALESCE(permission, 2) as permission FROM users ORDER BY displayName COLLATE NOCASE", (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -104,6 +104,22 @@ router.post('/api/users/ban', isAuthenticated, requireTeacherAccess, async (req,
             return res.status(400).json({ error: 'Username is required' });
         }
 
+        // Check if target user is a teacher or owner — cannot ban them
+        const targetUser = await new Promise((resolve, reject) => {
+            db.get("SELECT id, COALESCE(permission, 2) as permission FROM users WHERE displayName = ?", [username], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        if (targetUser.permission >= 4 || isOwner(targetUser.id)) {
+            return res.status(403).json({ error: 'Cannot ban a teacher or owner' });
+        }
+
         // Update user's banned status in database
         await new Promise((resolve, reject) => {
             db.run("UPDATE users SET isBanned = 1 WHERE displayName = ?", [username], function(err) {
@@ -118,6 +134,13 @@ router.post('/api/users/ban', isAuthenticated, requireTeacherAccess, async (req,
         });
         
         console.log(`Banning user: ${username}`);
+
+        // Emit real-time ban event to all clients
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('userBanned', { userId: targetUser.id, username });
+        }
+
         res.json({ success: true, message: `User ${username} has been banned` });
     } catch (error) {
         console.error('Error banning user:', error);
@@ -149,10 +172,63 @@ router.post('/api/users/unban', isAuthenticated, requireTeacherAccess, async (re
         });
         
         console.log(`Unbanning user: ${username}`);
+
+        // Emit real-time unban event to all clients
+        const io = req.app.get('io');
+        if (io) {
+            // Look up the user's ID for targeted unban
+            const unbannedUser = await new Promise((resolve, reject) => {
+                db.get("SELECT id FROM users WHERE displayName = ?", [username], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                });
+            });
+            if (unbannedUser) {
+                io.emit('userUnbanned', { userId: unbannedUser.id, username });
+            }
+        }
+
         res.json({ success: true, message: `User ${username} has been unbanned` });
     } catch (error) {
         console.error('Error unbanning user:', error);
         res.status(500).json({ error: 'Failed to unban user' });
+    }
+});
+
+// Get list of banned users (for teacher panel)
+router.get('/api/users/banned', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    try {
+        const db = require('../utils/database');
+        const users = await new Promise((resolve, reject) => {
+            db.all("SELECT id, displayName FROM users WHERE isBanned = 1 ORDER BY displayName COLLATE NOCASE", (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        res.json(users);
+    } catch (error) {
+        console.error('Error fetching banned users:', error);
+        res.status(500).json({ error: 'Failed to fetch banned users' });
+    }
+});
+
+// Check if the current user is banned (student self-check)
+router.get('/api/me/banned', isAuthenticated, async (req, res) => {
+    try {
+        const db = require('../utils/database');
+        const userId = req.session.token?.id;
+        if (!userId) return res.json({ banned: false });
+
+        const user = await new Promise((resolve, reject) => {
+            db.get("SELECT COALESCE(isBanned, 0) as isBanned FROM users WHERE id = ?", [userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+        res.json({ banned: !!(user && user.isBanned) });
+    } catch (error) {
+        console.error('Error checking ban status:', error);
+        res.json({ banned: false });
     }
 });
 
