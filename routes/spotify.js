@@ -388,7 +388,7 @@ router.post('/addToQueue', async (req, res) => {
                 );
             });
 
-            if (anonMode !== 1) {
+            if (anonMode !== 1 && !isOwner(req.session.token?.id)) {
                 db.run(
                     "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
                     (err) => {
@@ -498,7 +498,7 @@ router.post('/addToQueue', async (req, res) => {
             );
         });
 
-        if (anonMode !== 1) {
+        if (anonMode !== 1 && !isOwner(req.session.token?.id)) {
             db.run(
                 "UPDATE users SET songsPlayed = songsPlayed + 1 WHERE id = ?", [req.session.token?.id],
                 (err) => {
