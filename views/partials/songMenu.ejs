@@ -89,6 +89,13 @@ document.getElementById('contextBanBtn').addEventListener('click', function() {
         Notify('No track selected!');
         return;
     }
+
+    // Check if user is banned
+    if (typeof userIsBanned !== 'undefined' && userIsBanned) {
+        Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
+        dropdown.style.display = 'none';
+        return;
+    }
     
     // Get track details from the last updateSongMenu event
     const trackData = dropdown.dataset;
