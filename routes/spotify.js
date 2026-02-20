@@ -450,11 +450,6 @@ router.post('/addToQueue', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
         }
 
-        // Check banned songs
-        if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
-            return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
-        }
-
         await spotifyApi.addToQueue(uri);
 
         // Also add to queueManager for WebSocket updates
