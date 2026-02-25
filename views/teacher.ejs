@@ -507,8 +507,20 @@
         });
     });
 
+    let searchDebounce = null;
+    document.getElementById('searchInput')?.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query) {
+            document.getElementById('searchResults').innerHTML = '';
+            return;
+        }
+        searchDebounce = setTimeout(() => searchSpotify(), 400);
+    });
+
     document.getElementById('searchForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
+        clearTimeout(searchDebounce);
         searchSpotify();
     });
     // Ban/Unban button handler (event delegation)

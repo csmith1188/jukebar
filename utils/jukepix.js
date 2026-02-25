@@ -1,6 +1,7 @@
 
 require('dotenv').config({ quiet: true });
 
+const { transliterate } = require('transliterate');
 const spotifyApi = require('./spotify').spotifyApi;
 const db = require('./database');
 const apikey = process.env.JUKEPIX_API_KEY;
@@ -215,8 +216,8 @@ function displayTrack(track, settings = null) {
     if (!jukepixEnabled || !track) return;
 
     try {
-        const trackName = track.name || "No Track Playing";
-        const artistName = track.artist || "Unknown Artist";
+        const trackName = transliterate(track.name || "No Track Playing");
+        const artistName = transliterate(track.artist || "Unknown Artist");
         const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
 
         // Use resolved settings if provided, otherwise fall back to defaults
