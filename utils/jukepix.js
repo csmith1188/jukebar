@@ -211,22 +211,27 @@ const trackCheckInterval = setInterval(async () => {
 
             // Check if the display still shows this track (someone may have changed it)
             try {
-                const displayRes = await fetch(`${jukepix}/getDisplay`, {
+                const getDisplayUrl = `${jukepix}/api/getDisplay`;
+                console.log('[JUKEPIX] Fetching display from:', getDisplayUrl);
+                const displayRes = await fetch(getDisplayUrl, {
                     headers: { 'API': apikey }
                 });
+                console.log('[JUKEPIX] getDisplay response status:', displayRes.status);
                 if (displayRes.ok) {
                     const displayData = await displayRes.json();
                     const currentMessage = displayData?.display?.message || '';
-                    const trackName = transliterate(currentTrack.name || 'No Track Playing');
-                    const artistName = transliterate(currentTrack.artist || 'Unknown Artist');
-                    const expectedMessage = `\u266a\u266b ${trackName} - ${artistName} \u266a\u266b        `;
 
-                    if (currentMessage !== expectedMessage) {
-                        console.log('[JUKEPIX] Display mismatch - restoring track display');
-                        console.log('[JUKEPIX] Expected:', expectedMessage);
-                        console.log('[JUKEPIX] Got:', currentMessage);
+                    console.log('[JUKEPIX] Display check - current:', JSON.stringify(currentMessage));
+
+                    const hasMusicSymbol = currentMessage.includes('\u266a') || currentMessage.includes('\u266b');
+                    if (!hasMusicSymbol) {
+                        console.log('[JUKEPIX] Display has no music symbol - restoring song');
                         displayTrack(currentTrack, lastSettings);
+                    } else {
+                        console.log('[JUKEPIX] Display already showing a song - leaving it alone');
                     }
+                } else {
+                    console.warn('[JUKEPIX] getDisplay returned non-ok status:', displayRes.status);
                 }
             } catch (err) {
                 console.error('[JUKEPIX] Display integrity check error:', err.message);
