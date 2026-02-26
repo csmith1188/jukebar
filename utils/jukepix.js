@@ -27,6 +27,7 @@ const reqOptions =
 
 let currentTrack = null;
 let lastTrack = null;
+let lastSettings = null;
 
 /**
  * Resolve effective JukePix display settings for a track.
@@ -150,6 +151,7 @@ const trackCheckInterval = setInterval(async () => {
 
             // Resolve settings from DB (song > artist > defaults)
             const settings = await resolveTrackSettings(currentTrack.name, currentTrack.artist);
+            lastSettings = settings;
             console.log('[JUKEPIX] Resolved settings:', settings);
 
             // Strip '#' from hex colors for the API
@@ -206,6 +208,29 @@ const trackCheckInterval = setInterval(async () => {
             lastTrack = currentTrack;
         } else {
             console.log('[JUKEPIX] Same track still playing:', currentTrack.name);
+
+            // Check if the display still shows this track (someone may have changed it)
+            try {
+                const displayRes = await fetch(`${jukepix}/getDisplay`, {
+                    headers: { 'API': apikey }
+                });
+                if (displayRes.ok) {
+                    const displayData = await displayRes.json();
+                    const currentMessage = displayData?.display?.message || '';
+                    const trackName = transliterate(currentTrack.name || 'No Track Playing');
+                    const artistName = transliterate(currentTrack.artist || 'Unknown Artist');
+                    const expectedMessage = `\u266a\u266b ${trackName} - ${artistName} \u266a\u266b        `;
+
+                    if (currentMessage !== expectedMessage) {
+                        console.log('[JUKEPIX] Display mismatch - restoring track display');
+                        console.log('[JUKEPIX] Expected:', expectedMessage);
+                        console.log('[JUKEPIX] Got:', currentMessage);
+                        displayTrack(currentTrack, lastSettings);
+                    }
+                }
+            } catch (err) {
+                console.error('[JUKEPIX] Display integrity check error:', err.message);
+            }
         }
     } catch (error) {
         console.error('[JUKEPIX] Track check error:', error.message, error);
