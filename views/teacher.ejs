@@ -155,11 +155,13 @@
 
             users.forEach(user => {
                 const tr = document.createElement('tr');
+                tr.className = 'user-row';
+                const displayName = user.displayName || user.username || '';
+                tr.dataset.username = displayName.toLowerCase();
                 const isBanned = !!(user.isBanned);
                 const isTeacherOrOwner = (user.permission >= 4) || ownerIDs.includes(user.id);
 
                 const nameTd = document.createElement('td');
-                const displayName = user.displayName || user.username || '';
                 let nameHtml = `<span>${displayName}</span>`;
                 if (isBanned) {
                     nameHtml += '<span style="color:#ff4444;font-size:0.8em;font-weight:600;margin-left:4px;">BANNED</span>';
@@ -501,7 +503,7 @@
     const searchInput = document.getElementById('userSearchInput');
     searchInput?.addEventListener('input', () => {
         const filter = searchInput.value.toLowerCase();
-        const rows = document.getElementById('userList').querySelectorAll('.user-row');
+        const rows = document.getElementById('userList').querySelectorAll('tr.user-row');
         rows.forEach(row => {
             row.style.display = row.dataset.username.includes(filter) ? '' : 'none';
         });

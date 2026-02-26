@@ -9,7 +9,7 @@
     "socket.io-client": "^4.8.1",
     "spotify-web-api-node": "^5.0.2",
     "sqlite3": "^5.1.7",
-    "transliterate": "^1.0.1"
+    "transliteration": "^2.6.1"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
