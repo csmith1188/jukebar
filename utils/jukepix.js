@@ -1,7 +1,7 @@
 
 require('dotenv').config({ quiet: true });
 
-const { transliterate } = require('transliterate');
+const transliterate = require('transliterate');
 const spotifyApi = require('./spotify').spotifyApi;
 const db = require('./database');
 const apikey = process.env.JUKEPIX_API_KEY;
