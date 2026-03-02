@@ -887,6 +887,7 @@ router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
 router.post('/purchaseShield', isAuthenticated, async (req, res) => {
     console.log('=== PURCHASE SHIELD REQUEST ===');
     const { trackUri } = req.body;
+    const quantity = Math.max(1, Math.min(1000, parseInt(req.body.quantity) || 1));
     const userId = req.session.token?.id;
     const displayName = req.session.user;
 
@@ -997,7 +998,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 // If found, update shields for this metadata entry
                 if (track) {
                     const updateResult = await new Promise((resolve, reject) => {
-                        db.run("UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ? AND added_at = ?", [trackUri, track.added_at], function (err) {
+                        db.run("UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + ? WHERE track_uri = ? AND added_at = ?", [quantity, trackUri, track.added_at], function (err) {
                             if (err) {
                                 console.error('Database error updating shields for current track:', err);
                                 reject(err);
@@ -1022,14 +1023,28 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
         } else {
             console.log('Track found:', track.track_name, 'by', track.artist_name);
 
+            // Check if track already has 1000 shields
+            const currentShields = track.skip_shields || 0;
+            if (currentShields >= 1000) {
+                console.log('Track already has max shields (1000)');
+                return failAndConsume(400, { ok: false, error: 'This song already has the maximum of 1000 shields and cannot have more added' });
+            }
+
+            // Check if adding the requested quantity would exceed 1000
+            if (currentShields + quantity > 1000) {
+                const availableSlots = 1000 - currentShields;
+                console.log(`Cannot add ${quantity} shields; only ${availableSlots} slots available`);
+                return failAndConsume(400, { ok: false, error: `This song already has ${currentShields} shields. You can only add ${availableSlots} more to reach the maximum of 1000` });
+            }
+
             // Step 2: Update shield count for specific track instance
             console.log('Step 2: Incrementing shield count...');
             const addedAt = req.body.addedAt;
             const updateResult = await new Promise((resolve, reject) => {
                 const query = addedAt && addedAt !== '0'
-                    ? "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ? AND added_at = ?"
-                    : "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + 1 WHERE track_uri = ?";
-                const params = addedAt && addedAt !== '0' ? [trackUri, addedAt] : [trackUri];
+                    ? "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + ? WHERE track_uri = ? AND added_at = ?"
+                    : "UPDATE queue_metadata SET skip_shields = COALESCE(skip_shields, 0) + ? WHERE track_uri = ?";
+                const params = addedAt && addedAt !== '0' ? [quantity, trackUri, addedAt] : [quantity, trackUri];
                 db.run(query, params, function (err) {
                     if (err) {
                         console.error('Database error updating shields:', err);
@@ -1057,7 +1072,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                 trackURI: trackUri,
                 trackName: track.track_name,
                 artistName: track.artist_name,
-                cost: userIsOwner ? 0 : (Number(process.env.SKIP_SHIELD_AMOUNT) || 75)
+                cost: userIsOwner ? 0 : (Number(process.env.SKIP_SHIELD_AMOUNT) || 75) * quantity
             });
             console.log('Transaction logged');
         } catch (logErr) {
@@ -1091,7 +1106,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
             }
             console.log('Shield purchase complete!');
             console.log('================================');
-            res.json({ ok: true, message: 'Shield added successfully' });
+            res.json({ ok: true, message: `${quantity > 1 ? quantity + ' shields' : 'Shield'} added successfully` });
         });
 
     } catch (error) {
