@@ -7,6 +7,24 @@
         </div>
         <span class="discount-display" id="discount"></span>
     </div>
+    <div class="row" id="shieldQuantityRow" style="display:none;">
+        <label class="small" for="shield-quantity-input">How many shields? <span style="color:#535353;font-size:0.85em;">(max 1000)</span></label>
+        <input type="number" id="shield-quantity-input" class="shield-quantity-input" min="1" max="1000"
+            placeholder="1"
+            onkeydown="if(['+','-','.','e','E'].includes(event.key)) event.preventDefault();"
+            oninput="
+                this.value = this.value.replace(/[^0-9]/g, '');
+                let v = parseInt(this.value) || 1;
+                if (v > 1000) {
+                    Notify('You\'ve reached the maximum of 1000 shields per purchase', 'error');
+                    v = 1000;
+                    this.value = v;
+                }
+                if (v < 1) this.value = 1;
+                pendingShieldQuantity = v;
+                window.dispatchEvent(new CustomEvent('updatePrice', { detail: { pendingAction, quantity: pendingShieldQuantity } }));
+            ">
+    </div>
     <div class="row">
         <label class="small">PIN</label>
         <div><input id="pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
@@ -143,9 +161,17 @@
             }
         }
 
-        async function getPrice() {
+        let baseShieldPrice = null;
+
+        async function getPrice(quantity = 1) {
             const state = window.getPlayerState?.() || {};
             const pendingAction = state.pendingAction;
+
+            // For shields, skip the API call if we already have the base price
+            if (pendingAction === 'Skip Shield' && baseShieldPrice !== null) {
+                document.getElementById('price').innerText = `${baseShieldPrice * quantity} Digipogs`;
+                return;
+            }
 
             try {
                 const res = await fetch('/getAmount', {
@@ -156,7 +182,17 @@
                 const data = await res.json();
 
                 if (data.ok) {
-                    document.getElementById('price').innerText = `${data.amount} Digipogs`;
+                    if (pendingAction === 'Skip Shield') {
+                        baseShieldPrice = data.amount;
+                        document.getElementById('price').innerText = `${data.amount * quantity} Digipogs`;
+                    } else {
+                        baseShieldPrice = null;
+                        document.getElementById('price').innerText = `${data.amount} Digipogs`;
+                    }
+
+                    // Show shield quantity row only for shield purchases
+                    const shieldRow = document.getElementById('shieldQuantityRow');
+                    if (shieldRow) shieldRow.style.display = pendingAction === 'Skip Shield' ? 'flex' : 'none';
 
                     // Show/hide anonymous mode based on action type
                     const anonModeRow = document.getElementById('anonModeRow');
@@ -188,7 +224,13 @@
 
         // Listen for price update requests from player.ejs
         window.addEventListener('updatePrice', (e) => {
-            getPrice();
+            const quantity = e.detail?.quantity || 1;
+            getPrice(quantity);
+        });
+
+        // Reset cached shield price when the modal closes
+        window.addEventListener('paymentHidden', () => {
+            baseShieldPrice = null;
         });
 
         // Load saved PIN when included
