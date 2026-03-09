@@ -450,6 +450,15 @@ router.post('/addToQueue', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
         }
 
+        // Prevent non-teachers from queuing a song that is already in the queue
+        const isTeacher = req.session.permission >= 4 || isOwner(req.session.token.id);
+        if (!isTeacher) {
+            const isDuplicate = queueManager.queue.some(item => item.uri === uri);
+            if (isDuplicate) {
+                return res.status(400).json({ ok: false, error: 'This song is already in the queue. Please choose a different song.' });
+            }
+        }
+
         await spotifyApi.addToQueue(uri);
 
         // Also add to queueManager for WebSocket updates

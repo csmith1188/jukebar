@@ -354,6 +354,7 @@
                                     Notify('Track added to queue!', 'success');
                                 } else {
                                     return response.json().then(data => {
+                                        Notify(data.error || 'Failed to add track to queue', 'error');
                                         refund();
                                     });
                                 }
