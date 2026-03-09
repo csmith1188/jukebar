@@ -60,7 +60,32 @@
         <div id="paymentModal" class="payment-modal">
             <div class="payment-content">
                 <button id="hide-payment">&times;</button>
+
                 <%- include('partials/pay') %>
+            </div>
+        </div>
+
+        <div id="ownerShieldModal" class="owner-shield-modal">
+            <div class="owner-shield-content">
+                <button id="owner-shield-close" class="owner-shield-close">&times;</button>
+                <h3 class="owner-shield-title"><img src="/img/skipShield.png" alt="Shield" class="notify-shield-icon"> Add Skip Shields</h3>
+                <div class="shield-quantity-section" style="display:block;">
+                    <label class="shield-quantity-label">How many shields?</label>
+                    <input type="number" id="owner-shield-quantity-input" class="shield-quantity-input"
+                        min="1" max="1000" placeholder="1" onkeydown="if(['+','-','.','e','E'].includes(event.key)) event.preventDefault();"
+                        oninput="
+                            this.value = this.value.replace(/[^0-9]/g, '');
+                            let v = parseInt(this.value) || 1;
+                            if (v > 1000) {
+                                Notify('You\'ve reached the maximum of 1000 shields', 'error');
+                                v = 1000;
+                                this.value = v;
+                            }
+                            if (v < 1) this.value = 1;
+                            pendingShieldQuantity = v;
+                        ">
+                </div>
+                <button id="owner-shield-confirm" class="owner-shield-confirm-btn">Add Shields</button>
             </div>
         </div>
 
@@ -97,70 +122,81 @@
             </div>
         </div>
 
-            <script>
-                // Notification functions - MUST be defined FIRST before any includes
-                let notificationTimeout;
+        <script>
+            // Notification functions - MUST be defined FIRST before any includes
+            let notificationTimeout;
 
-                function Notify(message, type = 'info') {
-                    let notification = document.getElementById("notification");
-                    let notificationText = document.getElementById("notification-text");
+            function Notify(message, type = 'info', iconSrc = null) {
+                let notification = document.getElementById("notification");
+                let notificationText = document.getElementById("notification-text");
 
+                notificationText.textContent = '';
+                if (iconSrc) {
+                    const icon = document.createElement('img');
+                    icon.src = iconSrc;
+                    icon.alt = '';
+                    icon.className = 'notify-shield-icon';
+                    notificationText.appendChild(icon);
+                    notificationText.appendChild(document.createTextNode(' ' + message));
+                } else {
                     notificationText.textContent = message;
-
-                    // Remove any existing type classes
-                    notification.classList.remove('notification-success', 'notification-error', 'notification-info');
-
-                    // Add the appropriate type class
-                    if (type === 'error') {
-                        notification.classList.add('notification-error');
-                    } else {
-                        // default to success for other types
-                        notification.classList.add('notification-success');
-                    }
-
-                    notification.style.display = "block";
-                    setTimeout(() => notification.style.opacity = "1", 100);
-
-                    clearTimeout(notificationTimeout);
-                    notificationTimeout = setTimeout(closeNotification, 5000);
                 }
 
-                function closeNotification() {
-                    let notification = document.getElementById("notification");
-                    clearTimeout(notificationTimeout);
+                // Remove any existing type classes
+                notification.classList.remove('notification-success', 'notification-error', 'notification-info');
 
-                    notification.style.opacity = "0";
-                    setTimeout(() => notification.style.display = "none", 500);
+                // Add the appropriate type class
+                if (type === 'error') {
+                    notification.classList.add('notification-error');
+                } else {
+                    // default to success for other types
+                    notification.classList.add('notification-success');
                 }
 
-                const userPermission = <%= userPermission %>;
+                notification.style.display = "block";
+                setTimeout(() => notification.style.opacity = "1", 100);
 
-                // Global payment status flags - MUST be at top for songMenu.ejs to access
-                var hasPaid = <%= JSON.stringify(hasPaid || false) %>;
-                var pendingTrackUri = null;
-                var pendingTrackAddedAt = null;
-                var pendingTrackName = null;
-                var pendingTrackArtist = null;
-                var pendingAction = null;
+                clearTimeout(notificationTimeout);
+                notificationTimeout = setTimeout(closeNotification, 5000);
+            }
 
-                // Global variables that need to be accessed by multiple functions
-                let currentlyPlayingUri = null;
-                let currentProgress = 0; // Current progress in ms
-                let currentDuration = 0; // Track duration in ms
-                let isCurrentlyPlaying = false;
-                let progressInterval = null;
-                let currentID = <%= JSON.stringify(userID || null) %>; // User ID - needed by ban votes
-                const ownerIDs = <%= JSON.stringify(ownerIDs) %>; // Array of owner IDs
+            function closeNotification() {
+                let notification = document.getElementById("notification");
+                clearTimeout(notificationTimeout);
 
-                // Helper: check if a user ID is an owner
-                function isOwnerClient(uid) {
-                    return ownerIDs.includes(Number(uid));
-                }
+                notification.style.opacity = "0";
+                setTimeout(() => notification.style.display = "none", 500);
+            }
 
-                // Create socket globally ONCE and expose it immediately
-                const socket = io();
-                window.banVoteSocket = socket;
-            </script>
+            const userPermission = <%= userPermission %>;
+
+            // Global payment status flags - MUST be at top for songMenu.ejs to access
+            let hasPaid = <%= JSON.stringify(hasPaid || false) %>;
+            let pendingTrackUri = null;
+            let pendingTrackAddedAt = null;
+            let pendingTrackName = null;
+            let pendingTrackArtist = null;
+            let pendingAction = null;
+            let pendingShieldQuantity = 1;
+
+            // Global letiables that need to be accessed by multiple functions
+            let currentlyPlayingUri = null;
+            let currentProgress = 0; // Current progress in ms
+            let currentDuration = 0; // Track duration in ms
+            let isCurrentlyPlaying = false;
+            let progressInterval = null;
+            let currentID = <%= JSON.stringify(userID || null) %>; // User ID which is needed by ban votes
+            const ownerIDs = <%= JSON.stringify(ownerIDs) %>; // Array of owner ids
+
+            // Helper function to check if a user ID is an owner
+            function isOwnerClient(uid) {
+                return ownerIDs.includes(Number(uid));
+            }
+
+            // Create socket globally one time and expose it immediately
+            const socket = io();
+            window.banVoteSocket = socket;
+        </script>
 
         <%- include('partials/songMenu') %>
 
@@ -323,7 +359,7 @@
 
                             if (data.shieldBlocked) {
                                 // Skip was blocked by a shield
-                                Notify(data.message || 'Skip blocked by shield! 🛡️', 'error');
+                                Notify(data.message || 'Skip blocked by shield!', 'error', '/img/skipShield.png');
                                 // Request queue update to show updated shield count
                                 socket.emit('getQueue');
                             } else if (data.ok) {
@@ -497,16 +533,22 @@
                     function showPayment() {
                         document.getElementById('paymentModal').style.display = 'block';
                         document.querySelector('.main-content').classList.add('blurred');
+                        // Reset shield quantity on open
+                        if (pendingAction === 'Skip Shield') {
+                            const input = document.getElementById('shield-quantity-input');
+                            if (input) { input.value = ''; pendingShieldQuantity = 1; }
+                        }
                         // Trigger getPrice via custom event
                         window.dispatchEvent(new CustomEvent('updatePrice', { detail: { pendingAction } }));
                     }
-                    
+
                     // Expose showPayment globally for external event handlers
                     window.showPayment = showPayment;
 
                     function hidePayment() {
                         document.getElementById('paymentModal').style.display = 'none';
                         document.querySelector('.main-content').classList.remove('blurred');
+                        window.dispatchEvent(new CustomEvent('paymentHidden'));
                     }
 
                     function onPaymentSuccess() {
@@ -526,9 +568,11 @@
                         } else if (action === 'Skip Shield' && pendingTrackUri) {
                             const uri = pendingTrackUri;
                             const addedAt = pendingTrackAddedAt || 0;
+                            const qty = pendingShieldQuantity || 1;  // NEW
                             pendingTrackUri = null;
                             pendingTrackAddedAt = null;
-                            purchaseShieldAfterPayment(uri, addedAt);
+                            pendingShieldQuantity = 1; // reset
+                            purchaseShieldAfterPayment(uri, addedAt, qty);
                         } else if (action === 'Ban Vote' && pendingTrackUri) {
                             const uri = pendingTrackUri;
                             const trackName = pendingTrackName || 'Unknown Track';
@@ -568,6 +612,27 @@
                     document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                     document.getElementById('close-notification')?.addEventListener('click', closeNotification);
 
+                    // Owner shield modal
+                    document.getElementById('owner-shield-close')?.addEventListener('click', () => {
+                        document.getElementById('ownerShieldModal').style.display = 'none';
+                        document.querySelector('.main-content').classList.remove('blurred');
+                        pendingTrackUri = null;
+                        pendingTrackAddedAt = null;
+                        pendingShieldQuantity = 1;
+                    });
+
+                    document.getElementById('owner-shield-confirm')?.addEventListener('click', () => {
+                        document.getElementById('ownerShieldModal').style.display = 'none';
+                        document.querySelector('.main-content').classList.remove('blurred');
+                        const uri = pendingTrackUri;
+                        const addedAt = pendingTrackAddedAt || 0;
+                        const qty = pendingShieldQuantity || 1;
+                        pendingTrackUri = null;
+                        pendingTrackAddedAt = null;
+                        pendingShieldQuantity = 1;
+                        purchaseShieldAfterPayment(uri, addedAt, qty);
+                    });
+
                     // Changelog button event listeners
                     document.getElementById('changelog-button')?.addEventListener('click', () => {
                         document.getElementById('changelogModal').style.display = 'block';
@@ -593,7 +658,7 @@
                             const uri = button.dataset.uri;
                             if (uri) checkPaymentAndPlay(uri);
                         }
-                        
+
                         // Handle ban button
                         if (e.target.matches('.ban-button-icon') || e.target.closest('.ban-button-icon')) {
                             const button = e.target.matches('.ban-button-icon') ? e.target : e.target.closest('.ban-button-icon');
@@ -606,10 +671,10 @@
                                 Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
                                 return;
                             }
-                            
+
                             // Check if user is owner (owners can start votes for free)
                             const userIsOwner = isOwnerClient(currentID);
-                            
+
                             if (userIsOwner) {
                                 // Owner bypass - start vote immediately
                                 startBanVote(uri, name, artist);
@@ -655,9 +720,15 @@
                             return;
                         }
 
-                        // Owner can purchase shields for free without payment modal
+                        // Owner gets a quantity picker before adding shields
                         if (isOwnerClient(currentID)) {
-                            purchaseShieldAfterPayment(trackUri, addedAt);
+                            pendingTrackUri = trackUri;
+                            pendingTrackAddedAt = addedAt;
+                            pendingShieldQuantity = 1;
+                            const input = document.getElementById('owner-shield-quantity-input');
+                            if (input) input.value = '';
+                            document.getElementById('ownerShieldModal').style.display = 'flex';
+                            document.querySelector('.main-content').classList.add('blurred');
                             return;
                         }
 
@@ -667,21 +738,22 @@
                         showPayment();
                     };
 
-                    async function purchaseShieldAfterPayment(trackUri, addedAt) {
+                    async function purchaseShieldAfterPayment(trackUri, addedAt, quantity = 1) {
                         try {
                             const response = await fetch('/purchaseShield', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ trackUri, addedAt })
+                                body: JSON.stringify({ trackUri, addedAt, quantity })
                             });
-
                             const data = await response.json();
-
                             if (response.ok && data.ok) {
-                                Notify(data.message || 'Skip Shield added successfully!', 'success');
-                                // Reset payment flag after successful purchase
+                                Notify(
+                                    quantity > 1
+                                        ? `${quantity} Skip Shields added!`
+                                        : 'Skip Shield added!',
+                                    'success'
+                                );
                                 hasPaid = false;
-                                // Refresh queue to show updated shield count
                                 socket.emit('getQueue');
                             } else {
                                 Notify(data.error || 'Failed to add Skip Shield', 'error');
@@ -734,7 +806,7 @@
                         // Handle shield purchase confirmation
                         socket.on('shieldPurchased', (data) => {
                             if (data.ok) {
-                                Notify(data.message || 'Skip Shield added! 🛡️', 'success');
+                                Notify(data.message || 'Skip Shield added!', 'success');
                                 socket.emit('getQueue'); // Refresh queue
                             } else {
                                 Notify(data.error || 'Failed to add Skip Shield', 'error');
@@ -770,7 +842,7 @@
                             Notify(data.error || 'Ban vote error', 'error');
                         });
                     }
-                    
+
                     // Initialize WebSocket-based queue sync after defining the function
                     initializeQueueSync();
                 })();
@@ -805,7 +877,7 @@
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
-                                ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
+                                ${shieldCount > 0 ? `<span class="shield-badge"><img src="/img/skipShield.png" alt="shield" class="shield-badge-icon"> ${shieldCount}</span>` : ''}
                             </div>
                             <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${track.image}', ${track.addedAt || 0}, event)" title="More options">
                                 <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -842,7 +914,7 @@
                             currentlyPlayingUri = track.id;
                         }
 
-                        // Update global progress variables from server data
+                        // Update global progress letiables from server data
                         // Only update progress if it's a different track or if we don't have progress yet
                         if (lastDisplayedTrackUri !== trackUri) {
                             // New track - accept server's progress data
@@ -897,7 +969,7 @@
                                 <div class="queue-item-title">${track.name}</div>
                                 <div class="queue-item-artist">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay}</div>
-                                ${shieldCount > 0 ? `<span class="shield-badge">🛡️ ${shieldCount}</span>` : ''}
+                                ${shieldCount > 0 ? `<span class="shield-badge"><img src="/img/skipShield.png" alt="shield" class="shield-badge-icon"> ${shieldCount}</span>` : ''}
                                 <div class="progress-container">
                                     <div class="progress-bar">
                                         <div class="progress-fill" id="progress-fill"></div>

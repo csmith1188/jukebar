@@ -1,6 +1,7 @@
 
 require('dotenv').config({ quiet: true });
 
+const { transliterate } = require('transliteration');
 const spotifyApi = require('./spotify').spotifyApi;
 const db = require('./database');
 const apikey = process.env.JUKEPIX_API_KEY;
@@ -26,6 +27,7 @@ const reqOptions =
 
 let currentTrack = null;
 let lastTrack = null;
+let lastSettings = null;
 
 /**
  * Resolve effective JukePix display settings for a track.
@@ -149,6 +151,7 @@ const trackCheckInterval = setInterval(async () => {
 
             // Resolve settings from DB (song > artist > defaults)
             const settings = await resolveTrackSettings(currentTrack.name, currentTrack.artist);
+            lastSettings = settings;
             console.log('[JUKEPIX] Resolved settings:', settings);
 
             // Strip '#' from hex colors for the API
@@ -205,6 +208,34 @@ const trackCheckInterval = setInterval(async () => {
             lastTrack = currentTrack;
         } else {
             console.log('[JUKEPIX] Same track still playing:', currentTrack.name);
+
+            // Check if the display still shows this track (someone may have changed it)
+            try {
+                const getDisplayUrl = `${jukepix}/api/getDisplay`;
+                console.log('[JUKEPIX] Fetching display from:', getDisplayUrl);
+                const displayRes = await fetch(getDisplayUrl, {
+                    headers: { 'API': apikey }
+                });
+                console.log('[JUKEPIX] getDisplay response status:', displayRes.status);
+                if (displayRes.ok) {
+                    const displayData = await displayRes.json();
+                    const currentMessage = displayData?.display?.message || '';
+
+                    console.log('[JUKEPIX] Display check - current:', JSON.stringify(currentMessage));
+
+                    const hasMusicSymbol = currentMessage.includes('\u266a') || currentMessage.includes('\u266b');
+                    if (!hasMusicSymbol) {
+                        console.log('[JUKEPIX] Display has no music symbol - restoring song');
+                        displayTrack(currentTrack, lastSettings);
+                    } else {
+                        console.log('[JUKEPIX] Display already showing a song - leaving it alone');
+                    }
+                } else {
+                    console.warn('[JUKEPIX] getDisplay returned non-ok status:', displayRes.status);
+                }
+            } catch (err) {
+                console.error('[JUKEPIX] Display integrity check error:', err.message);
+            }
         }
     } catch (error) {
         console.error('[JUKEPIX] Track check error:', error.message, error);
@@ -215,8 +246,8 @@ function displayTrack(track, settings = null) {
     if (!jukepixEnabled || !track) return;
 
     try {
-        const trackName = track.name || "No Track Playing";
-        const artistName = track.artist || "Unknown Artist";
+        const trackName = transliterate(track.name || "No Track Playing");
+        const artistName = transliterate(track.artist || "Unknown Artist");
         const displayText = `♪♫ ${trackName} - ${artistName} ♪♫        `;
 
         // Use resolved settings if provided, otherwise fall back to defaults

@@ -534,24 +534,6 @@ class QueueManager {
                 };
             });
 
-            // For currently playing, use the FIRST (oldest) metadata entry
-            if (currentTrack) {
-                const metadataArray = metadataMap[currentTrack.uri];
-                if (metadataArray && metadataArray.length > 0) {
-                    // Find the metadata entry that's NOT in the queue anymore (it's playing)
-                    // This should be the one with the oldest added_at that doesn't match any queue position
-                    const metadata = metadataArray[0]; // First entry is the one currently playing
-
-                    currentTrack.addedBy = metadata.is_anon ? 'Anonymous' : metadata.added_by;
-                    currentTrack.displayName = metadata.is_anon ? 'Anonymous' : metadata.display_name;
-                    currentTrack.isAnon = metadata.is_anon;
-                    currentTrack.skipShields = metadata.skip_shields;
-                }
-                // Add frontend-compatible property names
-                currentTrack.progress = currentTrack.progress_ms;
-                currentTrack.duration = currentTrack.duration_ms;
-            }
-
             // Update internal state
             this.queue = newQueue;
             this.currentTrack = currentTrack;

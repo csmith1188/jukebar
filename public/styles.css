@@ -802,6 +802,86 @@ p {
     margin-top: 6px;
 }
 
+.shield-badge-icon {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+}
+
+.notify-shield-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    display: inline-block;
+}
+
+/* Owner Shield Modal */
+.owner-shield-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.owner-shield-content {
+    background: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 320px;
+    position: relative;
+}
+
+.owner-shield-title {
+    margin: 0 0 16px;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.owner-shield-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 1.4rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.owner-shield-close:hover {
+    color: #fff;
+}
+
+.owner-shield-confirm-btn {
+    width: 100%;
+    padding: 10px;
+    background: #1db954;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    margin-top: 4px;
+}
+
+.owner-shield-confirm-btn:hover {
+    background: #17a349;
+}
+
+/* Shield Quantity Selector - row lives inside pay.ejs card */
+
 .queue-item-actions {
     display: flex;
     align-items: center;

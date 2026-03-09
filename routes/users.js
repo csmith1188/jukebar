@@ -69,24 +69,28 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
             });
         });
 
-        // Fetch album art from Spotify for each track
-        await ensureSpotifyAccessToken();
-        const enrichedPlays = await Promise.all(plays.map(async (play) => {
-            try {
-                if (play.track_uri) {
-                    const trackId = play.track_uri.replace('spotify:track:', '');
-                    const trackData = await spotifyApi.getTrack(trackId);
-                    return {
-                        ...play,
-                        albumImage: trackData.body.album.images?.[0]?.url || '/img/placeholder.png'
-                    };
-                }
-            } catch (err) {
-                console.warn(`Could not fetch album art for ${play.track_name}:`, err.message);
+        // Fetch album art from Spotify in a single batch call (up to 50 at once)
+        const imageMap = {};
+        try {
+            await ensureSpotifyAccessToken();
+            const trackIds = plays
+                .filter(p => p.track_uri)
+                .map(p => p.track_uri.replace('spotify:track:', ''));
+            if (trackIds.length > 0) {
+                const batchData = await spotifyApi.getTracks(trackIds);
+                batchData.body.tracks.forEach(track => {
+                    if (track) imageMap[track.uri] = track.album.images?.[0]?.url || null;
+                });
             }
-            return { ...play, albumImage: '/img/placeholder.png' };
+        } catch (err) {
+            console.warn('Could not fetch album art batch:', err.message);
+        }
+
+        const enrichedPlays = plays.map(play => ({
+            ...play,
+            albumImage: imageMap[play.track_uri] || '/img/placeholder.png'
         }));
-        
+
         res.json({ ok: true, plays: enrichedPlays });
     } catch (error) {
         console.error('Error fetching queue history:', error);
