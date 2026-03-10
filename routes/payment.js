@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../utils/database');
-const { isOwner } = require('../utils/owners');
+const { isOwner, getFirstOwnerId } = require('../utils/owners');
 const { transfer, refund: poolRefund } = require('../utils/transferManager');
 
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
@@ -144,12 +144,20 @@ router.post('/transfer', async (req, res) => {
 
 router.post('/refund', async (req, res) => {
     try {
-        const from = POOL_ID;
         const reason = "Jukebar refund";
-        if (!from || isNaN(from)) {
-            return res.status(500).json({ ok: false, error: 'Server misconfigured: POOL_ID is not set. Contact your administrator.' });
+        
+        // Get the first owner's ID
+        const firstOwnerId = getFirstOwnerId();
+        if (!firstOwnerId) {
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: No owner ID found' });
         }
-        const pin = process.env.PIN;
+        
+        // Get owner's PIN from environment variable
+        const pin = process.env.OWNER_PIN;
+        if (!pin) {
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: OWNER_PIN not set' });
+        }
+        
         const userRow = await new Promise((resolve, reject) => {
             db.get("SELECT id FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
                 if (err) {
@@ -164,9 +172,6 @@ router.post('/refund', async (req, res) => {
         if (!userRow || !userRow.id) {
             return res.status(401).json({ ok: false, error: 'Not authenticated' });
         }
-        if (!from || pin == null) {
-            return res.status(500).json({ ok: false, error: 'Refund misconfigured on server' });
-        }
 
         // Require a recent, unclaimed payment to exist in session and prevent double-refunds
         const lastPayment = req.session.payment || null;
@@ -179,7 +184,7 @@ router.post('/refund', async (req, res) => {
         if (lastPayment.refundedAt) {
             return res.status(409).json({ ok: false, error: 'Payment already refunded' });
         }
-        if (lastPayment.from !== Number(userRow.id) || lastPayment.to !== from) {
+        if (lastPayment.from !== Number(userRow.id)) {
             return res.status(403).json({ ok: false, error: 'Payment does not belong to this user' });
         }
         if (!req.session.hasPaid) {
@@ -189,6 +194,9 @@ router.post('/refund', async (req, res) => {
         if (!lastPayment.at || (now - lastPayment.at) > refundableWindowMs) {
             return res.status(408).json({ ok: false, error: 'Refund window expired' });
         }
+        
+        // Refund comes from the first owner, not from the pool
+        const from = firstOwnerId;
 
         // Refund the exact amount of the last payment
         const amount = Number(lastPayment.amount);
