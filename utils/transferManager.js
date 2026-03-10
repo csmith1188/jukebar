@@ -40,7 +40,7 @@ function validateTransferParams({ from, to, amount, pin }) {
 }
 
 /**
- * Perform a pool-based transfer via Formbar socket.
+ * Perform a transfer via Formbar socket.
  * 
  * @param {object} params
  * @param {number} params.from   - Sender user ID
@@ -48,12 +48,17 @@ function validateTransferParams({ from, to, amount, pin }) {
  * @param {number} params.amount - Amount to transfer
  * @param {number} params.pin    - Sender's PIN
  * @param {string} params.reason - Reason for transfer
+ * @param {boolean} params.pool  - Whether this is a pool-based transfer (optional)
  * @returns {Promise<object>} Transfer response
  * @throws {Error} With message and optional .details property
  */
-async function transfer({ from, to, amount, pin, reason = 'Jukebar Payment' }) {
+async function transfer({ from, to, amount, pin, reason = 'Jukebar Payment', pool = false }) {
     // Step 1: Validate inputs
     validateTransferParams({ from, to, amount, pin });
+
+    // Auto-detect if transfer involves the pool
+    // Only mark as pool transfer if TO a pool, not just FROM a pool
+    const isPoolTransfer = pool || Number(to) === POOL_ID;
 
     const payload = {
         from: Number(from),
@@ -61,10 +66,10 @@ async function transfer({ from, to, amount, pin, reason = 'Jukebar Payment' }) {
         amount: Number(amount),
         reason: String(reason),
         pin: Number(pin),
-        pool: true // Pool-based transfer
+        pool: isPoolTransfer
     };
 
-    console.log('[TransferManager] Initiating pool transfer:', {
+    console.log('[TransferManager] Initiating transfer:', {
         from: payload.from,
         to: payload.to,
         amount: payload.amount,
