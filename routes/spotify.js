@@ -5,7 +5,7 @@ const db = require('../utils/database');
 const { logTransaction } = require('./logging');
 const queueManager = require('../utils/queueManager');
 const { isAuthenticated } = require('../middleware/auth');
-const { isOwner } = require('../utils/owners');
+const { isOwner, getFirstOwnerId } = require('../utils/owners');
 const { refund: poolRefund } = require('../utils/transferManager');
 const { exec } = require('child_process');
 const fs = require('fs');
@@ -417,6 +417,18 @@ router.post('/addToQueue', async (req, res) => {
         return res.status(403).json({ ok: false, error: 'You have been banned from using Jukebar. Contact your teacher.' });
     }
 
+    // Check for duplicates BEFORE payment (for non-teachers)
+    const isTeacher = req.session.permission >= 4 || isOwner(req.session.token.id);
+    if (!isTeacher) {
+        const { uri } = req.body;
+        if (uri) {
+            const isDuplicate = queueManager.queue.some(item => item.uri === uri);
+            if (isDuplicate) {
+                return res.status(400).json({ ok: false, error: 'This song is already in the queue. Please choose a different song.' });
+            }
+        }
+    }
+
     // For non-admin users, check payment
     if (!req.session.hasPaid) {
         //console.log('addToQueue - Payment required. User ID:', req.session.token.id, 'hasPaid:', req.session.hasPaid);
@@ -448,15 +460,6 @@ router.post('/addToQueue', async (req, res) => {
         // Check banned songs
         if (await isTrackBannedByNameArtist(trackInfo.name, trackInfo.artist)) {
             return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
-        }
-
-        // Prevent non-teachers from queuing a song that is already in the queue
-        const isTeacher = req.session.permission >= 4 || isOwner(req.session.token.id);
-        if (!isTeacher) {
-            const isDuplicate = queueManager.queue.some(item => item.uri === uri);
-            if (isDuplicate) {
-                return res.status(400).json({ ok: false, error: 'This song is already in the queue. Please choose a different song.' });
-            }
         }
 
         await spotifyApi.addToQueue(uri);
