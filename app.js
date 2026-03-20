@@ -229,8 +229,8 @@ io.on('connection', (socket) => {
                         console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
                         // Insert into banned_songs table
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason) VALUES (?, ?, ?, ?)',
-                            [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
+                            [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri],
                             async (err) => {
                                 if (err) {
                                     console.error('Database insertion error (ban on expiration):', err);
