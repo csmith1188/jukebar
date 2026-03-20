@@ -219,7 +219,10 @@ router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res)
         if (!banReason) return res.status(400).json({ ok: false, error: 'Ban reason is required' });
         if (banReason.length > 200) return res.status(400).json({ ok: false, error: 'Ban reason must be 200 characters or fewer' });
 
-        const bannedBy = req.session?.token?.id || null;
+        const bannedBy = req.session?.token?.id;
+        if (!bannedBy) {
+            return res.status(401).json({ ok: false, error: 'Missing user token id' });
+        }
 
         // Avoid duplicates
         const alreadyBanned = await isTrackBannedByNameArtist(name, artist);
