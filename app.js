@@ -56,11 +56,11 @@ const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
 // Helper function to handle ban - removes from queue and skips if currently playing
 async function handleBanPassed(trackName, trackArtist, trackUri) {
     console.log(`=== HANDLING BAN FOR: "${trackName}" by "${trackArtist}" ===`);
-    
+
     // Remove matching tracks from the queue
     const removedCount = queueManager.removeByNameAndArtist(trackName, trackArtist);
     console.log(`Removed ${removedCount} matching track(s) from queue`);
-    
+
     // Check if the banned song is currently playing - if so, skip it
     if (queueManager.isCurrentlyPlaying(trackName, trackArtist)) {
         console.log('Banned song is currently playing - skipping it');
@@ -104,16 +104,16 @@ const voteManager = new VoteManager();
 
 io.on('connection', (socket) => {
     //console.log('Client connected for queue sync');
-    
+
     // Broadcast updated user count to all clients
     io.emit('userCount', io.engine.clientsCount);
-    
+
     // Send active ban vote to newly connected user
     const activeVote = voteManager.getActiveVote();
     if (activeVote) {
         socket.emit('banVoteStarted', activeVote);
     }
-    
+
     // Send current auxiliary permission to newly connected client
     const classroom = getCurrentClassroom();
     if (classroom && classroom.permissions && classroom.permissions.auxiliary) {
@@ -121,10 +121,10 @@ io.on('connection', (socket) => {
         console.log('Sending initial auxiliary permission to new client:', auxiliaryPermission);
         socket.emit('auxiliaryPermission', auxiliaryPermission);
     }
-    
+
     // Add client to queue manager
     queueManager.addClient(socket);
-    
+
     // Handle client disconnect
     socket.on('disconnect', () => {
         //console.log('Client disconnected from queue sync');
@@ -132,7 +132,7 @@ io.on('connection', (socket) => {
         // Broadcast updated user count after disconnect
         io.emit('userCount', io.engine.clientsCount);
     });
-    
+
     // Handle queue actions from clients
     socket.on('requestQueueUpdate', () => {
         socket.emit('queueUpdate', queueManager.getCurrentState());
@@ -141,8 +141,19 @@ io.on('connection', (socket) => {
     // Handle ban vote initiation
     socket.on('initiateBanVote', async (data) => {
         try {
-            const { trackUri, trackName, trackArtist, initiator } = data;
+            const { trackUri, trackName, trackArtist, initiator, reason } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
+            const banReason = typeof reason === 'string' ? reason.trim() : '';
+
+            if (!banReason) {
+                socket.emit('banVoteError', { error: 'Please provide a reason for banning this song' });
+                return;
+            }
+
+            if (banReason.length > 200) {
+                socket.emit('banVoteError', { error: 'Ban reason must be 200 characters or fewer' });
+                return;
+            }
 
             // Check if user is banned
             const userBanRow = await new Promise((resolve, reject) => {
@@ -210,6 +221,7 @@ io.on('connection', (socket) => {
                 trackUri,
                 trackName,
                 trackArtist,
+                banReason,
                 userId,
                 onlineCount,
                 async (expiredData) => {
@@ -217,8 +229,8 @@ io.on('connection', (socket) => {
                         console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
                         // Insert into banned_songs table
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
-                            [expiredData.trackName, expiredData.trackArtist],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
+                            [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri],
                             async (err) => {
                                 if (err) {
                                     console.error('Database insertion error (ban on expiration):', err);
@@ -249,6 +261,7 @@ io.on('connection', (socket) => {
                 totalOnline: onlineCount,
                 yesVotes: 1,
                 noVotes: 0,
+                reason: banReason,
                 expiresIn: voteData.expiresIn
             });
         } catch (error) {
@@ -276,8 +289,8 @@ io.on('connection', (socket) => {
                     await new Promise((resolve, reject) => {
                         console.log('Inserting into banned_songs:', result.trackName, result.trackArtist);
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
-                            [result.trackName, result.trackArtist],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason) VALUES (?, ?, ?, ?)',
+                            [result.trackName, result.trackArtist, result.userId, result.reason],
                             (err) => {
                                 if (err) {
                                     console.error('Database insertion error:', err);
@@ -289,10 +302,10 @@ io.on('connection', (socket) => {
                             }
                         );
                     });
-                    
+
                     // Handle ban - remove from queue and skip if playing
                     await handleBanPassed(result.trackName, result.trackArtist, result.trackUri);
-                    
+
                 } catch (dbError) {
                     console.error('Failed to insert ban into database:', dbError);
                 }
@@ -303,7 +316,8 @@ io.on('connection', (socket) => {
                     trackName: result.trackName,
                     trackArtist: result.trackArtist,
                     yesVotes: result.yesVotes,
-                    noVotes: result.noVotes
+                    noVotes: result.noVotes,
+                    reason: result.reason
                 });
             } else if (result.failed) {
                 // Broadcast vote failed
@@ -334,7 +348,7 @@ io.on('connection', (socket) => {
 // Initialize Spotify queue on startup
 if (process.env.SPOTIFY_CLIENT_ID) {
     const { spotifyApi } = require('./utils/spotify');
-    
+
     // Initialize queue from Spotify on startup
     async function initializeQueue() {
         try {
@@ -345,10 +359,10 @@ if (process.env.SPOTIFY_CLIENT_ID) {
             console.warn('Could not initialize queue from Spotify:', error.message);
         }
     }
-    
+
     // Call initialization
     initializeQueue();
-    
+
     // Periodic Spotify sync (every 5 seconds)
     setInterval(async () => {
         try {
@@ -410,7 +424,7 @@ app.get('/api/online-count', (req, res) => {
 app.get('/debug/formbar', isAuthenticated, (req, res) => {
     const { getCurrentClassroom } = require('./routes/socket');
     const classroom = getCurrentClassroom();
-    
+
     res.json({
         connected: formbarSocket.connected,
         formbarAddress: FORMBAR_ADDRESS,
@@ -470,7 +484,7 @@ app.use('/', require('./routes/settings'));
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
-    
+
     // Start the leaderboard auto-reset scheduler
     startResetScheduler(app);
 });
