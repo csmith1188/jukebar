@@ -69,9 +69,10 @@ db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     track_name TEXT NOT NULL,
     artist_name TEXT NOT NULL,
+    track_uri TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    banned_by TEXT NOT NULL,
-    reason TEXT DEFAULT "No reason given"
+    banned_by TEXT NOT NULL DEFAULT 'unknown',
+    reason TEXT DEFAULT 'No reason given'
 )`);
 
 // Migrate: ensure banned_songs has all required columns
