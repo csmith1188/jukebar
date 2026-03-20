@@ -157,23 +157,36 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
                 return key && !albumImageMap[key];
             });
 
-            for (const song of missingSongs) {
-                const key = normalizedKey(song.track_name, song.artist_name);
-                const trackName = String(song.track_name || '').trim();
-                const artistName = String(song.artist_name || '').trim();
-                if (!trackName || !artistName) {
-                    albumImageMap[key] = '/img/placeholder.png';
-                    continue;
-                }
+            // Limit how many missing songs we attempt to backfill per request
+            const MAX_BACKFILL = 10;
+            const songsToBackfill = missingSongs.slice(0, MAX_BACKFILL);
 
-                try {
-                    const query = `track:${trackName} artist:${artistName}`;
-                    const result = await spotifyApi.searchTracks(query, { limit: 1 });
-                    const image = result?.body?.tracks?.items?.[0]?.album?.images?.[0]?.url;
-                    albumImageMap[key] = image || '/img/placeholder.png';
-                } catch {
-                    albumImageMap[key] = '/img/placeholder.png';
-                }
+            // Apply a small concurrency limit when calling spotifyApi.searchTracks
+            const CONCURRENCY = 5;
+            for (let i = 0; i < songsToBackfill.length; i += CONCURRENCY) {
+                const batch = songsToBackfill.slice(i, i + CONCURRENCY);
+                // Process this batch in parallel
+                await Promise.all(
+                    batch.map(async (song) => {
+                        const key = normalizedKey(song.track_name, song.artist_name);
+                        const trackName = String(song.track_name || '').trim();
+                        const artistName = String(song.artist_name || '').trim();
+
+                        if (!trackName || !artistName) {
+                            albumImageMap[key] = '/img/placeholder.png';
+                            return;
+                        }
+
+                        try {
+                            const query = `track:${trackName} artist:${artistName}`;
+                            const result = await spotifyApi.searchTracks(query, { limit: 1 });
+                            const image = result?.body?.tracks?.items?.[0]?.album?.images?.[0]?.url;
+                            albumImageMap[key] = image || '/img/placeholder.png';
+                        } catch {
+                            albumImageMap[key] = '/img/placeholder.png';
+                        }
+                    })
+                );
             }
         } catch (error) {
             console.warn('Could not fetch banned song album art:', error.message);
