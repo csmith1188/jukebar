@@ -16,6 +16,7 @@ class VoteManager {
             trackUri: voteData.trackUri,
             trackName: voteData.trackName,
             trackArtist: voteData.trackArtist,
+            reason: voteData.banReason,
             initiator: voteData.initiator,
             onlineCount: voteData.onlineCount,
             totalOnline: voteData.onlineCount,
@@ -25,16 +26,17 @@ class VoteManager {
         };
     }
 
-    startBanVote(voteId, trackUri, trackName, trackArtist, initiator, onlineCount, onExpireCallback) {
+    startBanVote(voteId, trackUri, trackName, trackArtist, banReason, initiator, onlineCount, onExpireCallback) {
         const requiredVotes = Math.ceil(onlineCount / 2); // Simple majority
-        
+
         console.log(`Starting ban vote: onlineCount=${onlineCount}, requiredVotes=${requiredVotes}`);
-        
+
         const voteData = {
             voteId,
             trackUri,
             trackName,
             trackArtist,
+            banReason,
             initiator,
             onlineCount,
             requiredVotes,
@@ -63,10 +65,12 @@ class VoteManager {
                         passed: true,
                         yesVotes,
                         noVotes,
+                        userId: voteData.initiator,
                         trackUri: voteData.trackUri,
                         trackName: voteData.trackName,
                         trackArtist: voteData.trackArtist,
-                        reason: 'more yes than no at expiration'
+                        reason: voteData.banReason,
+                        outcomeReason: 'more yes than no at expiration'
                     };
                 } else if (noVotes > yesVotes) {
                     result = {
@@ -110,7 +114,7 @@ class VoteManager {
         // Check if user already voted
         const alreadyVotedYes = voteData.yesVotes.has(userId);
         const alreadyVotedNo = voteData.noVotes.has(userId);
-        
+
         if ((vote === 'yes' && alreadyVotedYes) || (vote === 'no' && alreadyVotedNo)) {
             return { error: 'You have already voted' };
         }
@@ -133,13 +137,16 @@ class VoteManager {
                 clearTimeout(voteData.timeoutId);
             }
             this.activeVotes.delete(voteId);
-            return { 
-                passed: true, 
+            return {
+                passed: true,
                 yesVotes: voteData.yesVotes.size,
                 noVotes: voteData.noVotes.size,
                 trackUri: voteData.trackUri,
                 trackName: voteData.trackName,
-                trackArtist: voteData.trackArtist
+                trackArtist: voteData.trackArtist,
+                reason: voteData.banReason,
+                outcomeReason: 'majority voted yes',
+                userId: voteData.initiator
             };
         }
 
@@ -147,7 +154,7 @@ class VoteManager {
         const remainingVoters = voteData.onlineCount - voteData.yesVotes.size - voteData.noVotes.size;
         const canStillWin = voteData.yesVotes.size + remainingVoters >= voteData.requiredVotes;
         const majorityNo = voteData.noVotes.size >= voteData.requiredVotes;
-        
+
         if (!canStillWin || majorityNo) {
             console.log('Vote FAILED! Clearing timeout and deleting from activeVotes');
             // Clear the expiration timeout since vote failed early
@@ -155,7 +162,7 @@ class VoteManager {
                 clearTimeout(voteData.timeoutId);
             }
             this.activeVotes.delete(voteId);
-            return { 
+            return {
                 failed: true,
                 yesVotes: voteData.yesVotes.size,
                 noVotes: voteData.noVotes.size,

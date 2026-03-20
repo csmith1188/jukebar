@@ -212,8 +212,14 @@ router.post('/unbanTrack', isAuthenticated, requireTeacherAccess, async (req, re
 // Teacher-only: Ban a track by name/artist (optionally record URI)
 router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
-        const { name, artist } = req.body || {};
+        const { name, artist, reason, uri } = req.body || {};
         if (!name || !artist) return res.status(400).json({ ok: false, error: 'Missing track name or artist' });
+
+        const banReason = typeof reason === 'string' ? reason.trim() : '';
+        if (!banReason) return res.status(400).json({ ok: false, error: 'Ban reason is required' });
+        if (banReason.length > 200) return res.status(400).json({ ok: false, error: 'Ban reason must be 200 characters or fewer' });
+
+        const bannedBy = req.session?.token?.id || null;
 
         // Avoid duplicates
         const alreadyBanned = await isTrackBannedByNameArtist(name, artist);
@@ -223,8 +229,8 @@ router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res)
 
         await new Promise((resolve, reject) => {
             db.run(
-                'INSERT INTO banned_songs (track_name, artist_name) VALUES (?, ?)',
-                [name, artist],
+                'INSERT INTO banned_songs (track_name, artist_name, track_uri, banned_by, reason) VALUES (?, ?, ?, ?, ?)',
+                [name, artist, uri || null, bannedBy, banReason],
                 function (err) {
                     if (err) return reject(err);
                     resolve();

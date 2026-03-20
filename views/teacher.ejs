@@ -13,77 +13,145 @@
     <%- include('partials/header', { page: 'teacher' }) %>
         <%- include('partials/jukePixSettings') %>
 
-        <div class="main-content">
-            <div class="jukepix-toggle">
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
-                        <div class="switch-track">
-                            <div class="switch-thumb"></div>
+            <div class="main-content">
+                <div class="jukepix-toggle">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
+                            <div class="switch-track">
+                                <div class="switch-thumb"></div>
+                            </div>
+                            <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%=jukepixEnabled
+                                ? 'checked' : '' %>
+                            style="display: none;">
                         </div>
-                        <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%=jukepixEnabled
-                            ? 'checked' : '' %>
-                        style="display: none;">
+                        <p>Enable Jukepix</p>
+                        <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
+                            <img src="/img/settings.png" alt="JukePix Settings">
+                        </button>
                     </div>
-                    <p>Enable Jukepix</p>
-                    <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
-                        <img src="/img/settings.png" alt="JukePix Settings">
-                    </button>
+                    <p class="user-greeting">Logged in as: <strong>
+                            <%= user %>
+                        </strong></p>
                 </div>
-                <p class="user-greeting">Logged in as: <strong>
-                        <%= user %>
-                    </strong></p>
+                <div class="container teacher-layout">
+                    <div id="queueHistory">
+                        <div class="section-header">
+                            <h2>Queue History</h2>
+                            <p class="section-subtitle">Recently played tracks</p>
+                        </div>
+                        <div id="historyList">
+                            <p style="text-align: center; color: #b3b3b3;">Loading...</p>
+                        </div>
+                        <div style="text-align: center; margin-top: 20px;">
+                            <button id="loadMoreHistory">Load More</button>
+                        </div>
+                    </div>
+                    <div id="spotifyPlayer">
+                        <div class="section-header">
+                            <h2>Music Control</h2>
+                            <p class="section-subtitle">Search and manage the music queue</p>
+                        </div>
+                        <form id="searchForm">
+                            <div class="search-container">
+                                <input type="text" id="searchInput" placeholder="Search for a song, artist, or album"
+                                    required>
+                                <button type="submit" id="searchButton">
+                                    <img src="/img/search.png" alt="Search" class="search-icon">
+                                </button>
+                            </div>
+                        </form>
+                        <div id="searchResults"></div>
+                    </div>
+                    <div id="userManagement">
+                        <div class="section-header">
+                            <h2>User Management</h2>
+                            <p class="section-subtitle">Manage user access and permissions</p>
+                        </div>
+                        <div class="user-search-container">
+                            <div class="search-wrapper">
+                                <input type="text" id="userSearchInput" placeholder="Search users..."
+                                    class="user-search-input">
+                            </div>
+                        </div>
+                        <div class="user-list-header">
+                            <span class="user-col-name">Username</span>
+                            <span class="user-col-actions">Actions</span>
+                        </div>
+                        <div id="userList"></div>
+                    </div>
+
+                    <div id="bannedSongsPanel">
+                        <div class="section-header">
+                            <h2>Banned Songs</h2>
+                            <p class="section-subtitle">All banned tracks</p>
+                        </div>
+                        <div id="bannedSongsList">
+                            <p style="text-align: center; color: #b3b3b3;">Loading...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="container teacher-layout">
-                <div id="queueHistory">
-                    <div class="section-header">
-                        <h2>Queue History</h2>
-                        <p class="section-subtitle">Recently played tracks</p>
+
+            <div id="teacherBanReasonModal" class="payment-modal" style="display:none;">
+                <div class="payment-content" style="max-width: 520px;">
+                    <button id="teacher-ban-reason-close">&times;</button>
+                    <h3 style="margin-bottom: 12px;">Reason for ban</h3>
+                    <input type="text" id="teacherBanReasonInput" placeholder="Enter reason (required)" maxlength="200"
+                        style="width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#1f1f1f;color:#fff;">
+                    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+                        <button id="teacher-ban-reason-cancel" class="unban-button" type="button">Cancel</button>
+                        <button id="teacher-ban-reason-confirm" class="ban-button" type="button">Ban Song</button>
                     </div>
-                    <div id="historyList">
-                        <p style="text-align: center; color: #b3b3b3;">Loading...</p>
-                    </div>
-                    <div style="text-align: center; margin-top: 20px;">
-                        <button id="loadMoreHistory">Load More</button>
-                    </div>
-                </div>
-                <div id="spotifyPlayer">
-                    <div class="section-header">
-                        <h2>Music Control</h2>
-                        <p class="section-subtitle">Search and manage the music queue</p>
-                    </div>
-                    <form id="searchForm">
-                        <div class="search-container">
-                            <input type="text" id="searchInput" placeholder="Search for a song, artist, or album"
-                                required>
-                            <button type="submit" id="searchButton">
-                                <img src="/img/search.png" alt="Search" class="search-icon">
-                            </button>
-                        </div>
-                    </form>
-                    <div id="searchResults"></div>
-                </div>
-                <div id="userManagement">
-                    <div class="section-header">
-                        <h2>User Management</h2>
-                        <p class="section-subtitle">Manage user access and permissions</p>
-                    </div>
-                    <div class="user-search-container">
-                        <div class="search-wrapper">
-                            <input type="text" id="userSearchInput" placeholder="Search users..."
-                                class="user-search-input">
-                        </div>
-                    </div>
-                    <div class="user-list-header">
-                        <span class="user-col-name">Username</span>
-                        <span class="user-col-actions">Actions</span>
-                    </div>
-                    <div id="userList"></div>
                 </div>
             </div>
-        </div>
 </body>
 <script>
     const ownerIDs = <%- JSON.stringify(ownerIDs) %>;
+    let onTeacherBanReasonConfirm = null;
+
+    function openTeacherBanReasonModal(onConfirm) {
+        const modal = document.getElementById('teacherBanReasonModal');
+        const input = document.getElementById('teacherBanReasonInput');
+        if (!modal || !input) return;
+
+        onTeacherBanReasonConfirm = onConfirm;
+        input.value = '';
+        modal.style.display = 'block';
+        document.querySelector('.main-content')?.classList.add('blurred');
+        setTimeout(() => input.focus(), 0);
+    }
+
+    function closeTeacherBanReasonModal() {
+        const modal = document.getElementById('teacherBanReasonModal');
+        const input = document.getElementById('teacherBanReasonInput');
+        if (modal) modal.style.display = 'none';
+        if (input) input.value = '';
+        onTeacherBanReasonConfirm = null;
+        document.querySelector('.main-content')?.classList.remove('blurred');
+    }
+
+    document.getElementById('teacher-ban-reason-close')?.addEventListener('click', closeTeacherBanReasonModal);
+    document.getElementById('teacher-ban-reason-cancel')?.addEventListener('click', closeTeacherBanReasonModal);
+    document.getElementById('teacher-ban-reason-confirm')?.addEventListener('click', () => {
+        const input = document.getElementById('teacherBanReasonInput');
+        const reason = (input?.value || '').trim();
+
+        if (!reason) {
+            showNotification('A ban reason is required.', 'error');
+            return;
+        }
+
+        if (reason.length > 200) {
+            showNotification('Ban reason must be 200 characters or fewer.', 'error');
+            return;
+        }
+
+        const callback = onTeacherBanReasonConfirm;
+        closeTeacherBanReasonModal();
+        if (typeof callback === 'function') {
+            callback(reason);
+        }
+    });
 
     function showNotification(message, type = 'info') {
         console.log('showNotification called:', message, type);
@@ -104,7 +172,7 @@
         }, 3000);
     }
 
-        document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
+    document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
         try {
             const trackRes = await fetch('/api/currentTrack');
             const data = await trackRes.json();
@@ -243,6 +311,167 @@
             document.getElementById('userList').innerHTML = '<div class="user-empty">Unable to load users.</div>';
         }
     }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    async function fetchBannedSongs() {
+        const list = document.getElementById('bannedSongsList');
+        if (!list) return;
+
+        try {
+            const res = await fetch('/api/banned-songs');
+            if (!res.ok) throw new Error('Failed to fetch banned songs');
+
+            const data = await res.json();
+            const songs = data.songs || [];
+
+            if (!songs.length) {
+                list.innerHTML = '<p style="text-align: center; color: #b3b3b3;">No banned songs.</p>';
+                return;
+            }
+
+            list.innerHTML = songs.map((song) => {
+                const bannedBy = escapeHtml(song.banned_by_name || 'Unknown');
+                const reason = escapeHtml(song.reason || 'No reason given');
+                const trackName = escapeHtml(song.track_name || 'Unknown Track');
+                const artistName = escapeHtml(song.artist_name || 'Unknown Artist');
+                const albumImage = escapeHtml(song.album_image || '/img/placeholder.png');
+                const when = song.timestamp ? new Date(song.timestamp).toLocaleString() : 'Unknown time';
+                const whenEscaped = escapeHtml(when);
+                const trackNameAttr = escapeHtml(song.track_name || '');
+                const artistNameAttr = escapeHtml(song.artist_name || '');
+
+                return `
+                    <div class="search-result-item">
+                        <img src="${albumImage}" alt="${trackName}" class="album-cover" />
+                        <div class="search-result-content">
+                            <div class="search-result-title">${trackName}</div>
+                            <div class="search-result-artist">${artistName}</div>
+                            <span class="info-button banned-song-info-button" data-reason="${reason}" data-banned-by="${bannedBy}" data-when="${whenEscaped}" title="Show ban details">i</span>
+                        </div>
+                        <div class="search-result-actions">
+                            <button class="unban-button banned-song-unban-btn" data-name="${trackNameAttr}" data-artist="${artistNameAttr}" title="Unban this track">Unban</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error('Error loading banned songs:', err);
+            list.innerHTML = '<p style="text-align: center; color: #ff4444;">Failed to load banned songs.</p>';
+        }
+    }
+
+    document.getElementById('bannedSongsList')?.addEventListener('click', async (e) => {
+        const button = e.target.closest('.banned-song-unban-btn');
+        if (!button) return;
+
+        const name = button.dataset.name;
+        const artist = button.dataset.artist;
+        if (!name || !artist) return;
+
+        if (!confirm(`Unban ${name} - ${artist}?`)) return;
+
+        try {
+            const res = await fetch('/unbanTrack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, artist })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.ok) {
+                showNotification(`Unbanned: ${name} - ${artist}`, 'success');
+                fetchBannedSongs();
+            } else {
+                showNotification(data.error || 'Failed to unban track', 'error');
+            }
+        } catch (err) {
+            console.error('Error unbanning from banned songs panel:', err);
+            showNotification('Network error updating ban', 'error');
+        }
+    });
+
+    function getBannedSongTooltip() {
+        let tooltip = document.getElementById('bannedSongMetaTooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'bannedSongMetaTooltip';
+            tooltip.className = 'banned-song-meta-tooltip';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+        }
+        return tooltip;
+    }
+
+    function positionBannedSongTooltip(button, tooltip) {
+        const rect = button.getBoundingClientRect();
+        const offset = 10;
+        const viewportPadding = 10;
+
+        let left = rect.left;
+        let top = rect.top - tooltip.offsetHeight - offset;
+
+        if (left + tooltip.offsetWidth > window.innerWidth - viewportPadding) {
+            left = window.innerWidth - tooltip.offsetWidth - viewportPadding;
+        }
+        if (left < viewportPadding) left = viewportPadding;
+
+        if (top < viewportPadding) {
+            top = rect.bottom + offset;
+        }
+        if (top + tooltip.offsetHeight > window.innerHeight - viewportPadding) {
+            top = window.innerHeight - tooltip.offsetHeight - viewportPadding;
+        }
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    }
+
+    const bannedSongsListEl = document.getElementById('bannedSongsList');
+    bannedSongsListEl?.addEventListener('mouseover', (e) => {
+        const infoBtn = e.target.closest('.banned-song-info-button');
+        if (!infoBtn || !bannedSongsListEl.contains(infoBtn)) return;
+
+        const tooltip = getBannedSongTooltip();
+        const reason = infoBtn.dataset.reason || 'No reason given';
+        const bannedBy = infoBtn.dataset.bannedBy || 'Unknown';
+        const when = infoBtn.dataset.when || 'Unknown time';
+
+        tooltip.innerHTML = `
+            <div class="banned-song-meta"><strong>Reason:</strong> ${reason}</div>
+            <div class="banned-song-meta-secondary"><strong>Banned by:</strong> ${bannedBy} • ${when}</div>
+        `;
+        tooltip.style.display = 'block';
+        positionBannedSongTooltip(infoBtn, tooltip);
+    });
+
+    bannedSongsListEl?.addEventListener('mousemove', (e) => {
+        const infoBtn = e.target.closest('.banned-song-info-button');
+        if (!infoBtn || !bannedSongsListEl.contains(infoBtn)) return;
+        const tooltip = document.getElementById('bannedSongMetaTooltip');
+        if (tooltip && tooltip.style.display === 'block') {
+            positionBannedSongTooltip(infoBtn, tooltip);
+        }
+    });
+
+    bannedSongsListEl?.addEventListener('mouseout', (e) => {
+        const infoBtn = e.target.closest('.banned-song-info-button');
+        if (!infoBtn || !bannedSongsListEl.contains(infoBtn)) return;
+        const tooltip = document.getElementById('bannedSongMetaTooltip');
+        if (tooltip) tooltip.style.display = 'none';
+    });
+
+    bannedSongsListEl?.addEventListener('scroll', () => {
+        const tooltip = document.getElementById('bannedSongMetaTooltip');
+        if (tooltip) tooltip.style.display = 'none';
+    });
 
     async function showUserTransactions(username, page = 1) {
         try {
@@ -389,6 +618,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         fetchUsers();
         fetchQueueHistory(true);
+        fetchBannedSongs();
     });
     function handleSearchSubmit(event) {
         event.preventDefault();
@@ -533,26 +763,35 @@
         if (!btn) return;
         const name = btn.dataset.name;
         const artist = btn.dataset.artist;
+        const uri = btn.dataset.uri;
         if (!name || !artist) return;
 
         try {
             if (banBtn) {
-                const res = await fetch('/banTrack', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, artist })
+                openTeacherBanReasonModal(async (reason) => {
+                    try {
+                        const res = await fetch('/banTrack', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, artist, reason, uri })
+                        });
+                        const data = await res.json();
+                        if (res.ok && data.ok) {
+                            showNotification(`Banned: ${name} - ${artist}`, 'success');
+                            // Toggle to Unban
+                            btn.classList.remove('ban-button');
+                            btn.classList.add('unban-button');
+                            btn.textContent = 'Unban';
+                            btn.title = 'Unban this track';
+                            fetchBannedSongs();
+                        } else {
+                            showNotification(data.error || 'Failed to ban track', 'error');
+                        }
+                    } catch (err) {
+                        console.error('Ban track error:', err);
+                        showNotification('Network error updating ban', 'error');
+                    }
                 });
-                const data = await res.json();
-                if (res.ok && data.ok) {
-                    showNotification(`Banned: ${name} - ${artist}`, 'success');
-                    // Toggle to Unban
-                    btn.classList.remove('ban-button');
-                    btn.classList.add('unban-button');
-                    btn.textContent = 'Unban';
-                    btn.title = 'Unban this track';
-                } else {
-                    showNotification(data.error || 'Failed to ban track', 'error');
-                }
             } else if (unbanBtn) {
                 const res = await fetch('/unbanTrack', {
                     method: 'POST',
@@ -567,6 +806,7 @@
                     btn.classList.add('ban-button');
                     btn.textContent = 'Ban';
                     btn.title = 'Ban this track';
+                    fetchBannedSongs();
                 } else {
                     showNotification(data.error || 'Failed to unban track', 'error');
                 }

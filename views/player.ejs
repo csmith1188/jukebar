@@ -68,12 +68,13 @@
         <div id="ownerShieldModal" class="owner-shield-modal">
             <div class="owner-shield-content">
                 <button id="owner-shield-close" class="owner-shield-close">&times;</button>
-                <h3 class="owner-shield-title"><img src="/img/skipShield.png" alt="Shield" class="notify-shield-icon"> Add Skip Shields</h3>
+                <h3 class="owner-shield-title"><img src="/img/skipShield.png" alt="Shield" class="notify-shield-icon">
+                    Add Skip Shields</h3>
                 <div class="shield-quantity-section" style="display:block;">
                     <label class="shield-quantity-label">How many shields?</label>
-                    <input type="number" id="owner-shield-quantity-input" class="shield-quantity-input"
-                        min="1" max="1000" placeholder="1" onkeydown="if(['+','-','.','e','E'].includes(event.key)) event.preventDefault();"
-                        oninput="
+                    <input type="number" id="owner-shield-quantity-input" class="shield-quantity-input" min="1"
+                        max="1000" placeholder="1"
+                        onkeydown="if(['+','-','.','e','E'].includes(event.key)) event.preventDefault();" oninput="
                             this.value = this.value.replace(/[^0-9]/g, '');
                             let v = parseInt(this.value) || 1;
                             if (v > 1000) {
@@ -86,6 +87,19 @@
                         ">
                 </div>
                 <button id="owner-shield-confirm" class="owner-shield-confirm-btn">Add Shields</button>
+            </div>
+        </div>
+
+        <div id="banReasonModal" class="payment-modal" style="display:none;">
+            <div class="payment-content" style="max-width: 520px;">
+                <button id="ban-reason-close">&times;</button>
+                <h3 style="margin-bottom: 12px;">Reason for ban</h3>
+                <input type="text" id="banReasonInput" placeholder="Enter reason (required)" maxlength="200"
+                    style="width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#1f1f1f;color:#fff;">
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+                    <button id="ban-reason-cancel" class="unban-button" type="button">Cancel</button>
+                    <button id="ban-reason-confirm" class="ban-button" type="button">Continue</button>
+                </div>
             </div>
         </div>
 
@@ -176,6 +190,7 @@
             let pendingTrackAddedAt = null;
             let pendingTrackName = null;
             let pendingTrackArtist = null;
+            let pendingBanReason = null;
             let pendingAction = null;
             let pendingShieldQuantity = 1;
 
@@ -577,10 +592,12 @@
                             const uri = pendingTrackUri;
                             const trackName = pendingTrackName || 'Unknown Track';
                             const trackArtist = pendingTrackArtist || 'Unknown Artist';
+                            const reason = pendingBanReason || '';
                             pendingTrackUri = null;
                             pendingTrackName = null;
                             pendingTrackArtist = null;
-                            startBanVote(uri, trackName, trackArtist);
+                            pendingBanReason = null;
+                            startBanVote(uri, trackName, trackArtist, reason);
                         }
                     }
 
@@ -675,17 +692,25 @@
                             // Check if user is owner (owners can start votes for free)
                             const userIsOwner = isOwnerClient(currentID);
 
-                            if (userIsOwner) {
-                                // Owner bypass - start vote immediately
-                                startBanVote(uri, name, artist);
-                            } else {
-                                // Regular user - show payment modal first
-                                pendingAction = 'Ban Vote';
-                                pendingTrackUri = uri;
-                                pendingTrackName = name;
-                                pendingTrackArtist = artist;
-                                showPayment();
+                            if (typeof window.openBanReasonModal !== 'function') {
+                                Notify('Unable to open reason input box.', 'error');
+                                return;
                             }
+
+                            window.openBanReasonModal((reason) => {
+                                if (userIsOwner) {
+                                    // Owner bypass - start vote immediately
+                                    startBanVote(uri, name, artist, reason);
+                                } else {
+                                    // Regular user - show payment modal first
+                                    pendingAction = 'Ban Vote';
+                                    pendingTrackUri = uri;
+                                    pendingTrackName = name;
+                                    pendingTrackArtist = artist;
+                                    pendingBanReason = reason;
+                                    showPayment();
+                                }
+                            });
                         }
                     });
 
@@ -1095,12 +1120,13 @@
                     const modal = document.getElementById('banVoteModal');
                     const title = document.getElementById('banVoteTitle');
                     const status = document.getElementById('banVoteStatus');
+                    const banReason = data.reason ? ` Reason: ${data.reason}` : '';
 
                     // gives the name of the user that started the ban
                     title.textContent = `${data.initiator} has started a vote to ban "${data.trackName}" by ${data.trackArtist}`;
 
                     const onlineCount = data.onlineCount || data.totalOnline || 0;
-                    status.textContent = `Ban vote: "${data.trackName}" - Yes: ${data.yesVotes || 1}, No: ${data.noVotes || 0} (${onlineCount} online)`;
+                    status.textContent = `Ban vote: "${data.trackName}" - Yes: ${data.yesVotes || 1}, No: ${data.noVotes || 0} (${onlineCount} online).${banReason}`;
 
                     document.getElementById('banVoteYes').textContent = data.yesVotes || 1;
                     document.getElementById('banVoteNo').textContent = data.noVotes || 0;
