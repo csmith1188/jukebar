@@ -444,10 +444,29 @@
         const bannedBy = infoBtn.dataset.bannedBy || 'Unknown';
         const when = infoBtn.dataset.when || 'Unknown time';
 
-        tooltip.innerHTML = `
-            <div class="banned-song-meta"><strong>Reason:</strong> ${reason}</div>
-            <div class="banned-song-meta-secondary"><strong>Banned by:</strong> ${bannedBy} • ${when}</div>
-        `;
+        // Build tooltip content using DOM APIs to avoid injecting HTML from data-attributes
+        tooltip.innerHTML = '';
+
+        const reasonDiv = document.createElement('div');
+        reasonDiv.className = 'banned-song-meta';
+        const reasonStrong = document.createElement('strong');
+        reasonStrong.textContent = 'Reason:';
+        reasonDiv.appendChild(reasonStrong);
+        reasonDiv.appendChild(document.createTextNode(' '));
+        reasonDiv.appendChild(document.createTextNode(reason));
+
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'banned-song-meta-secondary';
+        const bannedByStrong = document.createElement('strong');
+        bannedByStrong.textContent = 'Banned by:';
+        metaDiv.appendChild(bannedByStrong);
+        metaDiv.appendChild(document.createTextNode(' '));
+        metaDiv.appendChild(document.createTextNode(bannedBy));
+        metaDiv.appendChild(document.createTextNode(' • '));
+        metaDiv.appendChild(document.createTextNode(when));
+
+        tooltip.appendChild(reasonDiv);
+        tooltip.appendChild(metaDiv);
         tooltip.style.display = 'block';
         positionBannedSongTooltip(infoBtn, tooltip);
     });
