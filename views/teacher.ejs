@@ -14,21 +14,10 @@
         <%- include('partials/jukePixSettings') %>
 
             <div class="main-content">
-                <div class="jukepix-toggle">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
-                            <div class="switch-track">
-                                <div class="switch-thumb"></div>
-                            </div>
-                            <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%=jukepixEnabled
-                                ? 'checked' : '' %>
-                            style="display: none;">
-                        </div>
-                        <p>Enable Jukepix</p>
-                        <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
-                            <img src="/img/settings.png" alt="JukePix Settings">
-                        </button>
-                    </div>
+                <div class="teacher-toolbar">
+                    <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
+                        <img src="/img/settings.png" alt="JukePix Settings">
+                    </button>
                     <p class="user-greeting">Logged in as: <strong>
                             <%= user %>
                         </strong></p>
@@ -44,6 +33,12 @@
                         </div>
                         <div style="text-align: center; margin-top: 20px;">
                             <button id="loadMoreHistory">Load More</button>
+                        </div>
+                    </div>
+                    <div id="topMiddleColumn">
+                        <div class="section-header">
+                            <h2>Top Middle</h2>
+                            <p class="section-subtitle">New column</p>
                         </div>
                     </div>
                     <div id="spotifyPlayer">
@@ -171,34 +166,6 @@
             }, 500);
         }, 3000);
     }
-
-    document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
-        try {
-            const trackRes = await fetch('/api/currentTrack');
-            const data = await trackRes.json();
-            if (data.track) {
-                const res = await fetch('/toggleJukepix', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: e.target.checked })
-                });
-                const responseData = await res.json();
-                if (!res.ok || responseData.error) {
-                    showNotification(responseData.error || 'Failed to update Jukepix setting', 'error');
-                    e.target.checked = !e.target.checked;
-                } else {
-                    showNotification('Jukepix ' + (e.target.checked ? 'enabled' : 'disabled'), 'success');
-                }
-            } else {
-                showNotification('No track is currently playing. Cannot toggle Jukepix.', 'error');
-                e.target.checked = !e.target.checked;
-            }
-        } catch (err) {
-            console.error('Error updating Jukepix setting:', err);
-            showNotification('Network error updating Jukepix setting', 'error');
-            e.target.checked = !e.target.checked;
-        }
-    });
 
     async function fetchUsers() {
         try {
