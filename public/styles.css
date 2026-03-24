@@ -286,6 +286,81 @@ button.primary:hover {
     width: 90%;
 }
 
+#teacherBanReasonModal.payment-modal {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(2px);
+}
+
+#teacherBanReasonModal .payment-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 520px);
+    max-width: 520px;
+    background: #1b1b1b;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
+    padding: 20px;
+}
+
+#teacherBanReasonModal .ban-reason-title {
+    margin-bottom: 12px;
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+#teacherBanReasonModal #teacherBanReasonInput {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: #141414;
+    color: #fff;
+    font-size: 0.98rem;
+}
+
+#teacherBanReasonModal #teacherBanReasonInput:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.18);
+}
+
+#teacherBanReasonModal .ban-reason-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+#teacher-ban-reason-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: #f0f0f0;
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+#teacher-ban-reason-close:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: scale(1.03);
+}
+
 .discount-display {
     display: inline-block;
     margin-top: 10px;
@@ -372,7 +447,7 @@ h1 {
 
 .container.teacher-layout #spotifyPlayer,
 .container.teacher-layout #queueHistory,
-.container.teacher-layout #topMiddleColumn,
+.container.teacher-layout #playlistColumn,
 .container.teacher-layout #userManagement,
 .container.teacher-layout #bannedSongsPanel {
     width: 100%;
@@ -383,12 +458,12 @@ h1 {
 }
 
 .container.teacher-layout #queueHistory { grid-area: queue; }
-.container.teacher-layout #topMiddleColumn { grid-area: middle; }
+.container.teacher-layout #playlistColumn { grid-area: middle; }
 .container.teacher-layout #spotifyPlayer { grid-area: spotify; }
 .container.teacher-layout #userManagement { grid-area: users; }
 .container.teacher-layout #bannedSongsPanel { grid-area: banned; }
 
-#topMiddleColumn {
+#playlistColumn {
     background: #181818;
     border-radius: 20px;
     padding: 30px 40px;
@@ -397,6 +472,149 @@ h1 {
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+}
+
+#playlistList {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#playlistColumn .playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    color: #ffffff;
+    text-decoration: none;
+    margin-bottom: 8px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+#playlistColumn .playlist-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+#playlistColumn .playlist-cover {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+#playlistColumn .playlist-meta {
+    min-width: 0;
+}
+
+#playlistColumn .playlist-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#playlistColumn .playlist-details {
+    font-size: 0.8rem;
+    color: #b3b3b3;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#playlistColumn .teacher-playlist-item {
+    justify-content: space-between;
+}
+
+#playlistColumn .teacher-playlist-item .playlist-meta {
+    flex: 1;
+}
+
+.playlist-allow-btn {
+    margin: 0 !important;
+    flex-shrink: 0;
+}
+
+.playlists-page {
+    height: calc(100vh - 94px);
+    display: flex;
+}
+
+.playlists-panel {
+    width: 100%;
+    background: #181818;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#allowedPlaylistsList {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.student-playlist-item {
+    justify-content: space-between;
+}
+
+.student-playlist-item .playlist-meta {
+    flex: 1;
+}
+
+.student-playlist-item button {
+    margin: 0 !important;
+    flex-shrink: 0;
+}
+
+.playlist-pay-content {
+    background: #1b1b1b;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
+    max-width: 460px;
+}
+
+.playlist-pay-summary {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.playlist-pay-title {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 2px;
+}
+
+.playlist-pay-meta {
+    color: #b3b3b3;
+    font-size: 0.9rem;
+}
+
+.playlist-pay-cost {
+    color: #1db954;
+    font-weight: 700;
+    margin-top: 8px;
+}
+
+.playlist-pay-save {
+    margin-top: 10px;
 }
 
 
@@ -1461,7 +1679,7 @@ p {
 .teacher-layout #userManagement,
 .teacher-layout #spotifyPlayer,
 .teacher-layout #queueHistory,
-.teacher-layout #topMiddleColumn {
+.teacher-layout #playlistColumn {
     flex: 1 1 0 !important;
     width: auto !important;
     max-width: none !important;

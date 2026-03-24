@@ -414,6 +414,22 @@ app.get('/spotify', isAuthenticated, (req, res) => {
     }
 });
 
+app.get('/playlists', isAuthenticated, (req, res) => {
+    try {
+        res.render('playlists.ejs', {
+            user: req.session.user,
+            userID: req.session.token?.id,
+            hasPaid: !!req.session.hasPaid,
+            payment: req.session.payment || null,
+            userPermission: req.session.permission || 2,
+            ownerIDs: getOwnerIds(),
+            songAmount: Number(process.env.SONG_AMOUNT) || 50
+        });
+    } catch (error) {
+        res.send(error.message);
+    }
+});
+
 // API endpoint to get online user count
 app.get('/api/online-count', (req, res) => {
     const onlineCount = io.engine.clientsCount;

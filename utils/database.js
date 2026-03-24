@@ -209,6 +209,19 @@ db.run(`CREATE TABLE IF NOT EXISTS track_bans (
     banned_at INTEGER NOT NULL
 )`);
 
+db.run(`CREATE TABLE IF NOT EXISTS allowed_playlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spotify_playlist_id TEXT NOT NULL UNIQUE,
+    name TEXT,
+    owner_name TEXT,
+    image_url TEXT,
+    total_tracks INTEGER DEFAULT 0,
+    is_allowed INTEGER DEFAULT 0,
+    updated_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // JukePix custom settings per artist/song
 db.run(`CREATE TABLE IF NOT EXISTS jukepix_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

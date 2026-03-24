@@ -9,7 +9,7 @@
     <div class="jp-drawer-body">
 
         <div class="jp-section jp-power-section">
-            <h3>JukePix Power</h3>
+            <h3>JukePix Enable/Disable</h3>
             <p class="jp-hint">Enable or disable JukePix output for the currently playing track.</p>
             <div class="jp-toggle-row">
                 <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
@@ -18,7 +18,7 @@
                     </div>
                     <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%= jukepixEnabled ? 'checked' : '' %> style="display: none;">
                 </div>
-                <label for="jukepixToggleCheckbox">Enable JukePix</label>
+                <label id="jukepixToggleLabel" for="jukepixToggleCheckbox"><%= jukepixEnabled ? 'Disable JukePix' : 'Enable JukePix' %></label>
             </div>
         </div>
 
@@ -253,23 +253,35 @@
                 if (!res.ok || responseData.error) {
                     showNotification(responseData.error || 'Failed to update Jukepix setting', 'error');
                     e.target.checked = !e.target.checked;
+                    jpUpdateToggleLabel();
                 } else {
                     showNotification('Jukepix ' + (e.target.checked ? 'enabled' : 'disabled'), 'success');
+                    jpUpdateToggleLabel();
                 }
             } else {
                 showNotification('No track is currently playing. Cannot toggle Jukepix.', 'error');
                 e.target.checked = !e.target.checked;
+                jpUpdateToggleLabel();
             }
         } catch (err) {
             console.error('Error updating Jukepix setting:', err);
             showNotification('Network error updating Jukepix setting', 'error');
             e.target.checked = !e.target.checked;
+            jpUpdateToggleLabel();
         }
+    }
+
+    function jpUpdateToggleLabel() {
+        const checkbox = document.getElementById('jukepixToggleCheckbox');
+        const label = document.getElementById('jukepixToggleLabel');
+        if (!checkbox || !label) return;
+        label.textContent = checkbox.checked ? 'Disable JukePix' : 'Enable JukePix';
     }
 
     const jpToggleCheckbox = document.getElementById('jukepixToggleCheckbox');
     if (jpToggleCheckbox) {
         jpToggleCheckbox.addEventListener('change', jpHandleToggleChange);
+        jpUpdateToggleLabel();
     }
 
     /* ── Color sync ── */

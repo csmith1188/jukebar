@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jukebar - Playlists</title>
+    <link rel="icon" href="/img/favicon.png">
+</head>
+
+<body>
+    <%- include('partials/header', { page: 'playlists' }) %>
+
+        <div class="main-content playlists-page">
+            <div class="playlists-panel">
+                <div class="section-header">
+                    <h2>Allowed Playlists</h2>
+                    <p class="section-subtitle">Queue approved playlists for your class</p>
+                </div>
+                <div id="allowedPlaylistsList">
+                    <p style="text-align: center; color: #b3b3b3;">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="playlistPaymentModal" class="payment-modal" style="display:none;">
+            <div class="payment-content playlist-pay-content">
+                <h3 class="ban-reason-title">Play Playlist</h3>
+                <div class="playlist-pay-summary">
+                    <div id="playlistPayTitle" class="playlist-pay-title">Playlist</div>
+                    <div id="playlistPayMeta" class="playlist-pay-meta">0 queueable tracks</div>
+                    <div id="playlistPayCost" class="playlist-pay-cost">0 Digipogs</div>
+                </div>
+                <input id="playlist-pay-pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
+                    placeholder="Enter PIN" oninput="this.value = this.value.replace(/[^0-9]/g,'');" />
+                <label class="medium label-inline playlist-pay-save" for="playlistSavePIN">
+                    Save PIN for next purchase
+                    <input id="playlistSavePIN" type="checkbox" />
+                </label>
+                <div class="ban-reason-actions">
+                    <button id="playlist-pay-cancel" class="unban-button" type="button">Cancel</button>
+                    <button id="playlist-pay-confirm" class="ban-button" type="button">Pay & Queue</button>
+                </div>
+            </div>
+        </div>
+</body>
+
+<script>
+    let selectedPlaylist = null;
+    const ownerIDs = <%- JSON.stringify(ownerIDs || []) %>;
+    const currentID = Number(<%- JSON.stringify(userID || 0) %>);
+
+    function isOwnerClient(id) {
+        const numericId = Number(id);
+        return ownerIDs.includes(numericId);
+    }
+
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type === 'success' ? 'notification-success' : type === 'error' ? 'notification-error' : ''}`;
+        notification.textContent = message;
+        notification.style.display = 'block';
+        notification.style.opacity = '1';
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 500);
+        }, 3000);
+    }
+
+    async function post(path, body) {
+        const res = await fetch(path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body || {})
+        });
+        const data = await res.json().catch(() => ({}));
+        return { res, data };
+    }
+
+    async function loadSavedPin() {
+        try {
+            const { res, data } = await post('/getPin');
+            if (!res.ok || !data.ok) return;
+            const pin = data.userPin || '';
+            if (pin) {
+                document.getElementById('playlist-pay-pin').value = pin;
+                document.getElementById('playlistSavePIN').checked = true;
+            }
+        } catch (err) {
+            console.error('Failed to load saved PIN:', err);
+        }
+    }
+
+    function closePlaylistPaymentModal() {
+        document.getElementById('playlistPaymentModal').style.display = 'none';
+        selectedPlaylist = null;
+    }
+
+    function openPlaylistPaymentModal(quoteData) {
+        selectedPlaylist = quoteData;
+        document.getElementById('playlistPayTitle').textContent = quoteData.playlist?.name || 'Playlist';
+        document.getElementById('playlistPayMeta').textContent = `${quoteData.queueableCount || 0} queueable tracks`;
+        document.getElementById('playlistPayCost').textContent = `${quoteData.cost || 0} Digipogs`;
+        document.getElementById('playlistPaymentModal').style.display = 'block';
+    }
+
+    async function fetchAllowedPlaylists() {
+        const list = document.getElementById('allowedPlaylistsList');
+        if (!list) return;
+
+        list.innerHTML = '<p style="text-align: center; color: #b3b3b3;">Loading...</p>';
+
+        try {
+            const res = await fetch('/api/playlists/allowed');
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+                throw new Error(data.error || 'Failed to load playlists');
+            }
+
+            const playlists = data.playlists || [];
+            if (!playlists.length) {
+                list.innerHTML = '<p style="text-align: center; color: #b3b3b3;">No allowed playlists yet.</p>';
+                return;
+            }
+
+            list.innerHTML = '';
+            playlists.forEach((playlist) => {
+                const row = document.createElement('div');
+                row.className = 'search-result-item';
+
+                const img = document.createElement('img');
+                img.className = 'album-cover';
+                img.src = playlist.image || '/img/placeholder.png';
+                img.alt = playlist.name || 'Playlist';
+
+                const meta = document.createElement('div');
+                meta.className = 'search-result-content';
+
+                const name = document.createElement('div');
+                name.className = 'search-result-title';
+                name.textContent = playlist.name || 'Untitled Playlist';
+
+                const details = document.createElement('div');
+                details.className = 'search-result-artist';
+                details.textContent = `${playlist.owner || 'Unknown'} • ${playlist.totalTracks || 0} tracks`;
+
+                meta.appendChild(name);
+                meta.appendChild(details);
+
+                const actions = document.createElement('div');
+                actions.className = 'search-result-actions';
+
+                const playBtn = document.createElement('button');
+                playBtn.className = 'play-button-icon';
+                playBtn.type = 'button';
+                playBtn.title = 'Play playlist';
+
+                const playIcon = document.createElement('img');
+                playIcon.src = '/img/play.png';
+                playIcon.alt = 'Play';
+                playIcon.className = 'play-icon';
+                playBtn.appendChild(playIcon);
+
+                playBtn.addEventListener('click', async () => {
+                    try {
+                        playBtn.disabled = true;
+                        playBtn.style.opacity = '0.6';
+
+                        if (isOwnerClient(currentID)) {
+                            const { res: ownerQueueRes, data: ownerQueueData } = await post('/api/playlists/queue', {
+                                playlistId: playlist.id
+                            });
+
+                            if (!ownerQueueRes.ok || !ownerQueueData.ok) {
+                                throw new Error(ownerQueueData.error || 'Failed to queue playlist');
+                            }
+
+                            showNotification(ownerQueueData.message || 'Playlist playback started', 'success');
+                            await fetchAllowedPlaylists();
+                            return;
+                        }
+
+                        const { res: quoteRes, data: quoteData } = await post('/api/playlists/quote', {
+                            playlistId: playlist.id
+                        });
+
+                        if (!quoteRes.ok || !quoteData.ok) {
+                            throw new Error(quoteData.error || 'Failed to quote playlist');
+                        }
+
+                        if (!quoteData.queueableCount || quoteData.cost <= 0) {
+                            showNotification('No queueable tracks in this playlist right now.', 'error');
+                            return;
+                        }
+
+                        openPlaylistPaymentModal({
+                            playlistId: playlist.id,
+                            playlist: quoteData.playlist,
+                            queueableCount: quoteData.queueableCount,
+                            cost: quoteData.cost
+                        });
+                    } catch (err) {
+                        console.error('Quote error:', err);
+                        showNotification(err.message || 'Could not prepare playlist purchase', 'error');
+                    } finally {
+                        playBtn.disabled = false;
+                        playBtn.style.opacity = '';
+                    }
+                });
+
+                row.appendChild(img);
+                row.appendChild(meta);
+                actions.appendChild(playBtn);
+                row.appendChild(actions);
+                list.appendChild(row);
+            });
+        } catch (err) {
+            console.error('Playlist load error:', err);
+            list.innerHTML = '<p style="text-align: center; color: #ff4444;">Failed to load playlists.</p>';
+        }
+    }
+
+    document.getElementById('playlist-pay-cancel')?.addEventListener('click', closePlaylistPaymentModal);
+
+    document.getElementById('playlist-pay-confirm')?.addEventListener('click', async () => {
+        if (!selectedPlaylist || !selectedPlaylist.playlistId) {
+            showNotification('No playlist selected.', 'error');
+            return;
+        }
+
+        const pin = document.getElementById('playlist-pay-pin').value.trim();
+        if (!pin) {
+            showNotification('Please enter your PIN.', 'error');
+            return;
+        }
+
+        try {
+            const savePin = document.getElementById('playlistSavePIN')?.checked;
+            if (savePin) {
+                await post('/savePin', { pin });
+            }
+
+            const reason = `Jukebar Payment - Play Playlist (${selectedPlaylist.playlist?.name || 'Playlist'})`;
+            const { res: transferRes, data: transferData } = await post('/transfer', {
+                pin,
+                reason,
+                pendingAction: 'playlist',
+                playlistId: selectedPlaylist.playlistId
+            });
+
+            if (!transferRes.ok || !transferData.ok) {
+                throw new Error(transferData.error || 'Transfer failed');
+            }
+
+            const { res: queueRes, data: queueData } = await post('/api/playlists/queue', {
+                playlistId: selectedPlaylist.playlistId
+            });
+
+            if (!queueRes.ok || !queueData.ok) {
+                throw new Error(queueData.error || 'Failed to queue playlist');
+            }
+
+            closePlaylistPaymentModal();
+            showNotification(queueData.message || 'Playlist playback started', 'success');
+            await fetchAllowedPlaylists();
+        } catch (err) {
+            console.error('Playlist purchase error:', err);
+            showNotification(err.message || 'Could not queue playlist', 'error');
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadSavedPin();
+        await fetchAllowedPlaylists();
+    });
+</script>
+
+</html>
