@@ -47,6 +47,7 @@ const { isAuthenticated } = require('./middleware/auth');
 const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
+const playlistsRoutes = require('./routes/playlists');
 const { router: leaderboardRoutes, checkAndResetLeaderboard, startResetScheduler } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
@@ -459,9 +460,25 @@ app.get('/teacher', isAuthenticated, (req, res) => {
     }
 });
 
+app.get('/playlists', isAuthenticated, (req, res) => {
+    try {
+        const isTeacher = (req.session.permission >= 4) || isOwner(req.session.token?.id);
+        res.render('playlist.ejs', {
+            user: req.session.user,
+            userID: req.session.token?.id,
+            userPermission: req.session.permission || 2,
+            ownerIDs: getOwnerIds(),
+            isTeacher
+        });
+    } catch (error) {
+        res.send(error.message);
+    }
+});
+
 app.use('/', authRoutes);
 app.use('/', spotifyRoutes);
 app.use('/', paymentRoutes);
+app.use('/', playlistsRoutes);
 app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 app.use('/', require('./routes/jukepix'));

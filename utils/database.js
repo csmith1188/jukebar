@@ -21,7 +21,8 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     displayName TEXT,
     pin INTEGER,
-    songsPlayed INTEGER DEFAULT 0
+    songsPlayed INTEGER DEFAULT 0,
+    digipogs INTEGER DEFAULT 0
 );`);
 
 // Migrate: add isBanned column if it doesn't exist
@@ -50,7 +51,29 @@ db.all("PRAGMA table_info(users)", (err, columns) => {
             }
         });
     }
+
+    const hasDigipogs = columns && columns.some(c => c.name === 'digipogs');
+    if (!hasDigipogs) {
+        db.run("ALTER TABLE users ADD COLUMN digipogs INTEGER DEFAULT 0", (alterErr) => {
+            if (alterErr) {
+                console.error('Error adding digipogs column:', alterErr);
+            } else {
+                console.log('Added digipogs column to users table');
+            }
+        });
+    }
 });
+
+db.run(`CREATE TABLE IF NOT EXISTS spotify_playlists (
+    spotify_playlist_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    image_url TEXT,
+    owner_name TEXT,
+    enabled_for_students INTEGER NOT NULL DEFAULT 0,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    total_duration_ms INTEGER NOT NULL DEFAULT 0,
+    last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
 
 db.run(`CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY,
