@@ -227,7 +227,7 @@ async function fetchPlaylistTracks(playlistId) {
 
 function computePlaylistCost(trackCount) {
     const songAmount = Number(process.env.SONG_AMOUNT) || 50;
-    return Math.min(trackCount * songAmount, 500);
+    return Math.min(Math.round(songAmount * Math.sqrt(trackCount)), 500);
 }
 
 async function getQueueUriSet() {
@@ -388,6 +388,70 @@ router.post('/search', async (req, res) => {
         });
     } catch (err) {
         return handleSpotifyError(err, res, 'search');
+    }
+});
+
+router.get('/recentlyQueued', async (req, res) => {
+    if (!req.session?.token?.id) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    try {
+        const rows = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT track_uri, track_name, artist_name FROM transactions 
+                 WHERE user_id = ? AND action = 'play' 
+                 ORDER BY timestamp DESC LIMIT 200`,
+                [req.session.token.id],
+                (err, rows) => err ? reject(err) : resolve(rows || [])
+            );
+        });
+
+        // Deduplicate: keep only the most recent play of each track, cap at 50
+        const seen = new Set();
+        const uniqueRows = rows.filter(r => {
+            if (seen.has(r.track_uri)) return false;
+            seen.add(r.track_uri);
+            return true;
+        }).slice(0, 50);
+
+        if (uniqueRows.length === 0) {
+            return res.json({ ok: true, tracks: [] });
+        }
+
+        // Extract track IDs from URIs and batch-fetch from Spotify for album art
+        const trackIds = uniqueRows
+            .map(r => r.track_uri?.match(/^spotify:track:([a-zA-Z0-9]{22})$/)?.[1])
+            .filter(Boolean);
+
+        let imageMap = {};
+        if (trackIds.length > 0) {
+            try {
+                await ensureSpotifyAccessToken();
+                const uniqueIds = [...new Set(trackIds)];
+                const trackData = await spotifyApi.getTracks(uniqueIds);
+                for (const t of trackData.body.tracks) {
+                    if (t) imageMap[t.uri] = t.album?.images?.[0]?.url || null;
+                }
+            } catch (e) {
+                console.warn('Could not fetch album art for recent tracks:', e.message);
+            }
+        }
+
+        const tracks = uniqueRows.map(r => ({
+            name: r.track_name || 'Unknown',
+            artist: r.artist_name || 'Unknown',
+            uri: r.track_uri,
+            album: {
+                name: '',
+                image: imageMap[r.track_uri] || null
+            }
+        }));
+
+        return res.json({ ok: true, tracks });
+    } catch (err) {
+        console.error('Error fetching recently queued:', err);
+        return res.status(500).json({ ok: false, error: 'Failed to fetch recently queued songs' });
     }
 });
 
@@ -850,6 +914,17 @@ router.post('/addToQueue', async (req, res) => {
                     }
                 );
             }
+
+            // Log transaction for owners (cost 0)
+            await logTransaction({
+                userID: req.session.token.id,
+                displayName: req.session.user,
+                action: 'play',
+                trackURI: trackInfo.uri,
+                trackName: trackInfo.name,
+                artistName: trackInfo.artist,
+                cost: 0
+            });
 
             //console.log(`Add to queue successful for owner (ID: ${req.session.token.id})`);
             res.json({ success: true, message: "Track queued!", trackInfo });

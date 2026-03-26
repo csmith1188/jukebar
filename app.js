@@ -1,4 +1,3 @@
-// Initialize leaderboardLastReset on server start if not set
 const express = require('express');
 const session = require('express-session');
 const dotenv = require('dotenv');
@@ -20,7 +19,6 @@ const io = new Server(server);
 app.set('io', io);
 
 app.set('view engine', 'ejs');
-app.set('leaderboardLastReset', Date.now());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
@@ -47,7 +45,7 @@ const { isAuthenticated } = require('./middleware/auth');
 const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
-const { router: leaderboardRoutes, checkAndResetLeaderboard, startResetScheduler } = require('./routes/leaderboard');
+const { router: leaderboardRoutes } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
@@ -434,14 +432,10 @@ app.get('/debug/formbar', isAuthenticated, (req, res) => {
 
 app.get('/leaderboard', isAuthenticated, (req, res) => {
     try {
-        if (Date.now() - (req.app.get('leaderboardLastReset') || 0) > 6 * 24 * 60 * 60 * 1000) {
-            checkAndResetLeaderboard(req.app);
-        }
         res.render('leaderboard.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
             userPermission: req.session.permission || null,
-            resetDate: req.app.get('leaderboardLastReset'),
             ownerIDs: getOwnerIds()
         });
     }
@@ -479,9 +473,6 @@ app.use('/', require('./routes/settings'));
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
-
-    // Start the leaderboard auto-reset scheduler
-    startResetScheduler(app);
 });
 
 module.exports = { app, io, formbarSocket };
