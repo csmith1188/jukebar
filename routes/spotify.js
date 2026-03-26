@@ -7,6 +7,7 @@ const queueManager = require('../utils/queueManager');
 const { isAuthenticated } = require('../middleware/auth');
 const { isOwner, getFirstOwnerId } = require('../utils/owners');
 const { refund: poolRefund } = require('../utils/transferManager');
+const { getCurrentClassId } = require('./socket');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -121,13 +122,13 @@ function handleSpotifyError(error, res, action = 'operation') {
     return res.status(500).json({ ok: false, error: `Failed to ${action}` });
 }
 
-function getAllowedPlaylist(playlistId) {
+function getAllowedPlaylist(playlistId, classId) {
     return new Promise((resolve, reject) => {
         db.get(
             `SELECT spotify_playlist_id, name, owner_name, image_url, total_tracks, is_allowed
              FROM allowed_playlists
-             WHERE spotify_playlist_id = ?`,
-            [playlistId],
+             WHERE spotify_playlist_id = ? AND class_id = ?`,
+            [playlistId, classId],
             (err, row) => {
                 if (err) return reject(err);
                 resolve(row || null);
@@ -136,13 +137,14 @@ function getAllowedPlaylist(playlistId) {
     });
 }
 
-function getAllowedPlaylists() {
+function getAllowedPlaylists(classId) {
     return new Promise((resolve, reject) => {
         db.all(
             `SELECT spotify_playlist_id, name, owner_name, image_url, total_tracks
              FROM allowed_playlists
-             WHERE is_allowed = 1
+             WHERE is_allowed = 1 AND class_id = ?
              ORDER BY lower(name) ASC`,
+            [classId],
             (err, rows) => {
                 if (err) return reject(err);
                 resolve(rows || []);
@@ -151,9 +153,9 @@ function getAllowedPlaylists() {
     });
 }
 
-function getAllowedPlaylistMap() {
+function getAllowedPlaylistMap(classId) {
     return new Promise((resolve, reject) => {
-        db.all(`SELECT spotify_playlist_id, is_allowed FROM allowed_playlists`, (err, rows) => {
+        db.all(`SELECT spotify_playlist_id, is_allowed FROM allowed_playlists WHERE class_id = ?`, [classId], (err, rows) => {
             if (err) return reject(err);
             const allowedMap = new Map();
             (rows || []).forEach((row) => {
@@ -164,42 +166,67 @@ function getAllowedPlaylistMap() {
     });
 }
 
-function upsertPlaylistMetadata(playlist, updatedBy = null) {
+function upsertPlaylistMetadata(playlist, updatedBy = null, classId = null) {
     return new Promise((resolve, reject) => {
-        db.run(
-            `INSERT INTO allowed_playlists
-             (spotify_playlist_id, name, owner_name, image_url, total_tracks, updated_by, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(spotify_playlist_id) DO UPDATE SET
-               name = excluded.name,
-               owner_name = excluded.owner_name,
-               image_url = excluded.image_url,
-               total_tracks = excluded.total_tracks,
-               updated_by = excluded.updated_by,
-               updated_at = CURRENT_TIMESTAMP`,
-            [
-                playlist.id,
-                playlist.name || 'Untitled Playlist',
-                playlist.owner || 'Unknown',
-                playlist.image || null,
-                Number(playlist.totalTracks) || 0,
-                updatedBy || null
-            ],
-            (err) => {
+        // Check if this playlist+class combo already exists
+        db.get(
+            `SELECT id FROM allowed_playlists WHERE spotify_playlist_id = ? AND class_id = ?`,
+            [playlist.id, classId],
+            (err, row) => {
                 if (err) return reject(err);
-                resolve();
+                if (row) {
+                    // Update existing
+                    db.run(
+                        `UPDATE allowed_playlists
+                         SET name = ?, owner_name = ?, image_url = ?, total_tracks = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                         WHERE spotify_playlist_id = ? AND class_id = ?`,
+                        [
+                            playlist.name || 'Untitled Playlist',
+                            playlist.owner || 'Unknown',
+                            playlist.image || null,
+                            Number(playlist.totalTracks) || 0,
+                            updatedBy || null,
+                            playlist.id,
+                            classId
+                        ],
+                        (err) => {
+                            if (err) return reject(err);
+                            resolve();
+                        }
+                    );
+                } else {
+                    // Insert new
+                    db.run(
+                        `INSERT INTO allowed_playlists
+                         (spotify_playlist_id, name, owner_name, image_url, total_tracks, updated_by, updated_at, class_id)
+                         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+                        [
+                            playlist.id,
+                            playlist.name || 'Untitled Playlist',
+                            playlist.owner || 'Unknown',
+                            playlist.image || null,
+                            Number(playlist.totalTracks) || 0,
+                            updatedBy || null,
+                            classId
+                        ],
+                        (err) => {
+                            if (err) return reject(err);
+                            resolve();
+                        }
+                    );
+                }
             }
         );
     });
 }
 
-function setPlaylistAllowedState(playlistId, isAllowed, teacherId) {
+function setPlaylistAllowedState(playlistId, isAllowed, teacherId, classId) {
     return new Promise((resolve, reject) => {
         db.run(
             `UPDATE allowed_playlists
              SET is_allowed = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE spotify_playlist_id = ?`,
-            [isAllowed ? 1 : 0, teacherId || null, playlistId],
+             WHERE spotify_playlist_id = ? AND class_id = ?`,
+            [isAllowed ? 1 : 0, teacherId || null, playlistId, classId],
             function (err) {
                 if (err) return reject(err);
                 resolve(this.changes || 0);
@@ -227,7 +254,7 @@ async function fetchPlaylistTracks(playlistId) {
 
 function computePlaylistCost(trackCount) {
     const songAmount = Number(process.env.SONG_AMOUNT) || 50;
-    return Math.min(trackCount * songAmount, 500);
+    return Math.min(Math.round(songAmount * Math.sqrt(trackCount)), 500);
 }
 
 async function getQueueUriSet() {
@@ -391,12 +418,77 @@ router.post('/search', async (req, res) => {
     }
 });
 
+router.get('/recentlyQueued', async (req, res) => {
+    if (!req.session?.token?.id) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    try {
+        const rows = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT track_uri, track_name, artist_name FROM transactions 
+                 WHERE user_id = ? AND action = 'play' 
+                 ORDER BY timestamp DESC LIMIT 200`,
+                [req.session.token.id],
+                (err, rows) => err ? reject(err) : resolve(rows || [])
+            );
+        });
+
+        // Deduplicate: keep only the most recent play of each track, cap at 50
+        const seen = new Set();
+        const uniqueRows = rows.filter(r => {
+            if (seen.has(r.track_uri)) return false;
+            seen.add(r.track_uri);
+            return true;
+        }).slice(0, 50);
+
+        if (uniqueRows.length === 0) {
+            return res.json({ ok: true, tracks: [] });
+        }
+
+        // Extract track IDs from URIs and batch-fetch from Spotify for album art
+        const trackIds = uniqueRows
+            .map(r => r.track_uri?.match(/^spotify:track:([a-zA-Z0-9]{22})$/)?.[1])
+            .filter(Boolean);
+
+        let imageMap = {};
+        if (trackIds.length > 0) {
+            try {
+                await ensureSpotifyAccessToken();
+                const uniqueIds = [...new Set(trackIds)];
+                const trackData = await spotifyApi.getTracks(uniqueIds);
+                for (const t of trackData.body.tracks) {
+                    if (t) imageMap[t.uri] = t.album?.images?.[0]?.url || null;
+                }
+            } catch (e) {
+                console.warn('Could not fetch album art for recent tracks:', e.message);
+            }
+        }
+
+        const tracks = uniqueRows.map(r => ({
+            name: r.track_name || 'Unknown',
+            artist: r.artist_name || 'Unknown',
+            uri: r.track_uri,
+            album: {
+                name: '',
+                image: imageMap[r.track_uri] || null
+            }
+        }));
+
+        return res.json({ ok: true, tracks });
+    } catch (err) {
+        console.error('Error fetching recently queued:', err);
+        return res.status(500).json({ ok: false, error: 'Failed to fetch recently queued songs' });
+    }
+});
+
 router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
+        const classId = getCurrentClassId();
         const playlistData = await spotifyApi.getUserPlaylists({ limit: 50 });
         const items = playlistData.body?.items || [];
-        const allowedMap = await getAllowedPlaylistMap();
+        const allowedMap = await getAllowedPlaylistMap(classId);
 
         const playlists = items.map((playlist) => {
             const formatted = {
@@ -412,7 +504,7 @@ router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, asyn
             return formatted;
         });
 
-        await Promise.all(playlists.map((playlist) => upsertPlaylistMetadata(playlist, req.session?.token?.id)));
+        await Promise.all(playlists.map((playlist) => upsertPlaylistMetadata(playlist, req.session?.token?.id, classId)));
 
         return res.json({ ok: true, playlists });
     } catch (err) {
@@ -427,15 +519,16 @@ router.post('/api/spotify/playlists/allow', isAuthenticated, requireTeacherAcces
             return res.status(400).json({ ok: false, error: 'playlistId is required' });
         }
 
+        const classId = getCurrentClassId();
         await upsertPlaylistMetadata({
             id: playlistId,
             name,
             owner,
             image,
             totalTracks
-        }, req.session?.token?.id);
+        }, req.session?.token?.id, classId);
 
-        await setPlaylistAllowedState(playlistId, true, req.session?.token?.id);
+        await setPlaylistAllowedState(playlistId, true, req.session?.token?.id, classId);
         return res.json({ ok: true, message: 'Playlist allowed' });
     } catch (err) {
         console.error('Allow playlist error:', err);
@@ -450,7 +543,8 @@ router.post('/api/spotify/playlists/disallow', isAuthenticated, requireTeacherAc
             return res.status(400).json({ ok: false, error: 'playlistId is required' });
         }
 
-        const changes = await setPlaylistAllowedState(playlistId, false, req.session?.token?.id);
+        const classId = getCurrentClassId();
+        const changes = await setPlaylistAllowedState(playlistId, false, req.session?.token?.id, classId);
         if (!changes) {
             return res.status(404).json({ ok: false, error: 'Playlist not found' });
         }
@@ -464,7 +558,8 @@ router.post('/api/spotify/playlists/disallow', isAuthenticated, requireTeacherAc
 
 router.get('/api/playlists/allowed', isAuthenticated, async (req, res) => {
     try {
-        const rows = await getAllowedPlaylists();
+        const classId = getCurrentClassId();
+        const rows = await getAllowedPlaylists(classId);
         const playlists = rows.map((row) => ({
             id: row.spotify_playlist_id,
             name: row.name || 'Untitled Playlist',
@@ -487,7 +582,8 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
             return res.status(400).json({ ok: false, error: 'playlistId is required' });
         }
 
-        const allowedRow = await getAllowedPlaylist(playlistId);
+        const classId = getCurrentClassId();
+        const allowedRow = await getAllowedPlaylist(playlistId, classId);
         if (!allowedRow || !allowedRow.is_allowed) {
             return res.status(403).json({ ok: false, error: 'This playlist is not allowed' });
         }
@@ -533,7 +629,8 @@ router.post('/api/playlists/queue', isAuthenticated, async (req, res) => {
             return res.status(400).json({ ok: false, error: 'playlistId is required' });
         }
 
-        const allowedRow = await getAllowedPlaylist(playlistId);
+        const classId = getCurrentClassId();
+        const allowedRow = await getAllowedPlaylist(playlistId, classId);
         if (!allowedRow || !allowedRow.is_allowed) {
             return res.status(403).json({ ok: false, error: 'This playlist is not allowed' });
         }
@@ -850,6 +947,17 @@ router.post('/addToQueue', async (req, res) => {
                     }
                 );
             }
+
+            // Log transaction for owners (cost 0)
+            await logTransaction({
+                userID: req.session.token.id,
+                displayName: req.session.user,
+                action: 'play',
+                trackURI: trackInfo.uri,
+                trackName: trackInfo.name,
+                artistName: trackInfo.artist,
+                cost: 0
+            });
 
             //console.log(`Add to queue successful for owner (ID: ${req.session.token.id})`);
             res.json({ success: true, message: "Track queued!", trackInfo });
