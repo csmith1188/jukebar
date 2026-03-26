@@ -98,6 +98,127 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
     }
 });
 
+// Get banned songs list (for teacher panel)
+router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    try {
+        const db = require('../utils/database');
+        const normalizedKey = (trackName, artistName) => `${String(trackName || '').trim().toLowerCase()}||${String(artistName || '').trim().toLowerCase()}`;
+        const songs = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT
+                    b.id,
+                    b.track_name,
+                    b.artist_name,
+                    b.track_uri,
+                    b.reason,
+                    b.banned_by,
+                    b.timestamp,
+                    u.displayName AS banned_by_name
+                FROM banned_songs b
+                LEFT JOIN users u ON u.id = CAST(b.banned_by AS INTEGER)
+                ORDER BY datetime(b.timestamp) DESC, b.id DESC
+            `, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        const albumImageMap = {};
+        try {
+            await ensureSpotifyAccessToken();
+            const uriToKeys = {};
+            songs.forEach((song) => {
+                const key = normalizedKey(song.track_name, song.artist_name);
+                const uri = String(song.track_uri || '').trim();
+                if (!uri || !key) return;
+                if (!uriToKeys[uri]) uriToKeys[uri] = [];
+                uriToKeys[uri].push(key);
+            });
+
+            const trackIds = Object.keys(uriToKeys)
+                .map((uri) => uri.replace('spotify:track:', '').trim())
+                .filter(Boolean)
+                .slice(0, 50);
+
+            if (trackIds.length > 0) {
+                const batchData = await spotifyApi.getTracks(trackIds);
+                (batchData?.body?.tracks || []).forEach((track) => {
+                    if (!track?.uri) return;
+                    const keys = uriToKeys[track.uri] || [];
+                    const image = track.album?.images?.[0]?.url || '/img/placeholder.png';
+                    keys.forEach((key) => {
+                        albumImageMap[key] = image;
+                    });
+                });
+            }
+
+            const missingSongs = songs.filter((song) => {
+                const key = normalizedKey(song.track_name, song.artist_name);
+                return key && !albumImageMap[key];
+            });
+
+            // Limit how many missing songs we attempt to backfill per request
+            const MAX_BACKFILL = 10;
+            const songsToBackfill = missingSongs.slice(0, MAX_BACKFILL);
+
+            // Apply a small concurrency limit when calling spotifyApi.searchTracks
+            const CONCURRENCY = 5;
+            for (let i = 0; i < songsToBackfill.length; i += CONCURRENCY) {
+                const batch = songsToBackfill.slice(i, i + CONCURRENCY);
+                // Process this batch in parallel
+                await Promise.all(
+                    batch.map(async (song) => {
+                        const key = normalizedKey(song.track_name, song.artist_name);
+                        const trackName = String(song.track_name || '').trim();
+                        const artistName = String(song.artist_name || '').trim();
+
+                        if (!trackName || !artistName) {
+                            albumImageMap[key] = '/img/placeholder.png';
+                            return;
+                        }
+
+                        try {
+                            const query = `track:${trackName} artist:${artistName}`;
+                            const result = await spotifyApi.searchTracks(query, { limit: 1 });
+                            const image = result?.body?.tracks?.items?.[0]?.album?.images?.[0]?.url;
+                            albumImageMap[key] = image || '/img/placeholder.png';
+                        } catch {
+                            albumImageMap[key] = '/img/placeholder.png';
+                        }
+                    })
+                );
+            }
+        } catch (error) {
+            console.warn('Could not fetch banned song album art:', error.message);
+        }
+
+        const normalized = songs.map((song) => {
+            const rawBannedBy = song.banned_by == null ? '' : String(song.banned_by).trim();
+            const hasName = song.banned_by_name && String(song.banned_by_name).trim();
+            const bannedByDisplay = hasName
+                ? song.banned_by_name
+                : (rawBannedBy && rawBannedBy.toLowerCase() !== 'unknown' ? rawBannedBy : 'Unknown');
+            const key = normalizedKey(song.track_name, song.artist_name);
+
+            return {
+                id: song.id,
+                track_name: song.track_name,
+                artist_name: song.artist_name,
+                reason: song.reason || 'No reason given',
+                banned_by: song.banned_by,
+                banned_by_name: bannedByDisplay,
+                timestamp: song.timestamp,
+                album_image: albumImageMap[key] || '/img/placeholder.png'
+            };
+        });
+
+        res.json({ ok: true, songs: normalized });
+    } catch (error) {
+        console.error('Error fetching banned songs:', error);
+        res.status(500).json({ ok: false, error: 'Failed to fetch banned songs' });
+    }
+});
+
 // Ban a user
 router.post('/api/users/ban', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {

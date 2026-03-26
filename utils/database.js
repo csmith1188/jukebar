@@ -21,7 +21,8 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     displayName TEXT,
     pin INTEGER,
-    songsPlayed INTEGER DEFAULT 0
+    songsPlayed INTEGER DEFAULT 0,
+    digipogs INTEGER DEFAULT 0
 );`);
 
 // Migrate: add isBanned column if it doesn't exist
@@ -50,7 +51,29 @@ db.all("PRAGMA table_info(users)", (err, columns) => {
             }
         });
     }
+
+    const hasDigipogs = columns && columns.some(c => c.name === 'digipogs');
+    if (!hasDigipogs) {
+        db.run("ALTER TABLE users ADD COLUMN digipogs INTEGER DEFAULT 0", (alterErr) => {
+            if (alterErr) {
+                console.error('Error adding digipogs column:', alterErr);
+            } else {
+                console.log('Added digipogs column to users table');
+            }
+        });
+    }
 });
+
+db.run(`CREATE TABLE IF NOT EXISTS spotify_playlists (
+    spotify_playlist_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    image_url TEXT,
+    owner_name TEXT,
+    enabled_for_students INTEGER NOT NULL DEFAULT 0,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    total_duration_ms INTEGER NOT NULL DEFAULT 0,
+    last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
 
 db.run(`CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY,
@@ -66,11 +89,60 @@ db.run(`CREATE TABLE IF NOT EXISTS transactions (
 )`);
 
 db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
-    id INTEGER PRIMARY KEY,
-    track_name TEXT,
-    artist_name TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_name TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    track_uri TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    banned_by TEXT NOT NULL DEFAULT 'unknown',
+    reason TEXT DEFAULT 'No reason given'
 )`);
+
+// Migrate: ensure banned_songs has all required columns
+db.all("PRAGMA table_info(banned_songs)", (err, columns) => {
+    if (err) {
+        console.error('Error checking banned_songs schema:', err);
+        return;
+    }
+
+    const hasColumn = (name) => columns && columns.some(c => c.name === name);
+    const migrations = [];
+
+    if (!hasColumn('track_name')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN track_name TEXT");
+    }
+    if (!hasColumn('artist_name')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN artist_name TEXT");
+    }
+    if (!hasColumn('track_uri')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN track_uri TEXT");
+    }
+    if (!hasColumn('timestamp')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
+    if (!hasColumn('banned_by')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN banned_by TEXT DEFAULT 'unknown'");
+    }
+    if (!hasColumn('reason')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN reason TEXT DEFAULT 'No reason given'");
+    }
+
+    if (migrations.length === 0) {
+        return;
+    }
+
+    db.serialize(() => {
+        migrations.forEach((sql) => {
+            db.run(sql, (migrationErr) => {
+                if (migrationErr) {
+                    console.error('Error migrating banned_songs table:', migrationErr);
+                } else {
+                    console.log(`Applied migration: ${sql}`);
+                }
+            });
+        });
+    });
+});
 
 // Check if table needs migration (remove PRIMARY KEY constraint)
 db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_metadata'", [], (err, row) => {
@@ -78,11 +150,11 @@ db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_metadat
         console.error('Error checking queue_metadata schema:', err);
         return;
     }
-    
+
     // If table exists and has PRIMARY KEY, recreate it
     if (row && row.sql.includes('PRIMARY KEY')) {
         console.log('Migrating queue_metadata table to remove UNIQUE constraint...');
-        
+
         db.serialize(() => {
             // Rename old table
             db.run('ALTER TABLE queue_metadata RENAME TO queue_metadata_old', (renameErr) => {
@@ -90,7 +162,7 @@ db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_metadat
                     console.error('Error renaming table:', renameErr);
                     return;
                 }
-                
+
                 // Create new table without PRIMARY KEY
                 db.run(`CREATE TABLE queue_metadata (
                     track_uri TEXT NOT NULL,
@@ -104,14 +176,14 @@ db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_metadat
                         console.error('Error creating new table:', createErr);
                         return;
                     }
-                    
+
                     // Copy data from old table
                     db.run(`INSERT INTO queue_metadata SELECT * FROM queue_metadata_old`, (copyErr) => {
                         if (copyErr) {
                             console.error('Error copying data:', copyErr);
                             return;
                         }
-                        
+
                         // Drop old table
                         db.run('DROP TABLE queue_metadata_old', (dropErr) => {
                             if (dropErr) {
