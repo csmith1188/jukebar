@@ -47,7 +47,6 @@ const { isAuthenticated } = require('./middleware/auth');
 const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
-const playlistsRoutes = require('./routes/playlists');
 const { router: leaderboardRoutes, checkAndResetLeaderboard, startResetScheduler } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
@@ -144,12 +143,7 @@ io.on('connection', (socket) => {
         try {
             const { trackUri, trackName, trackArtist, initiator, reason } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
-            const banReason = typeof reason === 'string' ? reason.trim() : '';
-
-            if (!banReason) {
-                socket.emit('banVoteError', { error: 'Please provide a reason for banning this song' });
-                return;
-            }
+            const banReason = (typeof reason === 'string' && reason.trim()) ? reason.trim() : 'student ban';
 
             if (banReason.length > 200) {
                 socket.emit('banVoteError', { error: 'Ban reason must be 200 characters or fewer' });
@@ -474,25 +468,9 @@ app.get('/teacher', isAuthenticated, (req, res) => {
     }
 });
 
-app.get('/playlists', isAuthenticated, (req, res) => {
-    try {
-        const isTeacher = (req.session.permission >= 4) || isOwner(req.session.token?.id);
-        res.render('playlist.ejs', {
-            user: req.session.user,
-            userID: req.session.token?.id,
-            userPermission: req.session.permission || 2,
-            ownerIDs: getOwnerIds(),
-            isTeacher
-        });
-    } catch (error) {
-        res.send(error.message);
-    }
-});
-
 app.use('/', authRoutes);
 app.use('/', spotifyRoutes);
 app.use('/', paymentRoutes);
-app.use('/', playlistsRoutes);
 app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 app.use('/', require('./routes/jukepix'));
