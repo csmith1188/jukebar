@@ -480,6 +480,7 @@ class QueueManager {
                     currentTrack.displayName = metadata.display_name;
                     currentTrack.isAnon = metadata.is_anon;
                     currentTrack.skipShields = metadata.skip_shields;
+                    currentTrack.addedAt = metadata.added_at;
                     
                     // Mark this metadata as used so queue items don't use it
                     const metadataKey = `${currentTrack.uri}_${metadata.added_at}`;
