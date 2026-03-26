@@ -4,6 +4,9 @@ let cachedRawToken = null;
 // Store the current classroom state
 let currentClassroom = null;
 
+// Store the current class ID
+let currentClassId = null;
+
 // Store reference to formbar socket
 let formbarSocketRef = null;
 
@@ -52,6 +55,11 @@ function setupFormbarSocket(io, formbarSocket) {
         
         // Store the current classroom state
         currentClassroom = classroomData;
+
+        // Extract class ID from classroom data
+        if (classroomData && classroomData.id) {
+            currentClassId = classroomData.id;
+        }
         
         // Extract and broadcast auxiliary permission
         if (classroomData && classroomData.permissions && classroomData.permissions.auxiliary) {
@@ -67,6 +75,11 @@ function setupFormbarSocket(io, formbarSocket) {
         
         // Relay the classroom data to all connected clients
         io.emit('classUpdate', classroomData);
+    });
+
+    formbarSocket.on('setClass', (newClassId) => {
+        console.log('Formbar setClass:', newClassId);
+        currentClassId = newClassId;
     });
 
     formbarSocket.on('event', (data) => {
@@ -109,4 +122,9 @@ function getCurrentClassroom() {
     return currentClassroom;
 }
 
-module.exports = { setupFormbarSocket, setRawToken, getCurrentClassroom };
+// Function to get current class ID
+function getCurrentClassId() {
+    return currentClassId;
+}
+
+module.exports = { setupFormbarSocket, setRawToken, getCurrentClassroom, getCurrentClassId };

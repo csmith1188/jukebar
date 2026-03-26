@@ -1047,6 +1047,14 @@ h1 {
     max-width: 100%;
 }
 
+.recently-queued-header {
+    grid-column: 1 / -1;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 4px 2px 2px;
+}
+
 .player-right-rail {
     background: #111;
     border-radius: 10px;

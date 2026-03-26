@@ -664,6 +664,26 @@
                         }
                     }
 
+                    async function loadRecentlyQueued() {
+                        try {
+                            const response = await fetch('/recentlyQueued');
+                            const data = await response.json();
+                            const resultsDiv = document.getElementById('searchResults');
+
+                            if (!resultsDiv || resultsDiv.children.length > 0) return;
+
+                            if (data.ok && data.tracks.length > 0) {
+                                const header = document.createElement('div');
+                                header.className = 'recently-queued-header';
+                                header.textContent = 'Recently Queued';
+                                resultsDiv.appendChild(header);
+                                renderSearchResults(data.tracks, resultsDiv);
+                            }
+                        } catch (error) {
+                            console.error('Error loading recently queued:', error);
+                        }
+                    }
+
                     async function getQueue() {
                         try {
                             const response = await fetch('/getQueue', {
@@ -832,6 +852,9 @@
                     document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
                     document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                     document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+
+                    // Load recently queued songs on page load
+                    loadRecentlyQueued();
 
                     // Owner shield modal
                     document.getElementById('owner-shield-close')?.addEventListener('click', () => {
