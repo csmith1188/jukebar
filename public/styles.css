@@ -946,6 +946,32 @@ h1 {
     height: auto;
 }
 
+.load-more-btn {
+    grid-column: 1 / -1;
+    padding: 12px 24px;
+    background: #1db954;
+    color: #fff;
+    border: none;
+    border-radius: 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.15s;
+    margin: 10px auto;
+    width: fit-content;
+}
+
+.load-more-btn:hover {
+    background: #1ed760;
+    transform: scale(1.03);
+}
+
+.load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .player-page #searchResults .search-result-item {
     display: block;
     aspect-ratio: 1 / 1;
@@ -2972,7 +2998,7 @@ p {
 /* Changelog Button */
 .changelog-button {
     position: fixed;
-    bottom: 110px;
+    bottom: 15px;
     right: 30px;
     width: 48px;
     height: 48px;

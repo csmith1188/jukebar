@@ -324,15 +324,17 @@ async function isPlaylistCurrentlyPlaying(playlistId) {
 
 router.post('/search', async (req, res) => {
     try {
-        let { query, source } = req.body || {};
+        let { query, source, offset } = req.body || {};
         if (!query || !query.trim()) {
             return res.status(400).json({ ok: false, error: 'Missing query' });
         }
 
+        offset = Math.max(0, parseInt(offset) || 0);
         await ensureSpotifyAccessToken();
 
-        const searchData = await spotifyApi.searchTracks(query, { limit: 25 });
+        const searchData = await spotifyApi.searchTracks(query, { limit: 50, offset });
         const items = searchData.body.tracks.items || [];
+        const total = searchData.body.tracks.total || 0;
 
         let simplified = items.map(t => ({
             id: t.id,
@@ -377,9 +379,12 @@ router.post('/search', async (req, res) => {
                 simplified = simplified.map(t => ({ ...t, isBanned: false }));
             }
         }
+        const nextOffset = offset + 50;
         return res.json({
             ok: true,
-            tracks: { items: simplified }
+            tracks: { items: simplified },
+            nextOffset,
+            hasMore: nextOffset < total
         });
     } catch (err) {
         return handleSpotifyError(err, res, 'search');
