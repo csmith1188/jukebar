@@ -2972,8 +2972,8 @@ p {
 /* Changelog Button */
 .changelog-button {
     position: fixed;
-    bottom: 30px;
-    left: 30px;
+    bottom: 110px;
+    right: 30px;
     width: 48px;
     height: 48px;
     border-radius: 100%;
@@ -2983,7 +2983,7 @@ p {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 999;
+    z-index: 2001;
     box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
     transition: all 0.3s ease;
     padding: 0;

@@ -1474,8 +1474,32 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                         return failAndConsume(404, { ok: false, error: 'Track no longer in queue or playing' });
                     }
                 } else {
-                    console.error('Track not found in queue or as currently playing');
-                    return failAndConsume(404, { ok: false, error: 'Track not found in queue or playing' });
+                    // No metadata entry exists for the currently playing track — create one with shields
+                    console.log('No metadata entry for currently playing track, creating one with', quantity, 'shields');
+                    const nowTs = Date.now();
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            `INSERT INTO queue_metadata (track_uri, added_by, added_at, display_name, is_anon, skip_shields) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [trackUri, currentTrack.addedBy || 'spotify', nowTs, currentTrack.displayName || 'Spotify', currentTrack.isAnon ? 1 : 0, quantity],
+                            function (err) {
+                                if (err) {
+                                    console.error('Database error inserting metadata for current track:', err);
+                                    reject(err);
+                                } else {
+                                    console.log('Created metadata entry for currently playing track with', quantity, 'shields');
+                                    resolve(this.changes);
+                                }
+                            }
+                        );
+                    });
+                    track = {
+                        track_uri: trackUri,
+                        added_by: currentTrack.addedBy || 'spotify',
+                        added_at: nowTs,
+                        display_name: currentTrack.displayName || 'Spotify',
+                        is_anon: currentTrack.isAnon ? 1 : 0,
+                        skip_shields: quantity
+                    };
                 }
             } else {
                 console.error('Track not found in queue or as currently playing');

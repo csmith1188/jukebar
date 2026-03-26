@@ -124,19 +124,6 @@
             </div>
         </div>
 
-        <div id="banReasonModal" class="payment-modal" style="display:none;">
-            <div class="payment-content" style="max-width: 520px;">
-                <button id="ban-reason-close">&times;</button>
-                <h3 style="margin-bottom: 12px;">Reason for ban</h3>
-                <input type="text" id="banReasonInput" placeholder="Enter reason (required)" maxlength="200"
-                    style="width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#1f1f1f;color:#fff;">
-                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-                    <button id="ban-reason-cancel" class="unban-button" type="button">Cancel</button>
-                    <button id="ban-reason-confirm" class="ban-button" type="button">Continue</button>
-                </div>
-            </div>
-        </div>
-
         <button id="changelog-button" class="changelog-button" title="View Changelog">
             <img src="/img/changelog.png" alt="Changelog">
         </button>
@@ -370,23 +357,16 @@
                         }
 
                         const userIsOwner = isOwnerClient(currentID);
-                        if (typeof window.openBanReasonModal !== 'function') {
-                            Notify('Unable to open reason input box.', 'error');
-                            return;
+                        if (userIsOwner) {
+                            startBanVote(actionTrack.uri, actionTrack.name, actionTrack.artist, 'student ban');
+                        } else {
+                            pendingAction = 'Ban Vote';
+                            pendingTrackUri = actionTrack.uri;
+                            pendingTrackName = actionTrack.name;
+                            pendingTrackArtist = actionTrack.artist;
+                            pendingBanReason = 'student ban';
+                            showPayment();
                         }
-
-                        window.openBanReasonModal((reason) => {
-                            if (userIsOwner) {
-                                startBanVote(actionTrack.uri, actionTrack.name, actionTrack.artist, reason);
-                            } else {
-                                pendingAction = 'Ban Vote';
-                                pendingTrackUri = actionTrack.uri;
-                                pendingTrackName = actionTrack.name;
-                                pendingTrackArtist = actionTrack.artist;
-                                pendingBanReason = reason;
-                                showPayment();
-                            }
-                        });
                     });
 
                     document.getElementById('now-shield-button')?.addEventListener('click', async () => {
@@ -762,7 +742,7 @@
                             const uri = pendingTrackUri;
                             const trackName = pendingTrackName || 'Unknown Track';
                             const trackArtist = pendingTrackArtist || 'Unknown Artist';
-                            const reason = pendingBanReason || '';
+                            const reason = pendingBanReason || 'student ban';
                             pendingTrackUri = null;
                             pendingTrackName = null;
                             pendingTrackArtist = null;
@@ -827,6 +807,7 @@
 
                     document.getElementById('close-changelog')?.addEventListener('click', () => {
                         document.getElementById('changelogModal').style.display = 'none';
+                        localStorage.setItem('changelog_seen', 'v2.0');
                     });
 
                     // Close modal when clicking outside of it
@@ -834,8 +815,14 @@
                         const changelogModal = document.getElementById('changelogModal');
                         if (event.target === changelogModal) {
                             changelogModal.style.display = 'none';
+                            localStorage.setItem('changelog_seen', 'v2.0');
                         }
                     });
+
+                    // Show changelog on first visit or new version
+                    if (localStorage.getItem('changelog_seen') !== 'v2.0') {
+                        document.getElementById('changelogModal').style.display = 'block';
+                    }
 
                     // Event delegation for dynamically created play and ban buttons
                     document.getElementById('searchResults')?.addEventListener('click', (e) => {
@@ -862,25 +849,16 @@
                             // Check if user is owner (owners can start votes for free)
                             const userIsOwner = isOwnerClient(currentID);
 
-                            if (typeof window.openBanReasonModal !== 'function') {
-                                Notify('Unable to open reason input box.', 'error');
-                                return;
+                            if (userIsOwner) {
+                                startBanVote(uri, name, artist, 'student ban');
+                            } else {
+                                pendingAction = 'Ban Vote';
+                                pendingTrackUri = uri;
+                                pendingTrackName = name;
+                                pendingTrackArtist = artist;
+                                pendingBanReason = 'student ban';
+                                showPayment();
                             }
-
-                            window.openBanReasonModal((reason) => {
-                                if (userIsOwner) {
-                                    // Owner bypass - start vote immediately
-                                    startBanVote(uri, name, artist, reason);
-                                } else {
-                                    // Regular user - show payment modal first
-                                    pendingAction = 'Ban Vote';
-                                    pendingTrackUri = uri;
-                                    pendingTrackName = name;
-                                    pendingTrackArtist = artist;
-                                    pendingBanReason = reason;
-                                    showPayment();
-                                }
-                            });
                         }
                     });
 

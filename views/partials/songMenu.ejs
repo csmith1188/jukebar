@@ -12,57 +12,6 @@
 
 <script>
     let currentMenuTrackUri = null;
-    let onBanReasonConfirm = null;
-
-    function openBanReasonModal(onConfirm) {
-        const modal = document.getElementById('banReasonModal');
-        const input = document.getElementById('banReasonInput');
-
-        if (!modal || !input) {
-            Notify('Unable to open reason input box.', 'error');
-            return;
-        }
-
-        onBanReasonConfirm = onConfirm;
-        input.value = '';
-        modal.style.display = 'block';
-        document.querySelector('.main-content')?.classList.add('blurred');
-        setTimeout(() => input.focus(), 0);
-    }
-
-    function closeBanReasonModal() {
-        const modal = document.getElementById('banReasonModal');
-        const input = document.getElementById('banReasonInput');
-        if (modal) modal.style.display = 'none';
-        if (input) input.value = '';
-        onBanReasonConfirm = null;
-        document.querySelector('.main-content')?.classList.remove('blurred');
-    }
-
-    window.openBanReasonModal = openBanReasonModal;
-
-    document.getElementById('ban-reason-close')?.addEventListener('click', closeBanReasonModal);
-    document.getElementById('ban-reason-cancel')?.addEventListener('click', closeBanReasonModal);
-    document.getElementById('ban-reason-confirm')?.addEventListener('click', () => {
-        const input = document.getElementById('banReasonInput');
-        const reason = (input?.value || '').trim();
-
-        if (!reason) {
-            Notify('A ban reason is required to start a vote.', 'error');
-            return;
-        }
-
-        if (reason.length > 200) {
-            Notify('Ban reason must be 200 characters or fewer.', 'error');
-            return;
-        }
-
-        const callback = onBanReasonConfirm;
-        closeBanReasonModal();
-        if (typeof callback === 'function') {
-            callback(reason);
-        }
-    });
 
     // Listen for updateSongMenu event to show dropdown at position
     window.addEventListener('updateSongMenu', (event) => {
@@ -195,11 +144,7 @@
     function startBanVote(trackUri, trackName, trackArtist, reason) {
         console.log('Starting ban vote, socket:', window.banVoteSocket);
 
-        const trimmedReason = (reason || '').trim();
-        if (!trimmedReason) {
-            Notify('A ban reason is required to start a vote.', 'error');
-            return;
-        }
+        const trimmedReason = (reason || 'student ban').trim();
 
         // Emit socket event to initiate ban vote
         const socket = window.banVoteSocket || (typeof io !== 'undefined' ? io() : null);

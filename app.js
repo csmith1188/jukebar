@@ -143,12 +143,7 @@ io.on('connection', (socket) => {
         try {
             const { trackUri, trackName, trackArtist, initiator, reason } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
-            const banReason = typeof reason === 'string' ? reason.trim() : '';
-
-            if (!banReason) {
-                socket.emit('banVoteError', { error: 'Please provide a reason for banning this song' });
-                return;
-            }
+            const banReason = (typeof reason === 'string' && reason.trim()) ? reason.trim() : 'student ban';
 
             if (banReason.length > 200) {
                 socket.emit('banVoteError', { error: 'Ban reason must be 200 characters or fewer' });
