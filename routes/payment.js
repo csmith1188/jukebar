@@ -17,6 +17,32 @@ function computePlaylistCost(trackCount) {
     return Math.min(trackCount * songAmount, 500);
 }
 
+// Returns the top non-owner user IDs ranked by plays in the last 7 days (same source as the leaderboard)
+function getRollingTopUsers() {
+    return new Promise((resolve, reject) => {
+        const ownerIds = require('../utils/owners').getOwnerIds();
+        const ownerFilter = ownerIds.length
+            ? `AND t.user_id NOT IN (${ownerIds.map(() => '?').join(',')})`
+            : '';
+
+        db.all(
+            `SELECT t.user_id as id
+             FROM transactions t
+             WHERE t.action = 'play'
+               AND t.timestamp >= datetime('now', '-7 days')
+               ${ownerFilter}
+             GROUP BY t.user_id
+             ORDER BY COUNT(*) DESC
+             LIMIT 10`,
+            ownerIds,
+            (err, rows) => {
+                if (err) return reject(err);
+                resolve((rows || []).map(r => Number(r.id)));
+            }
+        );
+    });
+}
+
 async function fetchPlaylistTrackItems(playlistId) {
     await ensureSpotifyAccessToken();
     const items = [];
@@ -90,23 +116,12 @@ router.post('/transfer', async (req, res) => {
         console.log('reason:', reason);
 
         //gets the top 3 users to apply a discount (filter out ALL owners)
-        const topUsers = await new Promise((resolve, reject) => {
-            db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
-                if (rows) {
-                    rows = rows.filter(r => !isOwner(r.id));
-                }
-                if (err) return reject(err);
-                resolve(rows.map(r => Number(r.id)));
-            });
-        });
+        const topUsers = await getRollingTopUsers();
 
         const userRow = await new Promise((resolve, reject) => {
-            db.get("SELECT id, songsPlayed FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row);
-                }
+            db.get("SELECT id FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
             });
         });
 
@@ -140,7 +155,7 @@ router.post('/transfer', async (req, res) => {
             // Ban Votes are a fixed cost (no discounts)
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else {
-            amount = Number(process.env.TRANSFER_AMOUNT) || 50;
+            amount = Number(process.env.SONG_AMOUNT) || 50;
             if (userRow && userRow.id) {
                 const userIdNum = Number(userRow.id);
                 if (topUsers[0] === userIdNum) {
@@ -150,11 +165,6 @@ router.post('/transfer', async (req, res) => {
                 } else if (topUsers[2] === userIdNum) {
                     amount = Math.max(0, amount - 3);
                 }
-            }
-            // no discount for users who haven't played any songs
-            const songsPlayed = userRow?.songsPlayed || 0;
-            if (songsPlayed == 0) {
-                amount = 50;
             }
         }
 
@@ -419,15 +429,8 @@ router.post('/getAmount', async (req, res) => {
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
-            // Get top 3 user IDs in order
-            const topUsers = await new Promise((resolve, reject) => {
-                db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
-                    if (err) return reject(err);
-                    // Filter out ALL owner IDs
-                    const filteredRows = rows.filter(r => !isOwner(r.id));
-                    resolve(filteredRows.map(r => Number(r.id)));
-                });
-            });
+            // Get top 3 user IDs from the rolling 7-day leaderboard (same source as the displayed leaderboard)
+            const topUsers = await getRollingTopUsers();
             // discount
             if (userId) {
                 const userIdNum = Number(userId);

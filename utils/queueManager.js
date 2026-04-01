@@ -52,6 +52,8 @@ class QueueManager {
         
         if (removedCount > 0) {
             console.log(`Removed ${removedCount} track(s) with URI ${trackUri} from queue`);
+            // Clean up ALL metadata for this URI so stale shields/names don't bleed into future queues
+            this.removeAllTrackMetadata(trackUri);
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
         }
         
@@ -63,17 +65,24 @@ class QueueManager {
         const originalLength = this.queue.length;
         const normalizedTrackName = trackName.toLowerCase().trim();
         const normalizedArtistName = artistName.toLowerCase().trim();
-        
+
+        const removedUris = new Set();
         this.queue = this.queue.filter(track => {
             const queueTrackName = (track.name || '').toLowerCase().trim();
             const queueArtistName = (track.artist || '').toLowerCase().trim();
-            return !(queueTrackName === normalizedTrackName && queueArtistName === normalizedArtistName);
+            const matches = queueTrackName === normalizedTrackName && queueArtistName === normalizedArtistName;
+            if (matches && track.uri) removedUris.add(track.uri);
+            return !matches;
         });
         
         const removedCount = originalLength - this.queue.length;
         
         if (removedCount > 0) {
             console.log(`Removed ${removedCount} track(s) matching "${trackName}" by "${artistName}" from queue`);
+            // Clean up ALL metadata for each removed URI so stale shields/names don't bleed into future queues
+            for (const uri of removedUris) {
+                this.removeAllTrackMetadata(uri);
+            }
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
         }
         
@@ -633,6 +642,27 @@ class QueueManager {
                         //console.log('Removed metadata for track:', trackUri);
                         resolve();
                     }
+                }
+            );
+        });
+    }
+
+    // Remove ALL metadata for a track URI (used when a track is force-removed from the queue,
+    // e.g. via ban or admin removal, so stale shields/names don't persist for future queues)
+    async removeAllTrackMetadata(trackUri) {
+        const db = require('./database');
+
+        return new Promise((resolve) => {
+            db.run(
+                'DELETE FROM queue_metadata WHERE track_uri = ?',
+                [trackUri],
+                (err) => {
+                    if (err) {
+                        console.error('Failed to remove all track metadata for', trackUri, ':', err);
+                    } else {
+                        console.log('Removed all metadata for force-removed track:', trackUri);
+                    }
+                    resolve();
                 }
             );
         });
