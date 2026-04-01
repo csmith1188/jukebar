@@ -1310,7 +1310,14 @@ h1 {
     opacity: 0.8;
 }
 
-.player-page .player-bottom-bar #currentlyPlaying .queue-item-added-by,
+.player-page .player-bottom-bar #currentlyPlaying .queue-item-added-by {
+    display: block;
+    font-size: 0.72rem;
+    opacity: 0.65;
+    margin-top: 2px;
+    font-style: normal;
+}
+
 .player-page .player-bottom-bar #currentlyPlaying .shield-badge {
     display: none;
 }
