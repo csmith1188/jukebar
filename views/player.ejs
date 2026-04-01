@@ -19,8 +19,9 @@
     <%- include('partials/header', { page: 'player' }) %>
         <div class="main-content player-main-content">
             <div class="player-topbar">
-                <p class="user-greeting">Logged in as: <strong><%= user %></strong> <span class="user-count">(<span
-                            id="onlineUserCount">1</span> online)</span></p>
+                <p class="user-greeting">Logged in as: <strong>
+                        <%= user %>
+                    </strong> <span class="user-count">(<span id="onlineUserCount">1</span> online)</span></p>
             </div>
 
             <div class="player-shell">
@@ -81,8 +82,8 @@
                             </div>
                             <img src="/img/skip.png" alt="Skip" class="player-control-icon player-control-icon--skip">
                         </button>
-                        <button id="now-shield-button" class="player-control-btn player-control-btn--action" type="button"
-                            aria-label="Skip Shield" title="Skip Shield" disabled>
+                        <button id="now-shield-button" class="player-control-btn player-control-btn--action"
+                            type="button" aria-label="Skip Shield" title="Skip Shield" disabled>
                             <img src="/img/skipShield.png" alt="Skip Shield" class="player-control-icon">
                         </button>
                     </div>
@@ -675,10 +676,45 @@
                             if (data.ok && data.tracks.length > 0) {
                                 const header = document.createElement('div');
                                 header.className = 'recently-queued-header';
-                                header.textContent = 'Recently Queued';
+                                header.style.display = 'flex';
+                                header.style.justifyContent = 'space-between';
+                                header.style.alignItems = 'center';
+
+                                const titleSpan = document.createElement('span');
+                                titleSpan.textContent = 'Recently Queued';
+                                header.appendChild(titleSpan);
+
+                                const clearLink = document.createElement('a');
+                                clearLink.textContent = 'Clear Queue History';
+                                clearLink.href = '#';
+                                clearLink.style.cssText = 'font-size: 0.85em; color: rgba(255, 255, 255, 0.6); text-decoration: none; cursor: pointer; transition: color 0.2s;';
+                                clearLink.onmouseover = () => clearLink.style.color = 'rgba(255, 255, 255, 0.9)';
+                                clearLink.onmouseout = () => clearLink.style.color = 'rgba(255, 255, 255, 0.6)';
+                                clearLink.onclick = (e) => {
+                                    e.preventDefault();
+                                    if (confirm('Are you sure you want to clear your queue history?')) {
+                                        fetch('/clearQueueHistory', { method: 'POST' })
+                                            .then(res => res.json())
+                                            .then(data => {
+                                                if (data.ok) {
+                                                    Notify('Queue history cleared', 'info');
+                                                    loadRecentlyQueued(); // Reload
+                                                } else {
+                                                    Notify('Failed to clear history', 'error');
+                                                }
+                                            })
+                                            .catch(err => {
+                                                console.error('Error clearing history:', err);
+                                                Notify('Error clearing history', 'error');
+                                            });
+                                    }
+                                };
+                                header.appendChild(clearLink);
+
                                 resultsDiv.appendChild(header);
                                 renderSearchResults(data.tracks, resultsDiv);
                             }
+
                         } catch (error) {
                             console.error('Error loading recently queued:', error);
                         }
@@ -852,6 +888,17 @@
                     document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
                     document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                     document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+
+                    // When search input is cleared, restore recently queued
+                    document.getElementById('searchInput')?.addEventListener('input', (e) => {
+                        if (e.target.value.trim() === '') {
+                            const searchResults = document.getElementById('searchResults');
+                            if (searchResults) {
+                                searchResults.innerHTML = '';
+                            }
+                            loadRecentlyQueued();
+                        }
+                    });
 
                     // Load recently queued songs on page load
                     loadRecentlyQueued();
@@ -1090,6 +1137,62 @@
                         socket.on('banVoteError', (data) => {
                             console.log('banVoteError received:', data);
                             Notify(data.error || 'Ban vote error', 'error');
+                        });
+
+                        socket.on('recentlyQueuedUpdate', (track) => {
+                            const searchInput = document.getElementById('searchInput');
+                            const searchResults = document.getElementById('searchResults');
+                            if (!searchResults) return;
+
+                            const isSearchActive = searchInput && searchInput.value.trim() !== '';
+
+                            if (!isSearchActive) {
+                                // Recently queued is visible — prepend the new track without a full refetch.
+                                // Remove any existing entry for this URI so it moves to the top (dedup).
+                                searchResults.querySelectorAll(`.search-result-item[data-uri="${track.uri}"]`).forEach(el => el.remove());
+
+                                const header = searchResults.querySelector('.recently-queued-header');
+                                const insertBefore = header ? header.nextElementSibling : null;
+
+                                const trackDiv = document.createElement('div');
+                                trackDiv.className = 'search-result-item';
+                                trackDiv.dataset.uri = track.uri;
+                                trackDiv.innerHTML = `
+                                    <img src="${track.album?.image || ''}" alt="${track.album?.name || ''}" class="album-cover" />
+                                    <div class="search-result-content-outer">
+                                        <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                                        <div class="search-result-content-pushies">
+                                            <div class="search-result-title" title="${track.name}">${track.name}</div>
+                                            <div class="search-result-artist" title="${track.artist}">${track.artist}</div>
+                                            <div class="search-result-actions">
+                                                <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
+                                                    <img src="/img/play.png" alt="Play" class="play-icon">
+                                                </button>
+                                                <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
+                                                    <img src="/img/ban.png" alt="Ban" class="ban-icon">
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+
+                                if (insertBefore) {
+                                    searchResults.insertBefore(trackDiv, insertBefore);
+                                } else {
+                                    // No header yet — do a full reload to get the header too
+                                    loadRecentlyQueued();
+                                }
+                            }
+                            // If search is active we leave it alone; the list will be fresh next time the input is cleared.
+                        });
+
+                        socket.on('queueHistoryUpdated', () => {
+                            // Fired when the user clears their queue history
+                            const searchResults = document.getElementById('searchResults');
+                            if (searchResults) {
+                                searchResults.innerHTML = '';
+                            }
+                            loadRecentlyQueued();
                         });
                     }
 

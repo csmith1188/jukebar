@@ -103,6 +103,12 @@ const voteManager = new VoteManager();
 io.on('connection', (socket) => {
     //console.log('Client connected for queue sync');
 
+    // Join user-specific room for targeted events (e.g. recently queued updates)
+    const userId = socket.request?.session?.token?.id;
+    if (userId) {
+        socket.join(`user:${userId}`);
+    }
+
     // Broadcast updated user count to all clients
     io.emit('userCount', io.engine.clientsCount);
 
