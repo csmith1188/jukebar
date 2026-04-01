@@ -15,6 +15,18 @@ const path = require('path');
 // Play random sound from /sfx folder
 let isPlayingSound = false;
 
+const APRIL_FOOLS_URI = 'spotify:track:0rQvvjAkX1B0gcJwjEGQZW';
+const APRIL_FOOLS_CHANCE = 0.3; // 30% chance
+
+function isAprilFools() {
+    const now = new Date();
+    return now.getMonth() === 3 && now.getDate() === 1; // month is 0-indexed
+}
+
+function shouldAprilFool() {
+    return isAprilFools() && Math.random() < APRIL_FOOLS_CHANCE;
+}
+
 function playRandomBlockedSound() {
     if (isPlayingSound) {
         console.log('Already playing a sound; skipping');
@@ -941,7 +953,7 @@ router.post('/addToQueue', async (req, res) => {
                 addedBy: username
             };
 
-            await spotifyApi.addToQueue(uri);
+            await spotifyApi.addToQueue(shouldAprilFool() ? APRIL_FOOLS_URI : uri);
 
             const queueTrack = {
                 uri: track.uri,
@@ -1078,9 +1090,7 @@ router.post('/addToQueue', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
         }
 
-        await spotifyApi.addToQueue(uri);
-
-        // Also add to queueManager for WebSocket updates
+        await spotifyApi.addToQueue(shouldAprilFool() ? APRIL_FOOLS_URI : uri);
         const username2 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
 
         const queueTrack = {
