@@ -482,6 +482,33 @@ router.get('/recentlyQueued', async (req, res) => {
     }
 });
 
+router.post('/clearQueueHistory', async (req, res) => {
+    if (!req.session?.token?.id) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(
+                `DELETE FROM transactions WHERE user_id = ? AND action = 'play'`,
+                [req.session.token.id],
+                (err) => err ? reject(err) : resolve()
+            );
+        });
+
+        // Emit socket event to notify the user their history was cleared
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`user:${req.session.token.id}`).emit('queueHistoryUpdated', { userId: req.session.token.id });
+        }
+
+        return res.json({ ok: true, message: 'Queue history cleared' });
+    } catch (err) {
+        console.error('Error clearing queue history:', err);
+        return res.status(500).json({ ok: false, error: 'Failed to clear queue history' });
+    }
+});
+
 router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
@@ -802,29 +829,31 @@ router.get('/getQueue', async (req, res) => {
 
             // 📖 Fetch metadata for all tracks from database
             const trackUris = items.map(item => item.uri);
-            const metadataMap = await new Promise((resolve) => {
+            const metadataArrayMap = await new Promise((resolve) => {
                 if (trackUris.length === 0) {
                     resolve({});
                     return;
                 }
 
                 const placeholders = trackUris.map(() => '?').join(',');
-                // Fetch added_by, added_at, and is_anon for each track
-                const query = `SELECT track_uri, added_by, added_at, is_anon FROM queue_metadata WHERE track_uri IN (${placeholders})`;
+                // Fetch added_by, added_at, and is_anon for each track, ordered so oldest is first
+                const query = `SELECT track_uri, added_by, added_at, is_anon FROM queue_metadata WHERE track_uri IN (${placeholders}) ORDER BY added_at ASC`;
 
                 db.all(query, trackUris, (err, rows) => {
                     if (err) {
                         console.error('Failed to fetch queue metadata:', err);
                         resolve({});
                     } else {
+                        // Build array-based map to correctly handle duplicate URIs in the queue
                         const map = {};
                         if (rows) {
                             rows.forEach(row => {
-                                map[row.track_uri] = {
+                                if (!map[row.track_uri]) map[row.track_uri] = [];
+                                map[row.track_uri].push({
                                     added_by: row.added_by,
                                     added_at: row.added_at,
                                     is_anon: row.is_anon
-                                };
+                                });
                             });
                         }
                         resolve(map);
@@ -832,10 +861,24 @@ router.get('/getQueue', async (req, res) => {
                 });
             });
 
+            // Track which metadata entries have been consumed (for duplicate URIs)
+            const usedMetaKeys = new Set();
+
             let simplified = items.map(t => {
-                const meta = metadataMap[t.uri] || {};
-                let addedBy = meta.added_by || 'Spotify';
-                if (meta.is_anon === 1 || meta.is_anon === true) {
+                const entries = metadataArrayMap[t.uri] || [];
+                let meta = null;
+                for (const entry of entries) {
+                    const key = `${t.uri}_${entry.added_at}`;
+                    if (!usedMetaKeys.has(key)) {
+                        meta = entry;
+                        usedMetaKeys.add(key);
+                        break;
+                    }
+                }
+                if (!meta && entries.length > 0) meta = entries[0];
+
+                let addedBy = meta?.added_by || 'Spotify';
+                if (meta?.is_anon === 1 || meta?.is_anon === true) {
                     addedBy = 'Anonymous';
                 }
                 return {
@@ -850,7 +893,7 @@ router.get('/getQueue', async (req, res) => {
                     explicit: t.explicit,
                     duration_ms: t.duration_ms,
                     addedBy,
-                    addedAt: meta.added_at || 0
+                    addedAt: meta?.added_at || 0
                 };
             });
             res.json({
@@ -958,6 +1001,17 @@ router.post('/addToQueue', async (req, res) => {
                 artistName: trackInfo.artist,
                 cost: 0
             });
+
+            // Notify the queuing user's sockets that their recently queued list changed
+            const io = req.app.get('io');
+            if (io) {
+                io.to(`user:${req.session.token.id}`).emit('recentlyQueuedUpdate', {
+                    name: trackInfo.name,
+                    artist: trackInfo.artist,
+                    uri: trackInfo.uri,
+                    album: { name: '', image: trackInfo.cover }
+                });
+            }
 
             //console.log(`Add to queue successful for owner (ID: ${req.session.token.id})`);
             res.json({ success: true, message: "Track queued!", trackInfo });
@@ -1090,6 +1144,16 @@ router.post('/addToQueue', async (req, res) => {
         // Clear payment flag after successful queue addition
         req.session.hasPaid = false;
         req.session.save(() => {
+            // Notify the queuing user's sockets that their recently queued list changed
+            const io = req.app.get('io');
+            if (io) {
+                io.to(`user:${req.session.token.id}`).emit('recentlyQueuedUpdate', {
+                    name: trackInfo.name,
+                    artist: trackInfo.artist,
+                    uri: trackInfo.uri,
+                    album: { name: '', image: trackInfo.cover }
+                });
+            }
             res.json({ success: true, message: "Track queued!", trackInfo });
         });
 
