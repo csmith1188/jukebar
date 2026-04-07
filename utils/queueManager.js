@@ -100,7 +100,7 @@ class QueueManager {
     }
 
     // Skip to next track
-    async skipTrack() {
+    async skipTrack(actor = null) {
         if (this.queue.length > 0) {
             const skippedTrack = this.currentTrack;
             const nextTrack = this.queue.shift();
@@ -125,7 +125,14 @@ class QueueManager {
             // Send queue update with updated current track
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
             // Send skip for notifications
-            this.broadcastUpdate('skip', { currentTrack: this.currentTrack, queue: this.queue });
+            this.broadcastUpdate('skip', {
+                currentTrack: this.currentTrack,
+                skippedTrack,
+                queue: this.queue,
+                skippedBy: actor || 'Someone',
+                skippedAt: Date.now(),
+                skippedType: 'song'
+            });
             return nextTrack;
         }
         return null;
