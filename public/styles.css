@@ -1173,25 +1173,23 @@ h1 {
 }
 
 .skip-activity-box {
-    position: fixed;
-    right: 90px;
-    bottom: 12px;
+    position: relative;
     width: 320px;
-    max-width: calc(100vw - 110px);
+    max-width: min(320px, calc(100vw - 220px));
+    margin-right: 84px;
     box-sizing: border-box;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 8px;
-    padding: 8px 10px;
-    z-index: 2202;
+    padding: 6px 8px;
 }
 
 .skip-activity-title {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: rgba(255, 255, 255, 0.68);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .skip-activity-list {
@@ -1201,7 +1199,7 @@ h1 {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    max-height: 84px;
+    max-height: 42px;
     overflow: auto;
 }
 
@@ -1234,10 +1232,9 @@ h1 {
 
 @media (max-width: 980px) {
     .skip-activity-box {
-        right: 68px;
-        bottom: 72px;
-        width: min(360px, calc(100vw - 24px));
-        max-width: calc(100vw - 80px);
+        width: min(360px, 100%);
+        max-width: 100%;
+        margin-right: 0;
     }
 }
 
