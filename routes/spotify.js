@@ -1282,7 +1282,7 @@ router.post('/skip', async (req, res) => {
             await spotifyApi.skipToNext();
 
             // Update queueManager and broadcast to clients
-            const nextTrack = await queueManager.skipTrack();
+            const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher');
             //console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
             res.json({ ok: true, currentTrack: nextTrack });
             return;
@@ -1378,6 +1378,12 @@ router.post('/skip', async (req, res) => {
 
                 // Broadcast updated queue to refresh shield count
                 await queueManager.syncWithSpotify(spotifyApi);
+                queueManager.broadcastUpdate('skip', {
+                    skippedBy: req.session.user || 'Someone',
+                    skippedAt: Date.now(),
+                    skippedType: 'shield',
+                    skippedTrack: { name: trackName }
+                });
 
                 console.log('Returning shield blocked response to client');
                 console.log(`Played sound: ${soundFile}`);
@@ -1401,7 +1407,7 @@ router.post('/skip', async (req, res) => {
         await spotifyApi.skipToNext();
 
         // Update queueManager and broadcast to clients
-        const nextTrack = await queueManager.skipTrack();
+        const nextTrack = await queueManager.skipTrack(req.session.user || 'Someone');
 
         if (currentTrack) {
             await logTransaction({
@@ -1483,7 +1489,7 @@ router.post('/queue/skip', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
         }
 
-        const nextTrack = await queueManager.skipTrack();
+        const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher');
 
         if (nextTrack) {
             // Actually skip on Spotify

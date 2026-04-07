@@ -89,6 +89,12 @@
                     </div>
                 </div>
                 <div class="player-nowplaying-right">
+                    <div id="skipActivityBox" class="skip-activity-box" aria-live="polite">
+                        <div class="skip-activity-title">Skip Activity</div>
+                        <ul id="skipActivityList" class="skip-activity-list">
+                            <li class="skip-activity-item skip-activity-empty">No skips yet.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </footer>
@@ -1098,6 +1104,7 @@
 
                         socket.on('skip', (data) => {
                             showNotification('Track skipped', 'info');
+                            updateSkipActivity(data);
                         });
 
                         // Handle shield purchase confirmation
@@ -1460,6 +1467,55 @@
                     setTimeout(() => {
                         notification.remove();
                     }, 3000);
+                }
+
+                function formatSkipActivityTime(timestamp) {
+                    const date = timestamp ? new Date(timestamp) : new Date();
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                function updateSkipActivity(data) {
+                    const skipList = document.getElementById('skipActivityList');
+                    if (!skipList) return;
+
+                    const skipTime = formatSkipActivityTime(data?.skippedAt);
+                    const skipUser = data?.skippedBy || 'Someone';
+                    const skippedSong = data?.skippedTrack?.name || 'Unknown song';
+                    const skippedType = data?.skippedType === 'shield' ? 'shield' : 'song';
+
+                    const emptyItem = skipList.querySelector('.skip-activity-empty');
+                    if (emptyItem) emptyItem.remove();
+
+                    const listItem = document.createElement('li');
+                    listItem.className = 'skip-activity-item';
+
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'skip-time';
+                    timeSpan.textContent = `(${skipTime}) : `;
+
+                    const userSpan = document.createElement('span');
+                    userSpan.className = 'skip-user';
+                    userSpan.textContent = skipUser;
+
+                    const actionSpan = document.createElement('span');
+                    actionSpan.className = 'skip-action';
+                    actionSpan.textContent = skippedType === 'shield' ? ' just skipped a shield on ' : ' just skipped ';
+
+                    const songSpan = document.createElement('span');
+                    songSpan.className = 'skip-song';
+                    songSpan.textContent = skippedSong;
+
+                    listItem.appendChild(timeSpan);
+                    listItem.appendChild(userSpan);
+                    listItem.appendChild(actionSpan);
+                    listItem.appendChild(songSpan);
+                    skipList.prepend(listItem);
+                    skipList.scrollTop = 0;
+
+                    const maxItems = 5;
+                    while (skipList.children.length > maxItems) {
+                        skipList.removeChild(skipList.lastElementChild);
+                    }
                 }
 
                 function openSongMenu(uri, name, artist, imageUrl, addedAt, event) {
