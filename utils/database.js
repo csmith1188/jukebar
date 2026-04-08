@@ -209,6 +209,15 @@ db.run(`CREATE TABLE IF NOT EXISTS track_bans (
     banned_at INTEGER NOT NULL
 )`);
 
+db.run(`CREATE TABLE IF NOT EXISTS skip_activity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    skipped_by TEXT NOT NULL,
+    skipped_at INTEGER NOT NULL,
+    skipped_type TEXT NOT NULL DEFAULT 'song',
+    skipped_track_name TEXT,
+    skipped_track_uri TEXT
+)`);
+
 db.run(`CREATE TABLE IF NOT EXISTS allowed_playlists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     spotify_playlist_id TEXT NOT NULL,
