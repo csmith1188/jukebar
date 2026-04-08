@@ -15,7 +15,7 @@
 
     <% if (changelogData && Array.isArray(changelogData) && changelogData.length > 0) { %>
         <% changelogData.forEach((entry, idx) => { %>
-            <section class="version-block <% if (idx === 0) { %>active<% } %>" data-version-index="<%= idx %>">
+            <section class="version-block <% if (idx === 0) { %>active<% } %>" data-version-index="<%= idx %>" data-version="<%= entry.version %>">
                 <div class="version-header">
                     <h2><%= entry.version %></h2>
                     <span class="release-date"><%= entry.releaseDate %></span>
@@ -49,18 +49,19 @@
     
     if (blocks.length === 0) return;
     
-    // Start at the last version (newest)
-    let currentIndex = blocks.length - 1;
+    // Start at the first entry (newest)
+    let currentIndex = 0;
     
     function updateDisplay() {
         blocks.forEach((block, idx) => {
             block.classList.toggle('active', idx === currentIndex);
         });
         if (versionDisplay) {
-            versionDisplay.textContent = `${currentIndex + 1} / ${blocks.length}`;
+            // Show version number counting down from total (2/2 for newest, 1/2 for older, etc.)
+            versionDisplay.textContent = `${blocks.length - currentIndex}/${blocks.length}`;
         }
-        if (prevBtn) prevBtn.disabled = currentIndex === 0;
-        if (nextBtn) nextBtn.disabled = currentIndex === blocks.length - 1;
+        if (prevBtn) prevBtn.disabled = currentIndex === blocks.length - 1;
+        if (nextBtn) nextBtn.disabled = currentIndex === 0;
     }
     
     function goToPrevious() {
@@ -77,8 +78,8 @@
         }
     }
     
-    if (prevBtn) prevBtn.addEventListener('click', goToPrevious);
-    if (nextBtn) nextBtn.addEventListener('click', goToNext);
+    if (prevBtn) prevBtn.addEventListener('click', goToNext);
+    if (nextBtn) nextBtn.addEventListener('click', goToPrevious);
     
     // Arrow key navigation
     window.addEventListener('keydown', (e) => {
