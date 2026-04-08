@@ -90,7 +90,11 @@
                 </div>
                 <div class="player-nowplaying-right">
                     <div id="skipActivityBox" class="skip-activity-box" aria-live="polite">
-                        <div class="skip-activity-title">Skip Activity</div>
+                        <div class="skip-activity-header">
+                            <div class="skip-activity-title">Skip Activity</div>
+                            <button id="skipActivityToggle" class="skip-activity-toggle" type="button"
+                                aria-label="Minimize skip activity" title="Minimize">&minus;</button>
+                        </div>
                         <ul id="skipActivityList" class="skip-activity-list">
                             <li class="skip-activity-item skip-activity-empty">No skips yet.</li>
                         </ul>
@@ -894,6 +898,30 @@
                     document.getElementById('skip-button')?.addEventListener('click', checkPaymentAndSkip);
                     document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                     document.getElementById('close-notification')?.addEventListener('click', closeNotification);
+
+                    // Skip activity box minimize/expand toggle
+                    (function initSkipActivityToggle() {
+                        const box = document.getElementById('skipActivityBox');
+                        const btn = document.getElementById('skipActivityToggle');
+                        if (!box || !btn) return;
+
+                        const STORAGE_KEY = 'skipActivityMinimized';
+
+                        function applyState(minimized) {
+                            box.classList.toggle('minimized', minimized);
+                            btn.innerHTML = minimized ? '&#43;' : '&minus;';
+                            btn.title = minimized ? 'Expand' : 'Minimize';
+                            btn.setAttribute('aria-label', minimized ? 'Expand skip activity' : 'Minimize skip activity');
+                        }
+
+                        applyState(localStorage.getItem(STORAGE_KEY) === 'true');
+
+                        btn.addEventListener('click', () => {
+                            const nowMinimized = !box.classList.contains('minimized');
+                            localStorage.setItem(STORAGE_KEY, nowMinimized);
+                            applyState(nowMinimized);
+                        });
+                    })();
 
                     // When search input is cleared, restore recently queued
                     document.getElementById('searchInput')?.addEventListener('input', (e) => {
