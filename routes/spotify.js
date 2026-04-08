@@ -6,6 +6,7 @@ const { logTransaction } = require('./logging');
 const queueManager = require('../utils/queueManager');
 const { isAuthenticated } = require('../middleware/auth');
 const { isOwner, getFirstOwnerId } = require('../utils/owners');
+const { logSkipActivity } = require('../utils/skipActivity');
 const { refund: poolRefund } = require('../utils/transferManager');
 const { getCurrentClassId } = require('./socket');
 const { exec } = require('child_process');
@@ -1378,12 +1379,20 @@ router.post('/skip', async (req, res) => {
 
                 // Broadcast updated queue to refresh shield count
                 await queueManager.syncWithSpotify(spotifyApi);
-                queueManager.broadcastUpdate('skip', {
+                const skipEvent = {
                     skippedBy: req.session.user || 'Someone',
                     skippedAt: Date.now(),
                     skippedType: 'shield',
                     skippedTrack: { name: trackName }
-                });
+                };
+
+                try {
+                    await logSkipActivity(skipEvent);
+                } catch (activityError) {
+                    console.error('Failed to persist shield skip activity:', activityError.message);
+                }
+
+                queueManager.broadcastUpdate('skip', skipEvent);
 
                 console.log('Returning shield blocked response to client');
                 console.log(`Played sound: ${soundFile}`);

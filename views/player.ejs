@@ -1107,6 +1107,10 @@
                             updateSkipActivity(data);
                         });
 
+                        socket.on('skipHistory', (history) => {
+                            renderSkipActivityHistory(history);
+                        });
+
                         // Handle shield purchase confirmation
                         socket.on('shieldPurchased', (data) => {
                             if (data.ok) {
@@ -1474,17 +1478,11 @@
                     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 }
 
-                function updateSkipActivity(data) {
-                    const skipList = document.getElementById('skipActivityList');
-                    if (!skipList) return;
-
+                function createSkipActivityItem(data) {
                     const skipTime = formatSkipActivityTime(data?.skippedAt);
                     const skipUser = data?.skippedBy || 'Someone';
                     const skippedSong = data?.skippedTrack?.name || 'Unknown song';
                     const skippedType = data?.skippedType === 'shield' ? 'shield' : 'song';
-
-                    const emptyItem = skipList.querySelector('.skip-activity-empty');
-                    if (emptyItem) emptyItem.remove();
 
                     const listItem = document.createElement('li');
                     listItem.className = 'skip-activity-item';
@@ -1509,6 +1507,38 @@
                     listItem.appendChild(userSpan);
                     listItem.appendChild(actionSpan);
                     listItem.appendChild(songSpan);
+
+                    return listItem;
+                }
+
+                function renderSkipActivityHistory(history) {
+                    const skipList = document.getElementById('skipActivityList');
+                    if (!skipList) return;
+
+                    skipList.innerHTML = '';
+
+                    const items = Array.isArray(history) ? history : [];
+                    if (items.length === 0) {
+                        const emptyItem = document.createElement('li');
+                        emptyItem.className = 'skip-activity-item skip-activity-empty';
+                        emptyItem.textContent = 'No skips yet.';
+                        skipList.appendChild(emptyItem);
+                        return;
+                    }
+
+                    for (const item of items) {
+                        skipList.appendChild(createSkipActivityItem(item));
+                    }
+                }
+
+                function updateSkipActivity(data) {
+                    const skipList = document.getElementById('skipActivityList');
+                    if (!skipList) return;
+
+                    const emptyItem = skipList.querySelector('.skip-activity-empty');
+                    if (emptyItem) emptyItem.remove();
+
+                    const listItem = createSkipActivityItem(data);
                     skipList.prepend(listItem);
                     skipList.scrollTop = 0;
 

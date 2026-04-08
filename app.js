@@ -48,8 +48,11 @@ const paymentRoutes = require('./routes/payment');
 const { router: leaderboardRoutes } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
+const { getRecentSkipActivity } = require('./utils/skipActivity');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
+
+const SKIP_ACTIVITY_SEND_LIMIT = Math.max(1, Math.min(50, Number(process.env.SKIP_ACTIVITY_SEND_LIMIT) || 5));
 
 // Helper function to handle ban - removes from queue and skips if currently playing
 async function handleBanPassed(trackName, trackArtist, trackUri) {
@@ -128,6 +131,14 @@ io.on('connection', (socket) => {
 
     // Add client to queue manager
     queueManager.addClient(socket);
+
+    getRecentSkipActivity(SKIP_ACTIVITY_SEND_LIMIT)
+        .then((history) => {
+            socket.emit('skipHistory', history);
+        })
+        .catch((error) => {
+            console.error('Failed to load skip history for socket client:', error.message);
+        });
 
     // Handle client disconnect
     socket.on('disconnect', () => {
