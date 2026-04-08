@@ -1,0 +1,50 @@
+[
+  {
+    "version": "2.0.2",
+    "releaseDate": "04/08/26",
+    "changes": [
+      {
+        "type": "feature",
+        "text": "<strong>Skip Activity Box:</strong> A new widget in the bottom bar displays recent skip activity, showing who skipped what and when. Now you can see all the latest skips happening in real-time!"
+      },
+      {
+        "type": "feature",
+        "text": "Skip Activity box now stores skip history in the database so it persists when users rejoin"
+      },
+      {
+        "type": "feature",
+        "text": "Added configurable environment variables for skip activity: <code>SKIP_ACTIVITY_STORED_LIMIT</code> and <code>SKIP_ACTIVITY_SEND_LIMIT</code>"
+      },
+      {
+        "type": "improvement",
+        "text": "Skip Activity box is now wider and displays more clearly in the bottom bar"
+      },
+      {
+        "type": "improvement",
+        "text": "Skip events now track whether they were song skips or shield-blocked attempts"
+      }
+    ]
+  },
+  {
+    "version": "2.0.1",
+    "releaseDate": "04/01/26",
+    "changes": [
+      {
+        "type": "feature",
+        "text": "Added a Clear Queue History feature to clear your queue history"
+      },
+      {
+        "type": "bugfix",
+        "text": "Fixed a bug where the leaderboard discount wasn't applying correctly"
+      },
+      {
+        "type": "bugfix",
+        "text": "Fixed the issue with the queue metadata not updating and pulling old songs with the wrong name and wrong skip shield count"
+      },
+      {
+        "type": "known-issue",
+        "text": "When queueing a song, it might queue Poo Bum Poo Bum 4. We are working on a fix for this."
+      }
+    ]
+  }
+]

@@ -51,6 +51,21 @@ const queueManager = require('./utils/queueManager');
 const { getRecentSkipActivity } = require('./utils/skipActivity');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
+const path = require('path');
+const fs = require('fs');
+
+let changelog = [];
+try {
+    const changelogPath = path.join(__dirname, 'changelog.json');
+    const changelogContent = fs.readFileSync(changelogPath, 'utf8');
+    const parsedChangelog = JSON.parse(changelogContent);
+    // Keep array as-is (newest first in JSON file)
+    changelog = Array.isArray(parsedChangelog) ? parsedChangelog : [];
+    console.log(`Loaded changelog with ${changelog.length} entries`);
+} catch (err) {
+    console.warn('Failed to load changelog.json:', err.message);
+    changelog = [];
+}
 
 const SKIP_ACTIVITY_SEND_LIMIT = Math.max(1, Math.min(50, Number(process.env.SKIP_ACTIVITY_SEND_LIMIT) || 5));
 
@@ -387,6 +402,7 @@ if (process.env.SPOTIFY_CLIENT_ID) {
 app.get('/', isAuthenticated, (req, res) => {
     try {
         console.log('Session permission:', req.session.permission);
+        console.log('Changelog to render:', changelog.length, 'entries');
         res.render('player.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
@@ -397,7 +413,8 @@ app.get('/', isAuthenticated, (req, res) => {
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
-            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500
+            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+            changelog: changelog
         });
     } catch (error) {
         res.send(error.message);
@@ -417,7 +434,8 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
-            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500
+            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+            changelog: changelog
         });
     } catch (error) {
         res.send(error.message);

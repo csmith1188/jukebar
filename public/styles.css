@@ -3475,6 +3475,46 @@ p {
     order: 2;
 }
 
+.changelog-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 12px;
+    order: 3;
+}
+
+.changelog-nav-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.changelog-nav-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.changelog-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.changelog-version-display {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 50px;
+    text-align: center;
+}
+
 .version-block {
     background: linear-gradient(135deg, #1a1a1a 0%, #212121 100%);
     border-left: 4px solid #1db954;
@@ -3482,6 +3522,12 @@ p {
     margin: 20px 30px 30px 30px;
     border-radius: 8px;
     transition: all 0.3s ease;
+    display: none;
+}
+
+.version-block.active {
+    display: block;
+    animation: fadeIn 0.3s ease-in;
 }
 
 .version-block:hover {
