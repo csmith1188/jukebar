@@ -1,4 +1,5 @@
 const { isJukepixEnabled } = require('./jukepix');
+const { logSkipActivity } = require('./skipActivity');
 
 class QueueManager {
     constructor() {
@@ -125,14 +126,22 @@ class QueueManager {
             // Send queue update with updated current track
             this.broadcastUpdate('queueUpdate', this.getCurrentState());
             // Send skip for notifications
-            this.broadcastUpdate('skip', {
+            const skipEvent = {
                 currentTrack: this.currentTrack,
                 skippedTrack,
                 queue: this.queue,
                 skippedBy: actor || 'Someone',
                 skippedAt: Date.now(),
                 skippedType: 'song'
-            });
+            };
+
+            try {
+                await logSkipActivity(skipEvent);
+            } catch (error) {
+                console.error('Failed to persist skip activity:', error.message);
+            }
+
+            this.broadcastUpdate('skip', skipEvent);
             return nextTrack;
         }
         return null;
