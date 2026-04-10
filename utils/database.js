@@ -299,6 +299,27 @@ db.run(`DELETE FROM allowed_playlists WHERE id NOT IN (
     else if (this.changes) console.log(`Cleaned up ${this.changes} duplicate allowed_playlists row(s)`);
 });
 
+db.run(`CREATE TABLE IF NOT EXISTS custom_playlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    class_id INTEGER,
+    spotify_playlist_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    song_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)`);
+
+// Migrate: add class_id to custom_playlists if it doesn't exist
+db.all("PRAGMA table_info(custom_playlists)", (err, columns) => {
+    if (!err && columns && !columns.some(c => c.name === 'class_id')) {
+        db.run("ALTER TABLE custom_playlists ADD COLUMN class_id INTEGER", (alterErr) => {
+            if (alterErr) console.error('Error adding class_id to custom_playlists:', alterErr);
+            else console.log('Added class_id column to custom_playlists table');
+        });
+    }
+});
+
 // JukePix custom settings per artist/song
 db.run(`CREATE TABLE IF NOT EXISTS jukepix_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

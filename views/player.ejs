@@ -27,10 +27,23 @@
             <div class="player-shell">
                 <aside class="player-sidebar" aria-label="Playlists">
                     <div class="player-sidebar-header">
-                        <div class="player-sidebar-title">Playlists</div>
+                        <div class="player-sidebar-tabs">
+                            <button class="sidebar-tab active" id="tab-playlists" onclick="switchSidebarTab('playlists')">Teacher Playlists</button>
+                            <button class="sidebar-tab" id="tab-my-playlists" onclick="switchSidebarTab('my-playlists')">Class Playlists</button>
+                        </div>
                     </div>
-                    <div id="studentPlaylistsList" class="player-sidebar-list">
-                        <p style="text-align:center;color:#b3b3b3;">Loading...</p>
+                    <div id="tab-playlists-panel">
+                        <div id="studentPlaylistsList" class="player-sidebar-list">
+                            <p style="text-align:center;color:#b3b3b3;">Loading...</p>
+                        </div>
+                    </div>
+                    <div id="tab-my-playlists-panel" style="display:none;">
+                        <div class="player-sidebar-list-actions">
+                            <button class="primary small-btn" id="createPlaylistBtn" onclick="openCreatePlaylistModal()">+ New Playlist (<%= createPlaylistAmount %> digipogs)</button>
+                        </div>
+                        <div id="myPlaylistsList" class="player-sidebar-list">
+                            <p style="text-align:center;color:#b3b3b3;">Loading...</p>
+                        </div>
                     </div>
                 </aside>
 
@@ -147,6 +160,65 @@
             </div>
         </div>
 
+        <!-- Create Custom Playlist Modal -->
+        <div id="createPlaylistModal" class="payment-modal" style="display:none;">
+            <div class="payment-content">
+                <button class="close-modal-btn" onclick="closeCreatePlaylistModal()">&times;</button>
+                <h3 class="ban-reason-title">Create Custom Playlist</h3>
+                <div class="playlist-modal-body">
+                    <p style="color:#b3b3b3;font-size:0.85em;margin:0;">Name your playlist and add up to 5 songs for free. Additional songs cost <%= addPlaylistSongAmount %> digipogs each.</p>
+                    <div class="row" style="margin:0;">
+                        <label class="small">Playlist Name</label>
+                        <input type="text" id="newPlaylistName" maxlength="100" placeholder="My Awesome Playlist" style="width:100%;box-sizing:border-box;" />
+                    </div>
+                    <div style="margin:0;">
+                        <label class="small">Initial Songs (up to 5)</label>
+                        <form id="createPlaylistSearchForm" style="margin-top:6px;">
+                            <div class="search-container">
+                                <input type="text" id="createPlaylistSearchInput" placeholder="Search for a song" style="flex:1;" />
+                                <button type="submit" class="primary" style="padding:6px 12px;">Search</button>
+                            </div>
+                        </form>
+                        <div id="createPlaylistSearchResults" class="playlist-search-results"></div>
+                    </div>
+                    <div id="createPlaylistSelectedSongs" class="playlist-selected-songs"></div>
+                </div>
+                <div class="playlist-modal-footer ban-reason-actions" style="display:flex;gap:8px;">
+                    <button class="unban-button" onclick="submitCreatePlaylist()">Create &amp; Pay (<%= createPlaylistAmount %> digipogs)</button>
+                    <button class="ban-button" onclick="closeCreatePlaylistModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Playlist Tracks Modal -->
+        <div id="customPlaylistTracksModal" class="payment-modal" style="display:none;">
+            <div class="payment-content" style="max-height:85vh;overflow-y:auto;">
+                <button class="close-modal-btn" onclick="closeCustomPlaylistTracksModal()">&times;</button>
+                <h3 class="ban-reason-title" id="customPlaylistTracksTitle">Playlist</h3>
+                <div style="margin-bottom:10px;">
+                    <button class="primary small-btn" onclick="openAddSongToCustomPlaylist()">+ Add Song (<%= addPlaylistSongAmount %> digipogs)</button>
+                </div>
+                <div id="customPlaylistTracksList" class="playlist-tracks-list">
+                    <p style="color:#b3b3b3;text-align:center;padding:12px;">Loading tracks...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Song to Custom Playlist Modal -->
+        <div id="addSongToPlaylistModal" class="payment-modal" style="display:none;">
+            <div class="payment-content" style="max-height:85vh;overflow-y:auto;">
+                <button class="close-modal-btn" onclick="closeAddSongToPlaylistModal()">&times;</button>
+                <h3 class="ban-reason-title">Add Song to Playlist</h3>
+                <form id="addSongSearchForm" style="margin-bottom:8px;">
+                    <div class="search-container">
+                        <input type="text" id="addSongSearchInput" placeholder="Search for a song" style="flex:1;" />
+                        <button type="submit" class="primary" style="padding:6px 12px;">Search</button>
+                    </div>
+                </form>
+                <div id="addSongSearchResults" class="playlist-search-results"></div>
+            </div>
+        </div>
+
         <button id="changelog-button" class="changelog-button" title="View Changelog">
             <img src="/img/changelog.png" alt="Changelog">
         </button>
@@ -239,6 +311,13 @@
             let pendingShieldQuantity = 1;
             let pendingPlaylistId = null;
             let selectedPlaylistQuote = null;
+
+            // Custom playlist state
+            let pendingCustomPlaylistId = null;
+            let pendingCustomPlaylistName = null;
+            let pendingCustomPlaylistTrackUri = null;
+            let createPlaylistSelectedUris = [];
+            let currentCustomPlaylistId = null;
 
             // Global letiables that need to be accessed by multiple functions
             let currentlyPlayingUri = null;
@@ -953,6 +1032,16 @@
                             pendingTrackArtist = null;
                             pendingBanReason = null;
                             startBanVote(uri, trackName, trackArtist, reason);
+                        } else if (action === 'createPlaylist') {
+                            finalizeCreatePlaylist();
+                        } else if (action === 'addPlaylistSong' && pendingCustomPlaylistTrackUri) {
+                            const uri = pendingCustomPlaylistTrackUri;
+                            pendingCustomPlaylistTrackUri = null;
+                            finalizeAddSongToPlaylist(uri);
+                        } else if (action === 'removePlaylistSong' && pendingCustomPlaylistTrackUri) {
+                            const uri = pendingCustomPlaylistTrackUri;
+                            pendingCustomPlaylistTrackUri = null;
+                            finalizeRemoveSongFromPlaylist(uri);
                         }
                     }
 
@@ -1908,6 +1997,312 @@
 
                 // Add event listeners for ban vote modal buttons
                 document.getElementById('banVoteMinimize')?.addEventListener('click', toggleBanVoteMinimize);
+
+                // ============================================================
+                // CUSTOM PLAYLISTS
+                // ============================================================
+
+                function switchSidebarTab(tab) {
+                    document.getElementById('tab-playlists-panel').style.display = tab === 'playlists' ? '' : 'none';
+                    document.getElementById('tab-my-playlists-panel').style.display = tab === 'my-playlists' ? '' : 'none';
+                    document.getElementById('tab-playlists').classList.toggle('active', tab === 'playlists');
+                    document.getElementById('tab-my-playlists').classList.toggle('active', tab === 'my-playlists');
+                    if (tab === 'my-playlists') loadMyPlaylists();
+                }
+                window.switchSidebarTab = switchSidebarTab;
+
+                async function loadMyPlaylists() {
+                    const listEl = document.getElementById('myPlaylistsList');
+                    listEl.innerHTML = '<p style="text-align:center;color:#b3b3b3;">Loading...</p>';
+                    try {
+                        const res = await fetch('/api/custom-playlists');
+                        const data = await res.json();
+                        if (!data.ok) throw new Error(data.error);
+                        if (!data.playlists.length) {
+                            listEl.innerHTML = '<p style="text-align:center;color:#b3b3b3;">No playlists yet.</p>';
+                            return;
+                        }
+                        listEl.innerHTML = '';
+                        data.playlists.forEach(pl => {
+                            const div = document.createElement('div');
+                            div.className = 'playlist-item';
+                            div.innerHTML = `
+                                <div class="playlist-item-info" style="cursor:pointer;" onclick="openCustomPlaylistTracks(${pl.id}, ${JSON.stringify(pl.name)})">
+                                    <div class="playlist-item-name">${escapeHtml(pl.name)}</div>
+                                    <div class="playlist-item-meta">${pl.song_count} song${pl.song_count !== 1 ? 's' : ''}</div>
+                                </div>`;
+                            listEl.appendChild(div);
+                        });
+                    } catch (err) {
+                        listEl.innerHTML = '<p style="text-align:center;color:#ff5555;">Failed to load playlists.</p>';
+                    }
+                }
+
+                function escapeHtml(str) {
+                    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                }
+
+                // --- Create Playlist ---
+                window.openCreatePlaylistModal = function() {
+                    createPlaylistSelectedUris = [];
+                    document.getElementById('newPlaylistName').value = '';
+                    document.getElementById('createPlaylistSearchInput').value = '';
+                    document.getElementById('createPlaylistSearchResults').innerHTML = '';
+                    renderCreatePlaylistSelectedSongs();
+                    document.getElementById('createPlaylistModal').style.display = 'flex';
+                    document.querySelector('.main-content').classList.add('blurred');
+                    document.querySelector('.player-bottom-bar')?.classList.add('blurred');
+                };
+
+                window.closeCreatePlaylistModal = function() {
+                    document.getElementById('createPlaylistModal').style.display = 'none';
+                    document.querySelector('.main-content').classList.remove('blurred');
+                    document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
+                };
+
+                document.getElementById('createPlaylistSearchForm')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const q = document.getElementById('createPlaylistSearchInput').value.trim();
+                    if (!q) return;
+                    const resultsEl = document.getElementById('createPlaylistSearchResults');
+                    resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Searching...</p>';
+                    try {
+                        const res = await fetch('/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: q })
+                        });
+                        const data = await res.json();
+                        const items = data.tracks?.items || [];
+                        if (!data.ok || !items.length) {
+                            resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No results.</p>';
+                            return;
+                        }
+                        resultsEl.innerHTML = '';
+                        items.slice(0, 10).forEach(track => {
+                            const alreadyAdded = createPlaylistSelectedUris.find(t => t.uri === track.uri);
+                            const div = document.createElement('div');
+                            div.className = 'playlist-search-result';
+                            div.innerHTML = `
+                                <img src="${track.album?.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;border-radius:6px;flex-shrink:0;" />
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
+                                    <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
+                                </div>
+                                <button class="primary small-btn" ${alreadyAdded || createPlaylistSelectedUris.length >= 5 ? 'disabled' : ''} onclick="addToCreatePlaylistSelection('${track.uri}', '${escapeHtml(track.name).replace(/'/g,"\\'")}', '${escapeHtml(track.artist).replace(/'/g,"\\'")}', '${track.album?.image || ''}')">${alreadyAdded ? 'Added' : 'Add'}</button>`;
+                            resultsEl.appendChild(div);
+                        });
+                    } catch {
+                        resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
+                    }
+                });
+
+                window.addToCreatePlaylistSelection = function(uri, name, artist, image) {
+                    if (createPlaylistSelectedUris.length >= 5 || createPlaylistSelectedUris.find(t => t.uri === uri)) return;
+                    createPlaylistSelectedUris.push({ uri, name, artist, image });
+                    renderCreatePlaylistSelectedSongs();
+                    document.getElementById('createPlaylistSearchResults').innerHTML = '';
+                    document.getElementById('createPlaylistSearchInput').value = '';
+                };
+
+                function renderCreatePlaylistSelectedSongs() {
+                    const el = document.getElementById('createPlaylistSelectedSongs');
+                    if (!createPlaylistSelectedUris.length) {
+                        el.innerHTML = '';
+                        return;
+                    }
+                    el.innerHTML = `<p style="color:#b3b3b3;font-size:0.8em;margin:0 0 4px;">Selected (${createPlaylistSelectedUris.length}/5 free):</p>
+                        <div class="playlist-selected-songs-scroll">` +
+                        createPlaylistSelectedUris.map((t, i) => `
+                            <div class="playlist-selected-item">
+                                <img src="${t.image || ''}" alt="" />
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:600;font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(t.name)}</div>
+                                    <div style="color:#b3b3b3;font-size:0.75em;">${escapeHtml(t.artist)}</div>
+                                </div>
+                                <button class="ban-button" style="padding:2px 8px;font-size:0.75em;flex-shrink:0;" onclick="removeFromCreatePlaylistSelection(${i})">✕</button>
+                            </div>`).join('') + `</div>`;
+                }
+
+                window.removeFromCreatePlaylistSelection = function(index) {
+                    createPlaylistSelectedUris.splice(index, 1);
+                    renderCreatePlaylistSelectedSongs();
+                };
+
+                window.submitCreatePlaylist = function() {
+                    const name = document.getElementById('newPlaylistName').value.trim();
+                    if (!name) { Notify('Please enter a playlist name.', 'error'); return; }
+                    pendingCustomPlaylistName = name;
+                    pendingAction = 'createPlaylist';
+                    closeCreatePlaylistModal();
+                    showPayment();
+                };
+
+                async function finalizeCreatePlaylist() {
+                    try {
+                        const uris = createPlaylistSelectedUris.map(t => t.uri);
+                        const res = await fetch('/api/custom-playlists/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: pendingCustomPlaylistName, trackUris: uris })
+                        });
+                        const data = await res.json();
+                        if (!data.ok) { Notify(data.error || 'Failed to create playlist.', 'error'); return; }
+                        Notify(`Playlist "${data.playlist.name}" created!`, 'success');
+                        createPlaylistSelectedUris = [];
+                        pendingCustomPlaylistName = null;
+                        loadMyPlaylists();
+                    } catch {
+                        Notify('Network error creating playlist.', 'error');
+                    }
+                }
+
+                // --- View Custom Playlist Tracks ---
+                window.openCustomPlaylistTracks = async function(playlistId, playlistName) {
+                    currentCustomPlaylistId = playlistId;
+                    document.getElementById('customPlaylistTracksTitle').textContent = playlistName;
+                    document.getElementById('customPlaylistTracksList').innerHTML = '<p style="color:#b3b3b3;text-align:center;">Loading...</p>';
+                    document.getElementById('customPlaylistTracksModal').style.display = 'flex';
+                    document.querySelector('.main-content').classList.add('blurred');
+                    document.querySelector('.player-bottom-bar')?.classList.add('blurred');
+                    try {
+                        const res = await fetch(`/api/custom-playlists/${playlistId}/tracks`);
+                        const data = await res.json();
+                        renderCustomPlaylistTracks(data);
+                    } catch {
+                        document.getElementById('customPlaylistTracksList').innerHTML = '<p style="color:#ff5555;">Failed to load tracks.</p>';
+                    }
+                };
+
+                function renderCustomPlaylistTracks(data) {
+                    const el = document.getElementById('customPlaylistTracksList');
+                    if (!data.ok) { el.innerHTML = `<p style="color:#ff5555;">${escapeHtml(data.error || 'Error')}</p>`; return; }
+                    if (!data.tracks.length) { el.innerHTML = '<p style="color:#b3b3b3;text-align:center;">No tracks yet.</p>'; return; }
+                    el.innerHTML = '';
+                    data.tracks.forEach(track => {
+                        const div = document.createElement('div');
+                        div.className = 'queue-item';
+                        div.innerHTML = `
+                            <img src="${track.album.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;" />
+                            <div class="queue-item-content" style="flex:1;">
+                                <div class="queue-item-title">${escapeHtml(track.name)}</div>
+                                <div class="queue-item-artist">${escapeHtml(track.artist)}</div>
+                            </div>
+                            <button class="ban-button" style="font-size:0.75em;padding:4px 8px;white-space:nowrap;" onclick="initiateRemoveSong('${track.uri}')">Remove (50)</button>`;
+                        el.appendChild(div);
+                    });
+                }
+
+                window.closeCustomPlaylistTracksModal = function() {
+                    document.getElementById('customPlaylistTracksModal').style.display = 'none';
+                    document.querySelector('.main-content').classList.remove('blurred');
+                    document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
+                    currentCustomPlaylistId = null;
+                };
+
+                window.initiateRemoveSong = function(trackUri) {
+                    pendingCustomPlaylistTrackUri = trackUri;
+                    pendingCustomPlaylistId = currentCustomPlaylistId;
+                    pendingPlaylistId = currentCustomPlaylistId;
+                    pendingAction = 'removePlaylistSong';
+                    closeCustomPlaylistTracksModal();
+                    showPayment();
+                };
+
+                async function finalizeRemoveSongFromPlaylist(trackUri) {
+                    try {
+                        const res = await fetch('/api/custom-playlists/remove-song', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playlistId: pendingCustomPlaylistId, trackUri })
+                        });
+                        const data = await res.json();
+                        if (!data.ok) { Notify(data.error || 'Failed to remove song.', 'error'); return; }
+                        Notify('Song removed from playlist.', 'success');
+                        pendingCustomPlaylistId = null;
+                        loadMyPlaylists();
+                    } catch {
+                        Notify('Network error removing song.', 'error');
+                    }
+                }
+
+                // --- Add Song to Custom Playlist ---
+                window.openAddSongToCustomPlaylist = function() {
+                    document.getElementById('addSongSearchInput').value = '';
+                    document.getElementById('addSongSearchResults').innerHTML = '';
+                    document.getElementById('addSongToPlaylistModal').style.display = 'flex';
+                    document.querySelector('.main-content').classList.add('blurred');
+                    document.querySelector('.player-bottom-bar')?.classList.add('blurred');
+                };
+
+                window.closeAddSongToPlaylistModal = function() {
+                    document.getElementById('addSongToPlaylistModal').style.display = 'none';
+                    document.querySelector('.main-content').classList.remove('blurred');
+                    document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
+                };
+
+                document.getElementById('addSongSearchForm')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const q = document.getElementById('addSongSearchInput').value.trim();
+                    if (!q) return;
+                    const resultsEl = document.getElementById('addSongSearchResults');
+                    resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Searching...</p>';
+                    try {
+                        const res = await fetch('/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: q })
+                        });
+                        const data = await res.json();
+                        const items = data.tracks?.items || [];
+                        if (!data.ok || !items.length) {
+                            resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No results.</p>';
+                            return;
+                        }
+                        resultsEl.innerHTML = '';
+                        items.slice(0, 10).forEach(track => {
+                            const div = document.createElement('div');
+                            div.className = 'playlist-search-result';
+                            div.innerHTML = `
+                                <img src="${track.album?.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;border-radius:6px;flex-shrink:0;" />
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
+                                    <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
+                                </div>
+                                <button class="primary small-btn" onclick="initiateAddSongToPlaylist('${track.uri}')">Add (100)</button>`;
+                            resultsEl.appendChild(div);
+                        });
+                    } catch {
+                        resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
+                    }
+                });
+
+                window.initiateAddSongToPlaylist = function(trackUri) {
+                    pendingCustomPlaylistTrackUri = trackUri;
+                    pendingCustomPlaylistId = currentCustomPlaylistId;
+                    pendingPlaylistId = currentCustomPlaylistId;
+                    pendingAction = 'addPlaylistSong';
+                    closeAddSongToPlaylistModal();
+                    closeCustomPlaylistTracksModal();
+                    showPayment();
+                };
+
+                async function finalizeAddSongToPlaylist(trackUri) {
+                    try {
+                        const res = await fetch('/api/custom-playlists/add-song', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playlistId: pendingCustomPlaylistId, trackUri })
+                        });
+                        const data = await res.json();
+                        if (!data.ok) { Notify(data.error || 'Failed to add song.', 'error'); return; }
+                        Notify('Song added to playlist!', 'success');
+                        pendingCustomPlaylistId = null;
+                        loadMyPlaylists();
+                    } catch {
+                        Notify('Network error adding song.', 'error');
+                    }
+                }
 
 
             </script>

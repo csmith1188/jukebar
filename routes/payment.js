@@ -154,6 +154,12 @@ router.post('/transfer', async (req, res) => {
         } else if (pendingAction === 'Ban Vote') {
             // Ban Votes are a fixed cost (no discounts)
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
+        } else if (pendingAction === 'createPlaylist') {
+            amount = Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700;
+        } else if (pendingAction === 'addPlaylistSong') {
+            amount = Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100;
+        } else if (pendingAction === 'removePlaylistSong') {
+            amount = Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
             if (userRow && userRow.id) {
@@ -211,7 +217,7 @@ router.post('/transfer', async (req, res) => {
                 to: Number(to),
                 amount: Number(amount),
                 pendingAction: pendingAction || null,
-                playlistId: pendingAction === 'playlist' ? String(playlistId || '') : null,
+                playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong') ? String(playlistId || '') : null,
                 at: Date.now()
             };
             return req.session.save((err) => {
@@ -427,6 +433,12 @@ router.post('/getAmount', async (req, res) => {
             amount = Number(process.env.SKIP_SHIELD) || 75;
         } else if (pendingAction === 'Ban Vote') {
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
+        } else if (pendingAction === 'createPlaylist') {
+            amount = Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700;
+        } else if (pendingAction === 'addPlaylistSong') {
+            amount = Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100;
+        } else if (pendingAction === 'removePlaylistSong') {
+            amount = Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
             // Get top 3 user IDs from the rolling 7-day leaderboard (same source as the displayed leaderboard)

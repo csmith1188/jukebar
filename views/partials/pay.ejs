@@ -128,6 +128,15 @@
             } else if (pendingAction === 'Ban Vote') {
                 reason += ' - Initiate Ban Vote';
                 amount = <%= voteBanAmount %>;
+            } else if (pendingAction === 'createPlaylist') {
+                reason += ' - Create Playlist';
+                amount = <%= createPlaylistAmount %>;
+            } else if (pendingAction === 'addPlaylistSong') {
+                reason += ' - Add Song to Playlist';
+                amount = <%= addPlaylistSongAmount %>;
+            } else if (pendingAction === 'removePlaylistSong') {
+                reason += ' - Remove Song from Playlist';
+                amount = <%= removePlaylistSongAmount %>;
             } else {
                 console.error('Unknown pending action:', pendingAction);
                 alert('Unknown action. Please try again. Your digipogs have not been charged.');
@@ -140,7 +149,12 @@
             }
 
             try {
-                const result = await post('/transfer', { pin, reason, pendingAction });
+                const transferBody = { pin, reason, pendingAction };
+                if (pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong') {
+                    const state2 = window.getPlayerState?.() || {};
+                    if (state2.pendingPlaylistId) transferBody.playlistId = state2.pendingPlaylistId;
+                }
+                const result = await post('/transfer', transferBody);
 
                 const isSuccess = result.ok === true || result.success === true || result.status === 'success' ||
                     (result.error === undefined && result.token !== undefined);

@@ -1766,6 +1766,11 @@ p {
     filter: blur(5px);
 }
 
+.player-bottom-bar.blurred {
+    filter: blur(5px);
+    pointer-events: none;
+}
+
 .album-cover {
     width: 64px;
     height: 64px;
@@ -4140,4 +4145,175 @@ p {
     overflow-y: auto;
 }
 .jp-modal h3 { color: #1db954; font-size: 1.1em; margin-bottom: 16px; }
+
+
+/* ====== Custom Playlists ====== */
+.player-sidebar-tabs {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+}
+.sidebar-tab {
+    flex: 1;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #b3b3b3;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    transition: background 0.15s, color 0.15s;
+}
+.sidebar-tab:hover {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+}
+.sidebar-tab.active {
+    background: #1db954;
+    border-color: #1db954;
+    color: #000;
+}
+.player-sidebar-list-actions {
+    padding: 8px 10px 0;
+}
+.small-btn {
+    font-size: 0.78rem !important;
+    padding: 4px 10px !important;
+}
+.close-modal-btn {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    background: transparent;
+    border: none;
+    color: #b3b3b3;
+    font-size: 1.4rem;
+    cursor: pointer;
+    line-height: 1;
+}
+.close-modal-btn:hover { color: #fff; }
+.payment-content { position: relative; }
+.playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.playlist-item:hover { background: rgba(255,255,255,0.07); }
+.playlist-item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.playlist-item-meta { color: #b3b3b3; font-size: 0.78rem; }
+
+/* Custom Playlist modals — shared background */
+#createPlaylistModal,
+#customPlaylistTracksModal,
+#addSongToPlaylistModal {
+    z-index: 3000;
+}
+#createPlaylistModal .payment-content,
+#customPlaylistTracksModal .payment-content,
+#addSongToPlaylistModal .payment-content {
+    background: #1b1b1b;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.6);
+    max-width: 700px;
+    width: min(95vw, 700px);
+}
+
+/* Create playlist modal — flex column so sections don't overflow */
+#createPlaylistModal .payment-content {
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+    overflow: hidden;
+    padding: 20px;
+    box-sizing: border-box;
+}
+#createPlaylistModal .playlist-modal-body {
+    flex: 1 1 auto;
+    overflow: visible;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+#createPlaylistModal .playlist-modal-footer {
+    flex-shrink: 0;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    margin-top: 8px;
+}
+
+/* Search results inside modals */
+.playlist-search-results {
+    margin-top: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 4px;
+}
+.playlist-search-results:empty { display: none; }
+.playlist-search-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+.playlist-search-result:hover { background: rgba(255,255,255,0.08); }
+
+/* Tracks list in view-playlist modal */
+.playlist-tracks-list {
+    max-height: 380px;
+    overflow-y: auto;
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 4px;
+}
+
+/* Selected songs in create modal */
+.playlist-selected-songs {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.playlist-selected-songs-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+.playlist-selected-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: rgba(29,185,84,0.08);
+    border: 1px solid rgba(29,185,84,0.18);
+    border-radius: 6px;
+    margin-bottom: 4px;
+}
+.playlist-selected-item img {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    object-fit: cover;
+}
 
