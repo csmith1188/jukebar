@@ -98,7 +98,10 @@ async function resolveTrackSettings(trackName, artistName) {
 
 const trackCheckInterval = setInterval(async () => {
     if (!jukepixEnabled) {
-        console.log('[JUKEPIX] Track check skipped - Jukepix not enabled');
+        if (!trackCheckInterval._lastSkipLog || Date.now() - trackCheckInterval._lastSkipLog > 60000) {
+            console.log('[JUKEPIX] Track check skipped - Jukepix not enabled');
+            trackCheckInterval._lastSkipLog = Date.now();
+        }
         return;
     }
 

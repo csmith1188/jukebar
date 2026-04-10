@@ -111,7 +111,7 @@ const formbarSocket = ioClient(FORMBAR_ADDRESS, {
 
 console.log('Formbar socket client created, attempting connection...');
 
-setupFormbarSocket(io, formbarSocket);
+setupFormbarSocket(io, formbarSocket, API_KEY);
 
 // WebSocket connection handling for queue sync
 // Initialize VoteManager

@@ -274,6 +274,12 @@ button.primary:hover {
     z-index: 1000;
 }
 
+.payment-modal{
+    h3{
+        text-align: center;
+    }
+}
+
 .payment-content {
     position: absolute;
     top: 50%;
@@ -594,6 +600,7 @@ h1 {
     border-radius: 10px;
     padding: 12px;
     margin-bottom: 12px;
+    text-align: center;
 }
 
 .playlist-pay-title {
