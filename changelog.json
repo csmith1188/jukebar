@@ -1,6 +1,20 @@
 [
     {
-        "version": "2.0.2",
+        "version": "2.1.1",
+        "releaseDate": "04/08/26",
+        "changes": [
+            {
+                "type": "feature",
+                "text": "Skip box has been removed."
+            },
+            {
+                "type": "bugfix",
+                "text": "Fixed an issue where playlists wouldn't be able to be purchased"
+            }
+        ]
+    },
+    {
+        "version": "2.1.0",
         "releaseDate": "04/08/26",
         "changes": [
             {
