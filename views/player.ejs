@@ -332,6 +332,8 @@
                             return;
                         }
 
+                        Notify('Loading playlist...', 'success');
+
                         // Owners skip payment — queue directly
                         if (isOwnerClient(currentID)) {
                             await queuePlaylist(playlist.id);
