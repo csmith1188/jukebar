@@ -89,12 +89,6 @@
                     </div>
                 </div>
                 <div class="player-nowplaying-right">
-                    <div id="skipActivityBox" class="skip-activity-box" aria-live="polite">
-                        <div class="skip-activity-title">Skip Activity</div>
-                        <ul id="skipActivityList" class="skip-activity-list">
-                            <li class="skip-activity-item skip-activity-empty">No skips yet.</li>
-                        </ul>
-                    </div>
                 </div>
             </div>
         </footer>
@@ -103,6 +97,28 @@
                 <button id="hide-payment">&times;</button>
 
                 <%- include('partials/pay') %>
+            </div>
+        </div>
+
+        <div id="playlistPaymentModal" class="payment-modal" style="display:none;">
+            <div class="payment-content playlist-pay-content">
+                <h3 class="ban-reason-title">Play Playlist</h3>
+                <div class="playlist-pay-summary">
+                    <div id="playlistPayTitle" class="playlist-pay-title">Playlist</div>
+                    <div id="playlistPayMeta" class="playlist-pay-meta">0 queueable tracks</div>
+                    <div id="playlistPayCost" class="playlist-pay-cost">0 Digipogs</div>
+                </div>
+                <p style="color:#ffaa00; font-size:0.85em; text-align:center; margin:8px 0;">Note: Playing a playlist will clear the current queue.</p>
+                <input id="playlist-pay-pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
+                    placeholder="Enter PIN" oninput="this.value = this.value.replace(/[^0-9]/g,'');" />
+                <label class="medium label-inline playlist-pay-save" for="playlistSavePIN">
+                    Save PIN for next purchase
+                    <input id="playlistSavePIN" type="checkbox" />
+                </label>
+                <div class="ban-reason-actions" style="display:flex; gap:8px; justify-content:flex-start;">
+                    <button id="playlist-pay-confirm" class="unban-button" type="button">Pay & Queue</button>
+                    <button id="playlist-pay-cancel" class="ban-button" type="button">Cancel</button>
+                </div>
             </div>
         </div>
 
@@ -221,6 +237,8 @@
             let pendingBanReason = null;
             let pendingAction = null;
             let pendingShieldQuantity = 1;
+            let pendingPlaylistId = null;
+            let selectedPlaylistQuote = null;
 
             // Global letiables that need to be accessed by multiple functions
             let currentlyPlayingUri = null;
@@ -298,11 +316,80 @@
                                 row.appendChild(img);
                                 row.appendChild(meta);
 
+                                row.addEventListener('click', () => handlePlaylistClick(p));
+
                                 list.appendChild(row);
                             });
                         } catch (err) {
                             console.error('Sidebar playlists load error:', err);
                             list.innerHTML = '<p style="text-align:center;color:#ff4444;">Failed to load playlists.</p>';
+                        }
+                    }
+
+                    async function handlePlaylistClick(playlist) {
+                        if (userIsBanned) {
+                            Notify('You are banned from using Jukebar.', 'error');
+                            return;
+                        }
+
+                        // Owners skip payment — queue directly
+                        if (isOwnerClient(currentID)) {
+                            await queuePlaylist(playlist.id);
+                            return;
+                        }
+
+                        // Get a cost quote first
+                        try {
+                            const quoteRes = await fetch('/api/playlists/quote', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ playlistId: playlist.id })
+                            });
+                            const quoteData = await quoteRes.json();
+                            if (!quoteRes.ok || !quoteData.ok) {
+                                Notify(quoteData.error || 'Cannot play this playlist', 'error');
+                                return;
+                            }
+
+                            if (!quoteData.queueableCount || quoteData.cost <= 0) {
+                                Notify('No queueable tracks in this playlist right now.', 'error');
+                                return;
+                            }
+
+                            // Show the dedicated playlist payment modal
+                            selectedPlaylistQuote = {
+                                playlistId: playlist.id,
+                                playlist: quoteData.playlist,
+                                queueableCount: quoteData.queueableCount,
+                                cost: quoteData.cost
+                            };
+                            document.getElementById('playlistPayTitle').textContent = quoteData.playlist?.name || 'Playlist';
+                            document.getElementById('playlistPayMeta').textContent = `${quoteData.queueableCount} queueable tracks`;
+                            document.getElementById('playlistPayCost').textContent = `${quoteData.cost} Digipogs`;
+                            document.getElementById('playlistPaymentModal').style.display = 'block';
+                            document.querySelector('.main-content').classList.add('blurred');
+                        } catch (err) {
+                            console.error('Playlist quote error:', err);
+                            Notify('Something went wrong. Try again.', 'error');
+                        }
+                    }
+
+                    async function queuePlaylist(playlistId) {
+                        try {
+                            const res = await fetch('/api/playlists/queue', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ playlistId })
+                            });
+                            const data = await res.json();
+                            if (res.ok && data.ok) {
+                                Notify(data.message || 'Playlist is now playing!', 'success');
+                            } else {
+                                Notify(data.error || 'Failed to play playlist', 'error');
+                            }
+                        } catch (err) {
+                            console.error('Queue playlist error:', err);
+                            Notify('Something went wrong. Try again.', 'error');
                         }
                     }
 
@@ -895,6 +982,107 @@
                     document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                     document.getElementById('close-notification')?.addEventListener('click', closeNotification);
 
+                    // Playlist payment modal handlers
+                    document.getElementById('playlist-pay-cancel')?.addEventListener('click', () => {
+                        document.getElementById('playlistPaymentModal').style.display = 'none';
+                        document.querySelector('.main-content').classList.remove('blurred');
+                        selectedPlaylistQuote = null;
+                    });
+
+                    document.getElementById('playlist-pay-confirm')?.addEventListener('click', async () => {
+                        if (!selectedPlaylistQuote?.playlistId) {
+                            Notify('No playlist selected.', 'error');
+                            return;
+                        }
+
+                        const pin = document.getElementById('playlist-pay-pin').value.trim();
+                        if (!pin) {
+                            Notify('Please enter your PIN.', 'error');
+                            return;
+                        }
+
+                        const confirmBtn = document.getElementById('playlist-pay-confirm');
+                        confirmBtn.disabled = true;
+
+                        try {
+                            if (document.getElementById('playlistSavePIN')?.checked) {
+                                await fetch('/savePin', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pin })
+                                }).catch(() => { });
+                            }
+
+                            const reason = `Jukebar Payment - Play Playlist (${selectedPlaylistQuote.playlist?.name || 'Playlist'})`;
+                            const transferRes = await fetch('/transfer', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    pin,
+                                    reason,
+                                    pendingAction: 'playlist',
+                                    playlistId: selectedPlaylistQuote.playlistId
+                                })
+                            });
+                            const transferData = await transferRes.json();
+                            if (!transferRes.ok || !(transferData.ok || transferData.success || transferData.token)) {
+                                throw new Error(transferData.error || 'Transfer failed');
+                            }
+
+                            // Payment succeeded — queue the playlist
+                            const playlistId = selectedPlaylistQuote.playlistId;
+                            document.getElementById('playlistPaymentModal').style.display = 'none';
+                            document.querySelector('.main-content').classList.remove('blurred');
+                            selectedPlaylistQuote = null;
+
+                            await queuePlaylist(playlistId);
+                        } catch (err) {
+                            console.error('Playlist purchase error:', err);
+                            Notify(err.message || 'Could not queue playlist', 'error');
+                        } finally {
+                            confirmBtn.disabled = false;
+                        }
+                    });
+
+                    // Load saved PIN into playlist modal too
+                    (async () => {
+                        try {
+                            const res = await fetch('/getPin', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            const data = await res.json();
+                            if (data.ok && data.userPin) {
+                                document.getElementById('playlist-pay-pin').value = data.userPin;
+                                document.getElementById('playlistSavePIN').checked = true;
+                            }
+                        } catch (_) { }
+                    })();
+
+                    // Skip activity box minimize/expand toggle
+                    (function initSkipActivityToggle() {
+                        const box = document.getElementById('skipActivityBox');
+                        const btn = document.getElementById('skipActivityToggle');
+                        if (!box || !btn) return;
+
+                        const STORAGE_KEY = 'skipActivityMinimized';
+
+                        function applyState(minimized) {
+                            box.classList.toggle('minimized', minimized);
+                            btn.innerHTML = minimized ? '&#43;' : '&minus;';
+                            btn.title = minimized ? 'Expand' : 'Minimize';
+                            btn.setAttribute('aria-label', minimized ? 'Expand skip activity' : 'Minimize skip activity');
+                        }
+
+                        applyState(localStorage.getItem(STORAGE_KEY) === 'true');
+
+                        btn.addEventListener('click', () => {
+                            const nowMinimized = !box.classList.contains('minimized');
+                            localStorage.setItem(STORAGE_KEY, nowMinimized);
+                            applyState(nowMinimized);
+                        });
+                    })();
+
                     // When search input is cleared, restore recently queued
                     document.getElementById('searchInput')?.addEventListener('input', (e) => {
                         if (e.target.value.trim() === '') {
@@ -1003,6 +1191,7 @@
                             hasPaid: hasPaid,
                             pendingAction: pendingAction,
                             pendingTrackUri: pendingTrackUri,
+                            pendingPlaylistId: pendingPlaylistId,
                             currentID: currentID
                         };
                     };

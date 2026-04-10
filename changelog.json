@@ -1,6 +1,20 @@
 [
     {
-        "version": "2.0.2",
+        "version": "2.1.1",
+        "releaseDate": "04/08/26",
+        "changes": [
+            {
+                "type": "feature",
+                "text": "Skip box has been removed."
+            },
+            {
+                "type": "bugfix",
+                "text": "Fixed an issue where playlists wouldn't be able to be purchased"
+            }
+        ]
+    },
+    {
+        "version": "2.1.0",
         "releaseDate": "04/08/26",
         "changes": [
             {
@@ -107,7 +121,7 @@
     },
     {
         "version": "1.1.0",
-        "releaseDate": "12/08/25",
+        "releaseDate": "12/18/25",
         "changes": [
             {
                 "type": "feature",
@@ -141,7 +155,7 @@
     },
     {
         "version": "1.0.1",
-        "releaseDate": "??/??/25",
+        "releaseDate": "12/09/25",
         "changes": [
             {
                 "type": "feature",
@@ -205,10 +219,6 @@
         "version": "0.8.0",
         "releaseDate": "12/13/25",
         "changes": [
-            {
-                "type": "feature",
-                "text": "Users can see who added a song so now you can publicly shame your friends for adding horrible songs!"
-            },
             {
                 "type": "feature",
                 "text": "Users can see who added a song so now you can publicly shame your friends for adding horrible songs!"

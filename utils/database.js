@@ -291,6 +291,14 @@ db.all("PRAGMA index_list(allowed_playlists)", (err, indexes) => {
     }
 });
 
+// Clean up duplicate allowed_playlists rows with NULL class_id (caused by old bug)
+db.run(`DELETE FROM allowed_playlists WHERE id NOT IN (
+    SELECT MIN(id) FROM allowed_playlists GROUP BY spotify_playlist_id, COALESCE(class_id, '__NULL__')
+)`, function (err) {
+    if (err) console.error('Error cleaning up duplicate allowed_playlists:', err.message);
+    else if (this.changes) console.log(`Cleaned up ${this.changes} duplicate allowed_playlists row(s)`);
+});
+
 // JukePix custom settings per artist/song
 db.run(`CREATE TABLE IF NOT EXISTS jukepix_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
