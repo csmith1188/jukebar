@@ -381,7 +381,7 @@
                 meta.appendChild(details);
 
                 const actionBtn = document.createElement('button');
-                const isAllowed = !!playlist.isAllowed;
+                let isAllowed = !!playlist.isAllowed;
                 actionBtn.className = isAllowed ? 'unban-button playlist-allow-btn' : 'ban-button playlist-allow-btn';
                 actionBtn.type = 'button';
                 actionBtn.textContent = isAllowed ? 'Disallow' : 'Allow';
@@ -406,12 +406,20 @@
                         if (!r.ok || !result.ok) {
                             throw new Error(result.error || 'Failed to update playlist permission');
                         }
-
+                        console.log('Playlist allow/disallow response:', result);
                         showNotification(
                             `${playlist.name} ${isAllowed ? 'disallowed' : 'allowed'} for students`,
                             'success'
                         );
-                        fetchUserPlaylists();
+                        // Toggle button state locally instead of re-fetching all playlists
+                        playlist.isAllowed = !isAllowed;
+                        const nowAllowed = playlist.isAllowed;
+                        actionBtn.className = nowAllowed ? 'unban-button playlist-allow-btn' : 'ban-button playlist-allow-btn';
+                        actionBtn.textContent = nowAllowed ? 'Disallow' : 'Allow';
+                        actionBtn.title = nowAllowed ? 'Disallow playlist for students' : 'Allow playlist for students';
+                        // Re-bind: swap the endpoint for the next click
+                        isAllowed = nowAllowed;
+                        actionBtn.disabled = false;
                     } catch (error) {
                         console.error('Playlist allow/disallow error:', error);
                         showNotification(error.message || 'Failed to update playlist', 'error');
