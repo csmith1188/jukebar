@@ -1,169 +1,202 @@
 # Jukebar
 
-Jukebar is a Node.js jukebox application that integrates with Spotify and Formbar, allowing users to search for and play music by making payments with their Digipogs.
+Jukebar is a Node.js classroom jukebox that integrates with Spotify and Formbar. Users can pay with Digipogs to queue songs, skip tracks, buy shields, and initiate ban votes.
 
 ## Features
 
-- **Spotify Integration**: Search and play music directly from Spotify
-- **Authentication**: Secure login system with JWT tokens from Formbar accounts
-- **Payment System**: Integrated with Formbar Digipogs for song purchases and skip shields
-- **Skip Shield System**: Purchase shields (25 Digipogs) to protect your songs from being skipped (100 Digipogs cost)
-- **Anonymous Mode**: Add songs anonymously without tracking to your play count
-- **Queue Management**: Real-time queue synchronization with shield protection display
-- **Skip Protection Sound Effects**: Random audio feedback when shields block skip attempts (Raspberry Pi compatible)
-- **Real-time Updates**: WebSocket-based live updates for queue, playback state, and currently playing
-- **User Management**: SQLite database for user data, PIN storage, and queue metadata
-- **Leaderboard**: Track top contributors based on songs played
-- **Transaction Logging**: Complete audit trail of all Digipog transactions
-- **Session Management**: Secure session handling with Express
+- **Spotify playback and queue control**
+- **Formbar OAuth login** with session-based auth
+- **Digipog payment flow** for songs, skips, shields, and ban-vote starts
+- **Skip Shield system** (buy shields, consume on blocked skip)
+- **Anonymous mode** (queue songs without leaderboard credit)
+- **Track ban system**
+    - Teacher/owner direct bans
+    - Community ban voting with online-user minimum
+- **User moderation** (ban/unban users, teacher transaction views)
+- **Leaderboard** with automatic weekly reset
+- **Real-time updates** with Socket.IO
+- **JukePix integration**
+    - Toggle bridge on/off
+    - Global/default visual settings
+    - Per-artist and per-song overrides
+    - Configurable skip/shield sound selection
+- **SQLite persistence** for users, queue metadata, bans, and transactions
 
 ## Prerequisites
 
-Before running this application, ensure you have:
-
-- Node.js (version 14 or higher)
-- A Spotify Premium account
-- Spotify application registered with Spotify for Developers
-- Access to Formbar API for payment processing
-- A device with Spotify open and active for playback
-- **Optional**: omxplayer installed (for Raspberry Pi audio playback of shield block sound effects)
+- Node.js 18+ (recommended)
+- Spotify Premium account and Spotify app credentials
+- Formbar instance access and API key
+- Active Spotify playback device
+- Optional: `omxplayer` (Raspberry Pi blocked-skip SFX)
 
 ## Installation
 
-1. Clone the repository:
+1. Clone repository:
+
 ```bash
 git clone <repository-url>
 cd Jukebar
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Create a `.env` file in the root directory with the following variables:
-```env
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-SPOTIFY_REFRESH_TOKEN=your_spotify_refresh_token
-FORMBAR_ADDRESS=https://your-formbar-instance.com
-PUBLIC_KEY=your_formbar_public_key
-API_KEY=your_formbar_api_key
-```
+3. Create `.env` from `.env-template` and fill values.
 
-4. Create the database directory:
-```bash
-mkdir db
-```
+4. Start app:
 
-5. **Optional**: Create the sound effects directory for skip shield blocked sounds:
-```bash
-mkdir public/sfx
-```
-Add `.wav` or `.mp3` audio files to this directory for random playback when skips are blocked.
-
-## Configuration
-
-### Spotify Setup
-
-1. Go to [Spotify for Developers](https://developer.spotify.com/)
-2. Create a new application
-3. Note down your Client ID and Client Secret
-4. Set up the redirect URI in your Spotify app settings
-5. Generate a refresh token for your Spotify account
-
-### Formbar Integration
-
-The application integrates with Formbar for user authentication and payment processing. Ensure you have:
-- Valid Formbar API credentials
-- Public key for JWT verification
-- Access to the Digipogs payment system
-
-## Usage
-
-1. Start Formbar (either run a local instance or connect to formbeta.yorktechapps.com):
-    - For local development: Follow the Formbar setup instructions on the [Formbar.js Wiki](https://github.com/csmith1188/Formbar.js/wiki/Hosting-Formbar.js-Locally) on starting your own version of formbar
-    - For testing: Use the public instance at `formbeta.yorktechapps.com`
-
-2. Start the application:
 ```bash
 node app.js
 ```
 
-3. Navigate to `http://localhost:3000` in your web browser
+5. Open browser:
 
-4. Log in through the Formbar authentication system
+`http://localhost:5000`
 
-5. Search for songs using the search interface
+## Environment Variables
 
-6. Make a payment through Digipogs to unlock song playback (75 Digipogs per song, 100 Digipogs per skip)
+Use `.env-template` as the source of truth. Common keys:
 
-7. **Optional**: Purchase skip shields (25 Digipogs) to protect your songs from being skipped
+```env
+# Formbar
+FORMBAR_ADDRESS=http://localhost:420
+API_KEY=your_formbar_api_key
+URL=http://localhost
+POOL_ID=your_pool_id
+OWNER_ID=comma_separated_owner_ids
+OWNER_PIN=first_owner_pin
 
-8. Add songs to the Spotify queue or play them directly
+# Spotify
+SPOTIFY_CLIENT_ID=...
+SPOTIFY_CLIENT_SECRET=...
+SPOTIFY_REFRESH_TOKEN=...
 
-9. Toggle anonymous mode to add songs without tracking to your play count
+# Pricing
+SONG_AMOUNT=50
+SKIP_AMOUNT=100
+SKIP_SHIELD_AMOUNT=75
+VOTE_BAN_AMOUNT=500
 
-## Key Features Explained
+# Skip activity history
+SKIP_ACTIVITY_STORED_LIMIT=100
+SKIP_ACTIVITY_SEND_LIMIT=5
 
-### Skip Shield System
-- Purchase shields for 25 Digipogs per song to protect it from skips
-- When someone attempts to skip a shielded song (costs 100 Digipogs), the shield is consumed instead
-- Shield count is displayed on each queue item with a 🛡️ badge
-- Random sound effects play when shields block skip attempts (requires audio files in `/public/sfx/`)
+# Optional compatibility keys used in some paths
+SKIP_SHIELD=75
+TRANSFER_AMOUNT=50
 
-### Anonymous Mode
-- Toggle the anonymous checkbox when adding songs
-- Songs added anonymously don't increment your `songsPlayed` count on the leaderboard
-- Still costs the same amount of Digipogs
+# JukePix
+JUKEPIX_URL=http://localhost:421
+JUKEPIX_API_KEY=...
+JUKEPIX_LENGTH=100
+```
 
-### Real-time Queue Sync
-- Queue and currently playing track update simultaneously via WebSocket
-- Progress bar shows real-time playback position
-- All users see updates instantly when songs are added, skipped, or shields are purchased
+## Default Pricing
 
-## Dependencies
+- Song: **50**
+- Skip: **100**
+- Skip Shield: **75**
+- Ban Vote Start: **500**
 
-- **express**: Web application framework
-- **express-session**: Session middleware
-- **ejs**: Template engine for views
-- **spotify-web-api-node**: Spotify Web API wrapper
-- **socket.io**: Real-time WebSocket communication
-- **sqlite3**: SQLite database driver
-- **jsonwebtoken**: JWT token handling
-- **dotenv**: Environment variable management
+Actual values are environment-driven.
 
-## Database Schema
+## Main Endpoints
 
-### Tables
-- **users**: User accounts with Formbar IDs, Digipog balances, and play counts
-- **queue_metadata**: Track metadata including who added songs, skip shield counts, and anonymous mode flags
-- **transactions**: Complete audit log of all Digipog transactions (plays, skips, shield purchases)
+### Auth
 
-## API Endpoints
+- `GET /login`
+- `GET /logout`
 
-### Authentication
-- `GET /auth` - Formbar authentication redirect
-- `GET /callback` - Formbar OAuth callback
-- `POST /logout` - End user session
+### Spotify and Queue
 
-### Queue Management
-- `POST /addToQueue` - Add a song to the Spotify queue
-- `POST /skip` - Skip the currently playing track
-- `POST /purchaseShield` - Purchase a skip shield for a specific track
+- `POST /search`
+- `GET /getQueue`
+- `POST /addToQueue`
+- `GET /currentlyPlaying`
+- `POST /skip`
+- `POST /purchaseShield`
+- `POST /checkTrackExists`
+- `GET /queue/state`
+- `POST /queue/add`
+- `POST /queue/skip`
+- `GET /api/currentTrack`
+
+### Bans
+
+- `POST /banTrack` (teacher/owner)
+- `POST /unbanTrack` (teacher/owner)
 
 ### Payments
-- `POST /payment/transfer` - Process Digipog payment for songs, skips, or shields
-- `GET /payment/getAmount` - Get the cost for a specific action
 
-### User Data
-- `GET /api/leaderboard` - Fetch the top users by songs played
-- `GET /api/queueHistory` - View transaction history (teacher access only)
+- `POST /transfer`
+- `POST /refund`
+- `POST /savePin`
+- `POST /getPin`
+- `POST /claimPayment`
+- `GET /paymentStatus`
+- `POST /getAmount`
+- `POST /testPayment` (non-production only)
+
+### Users and Teacher Tools
+
+- `GET /api/users`
+- `POST /api/users/ban`
+- `POST /api/users/unban`
+- `GET /api/users/banned`
+- `GET /api/me/banned`
+- `GET /api/queueHistory`
+- `POST /api/users/transactions`
+- `POST /api/users/transactions/modal`
+- `GET /api/banned-songs`
+
+### Leaderboard
+
+- `GET /api/leaderboard`
+- `GET /api/leaderboard/last-reset`
+- `GET /api/leaderboard/update`
+- `GET /api/leaderboard/auto-check`
+- `POST /api/leaderboard/force-reset`
+
+### JukePix and Settings
+
+- `POST /toggleJukepix`
+- `GET /jukepixStatus`
+- `GET /api/settings/defaults`
+- `PUT /api/settings/defaults`
+- `POST /api/settings/defaults/reset`
+- `GET /api/settings/overrides`
+- `POST /api/settings/overrides`
+- `PUT /api/settings/overrides/:id`
+- `DELETE /api/settings/overrides/:id`
+- `GET /api/settings/resolve`
+- `GET /api/settings/sounds`
+
+## Database Tables
+
+- `users`
+- `transactions`
+- `banned_songs`
+- `queue_metadata`
+- `currently_playing`
+- `track_bans`
+- `jukepix_settings`
+- `jukepix_defaults`
+
+## Notes
+
+- Session + token checks gate protected routes.
+- Teacher actions require permission level `>= 4` or owner status.
+- Owners bypass some payment checks.
+- Queue and moderation events are synchronized in real time with Socket.IO.
 
 ## Contributing
 
-Contributions are welcome! Please ensure all console logs are emoji-free for Raspberry Pi compatibility.
+Contributions are welcome.
 
 ## License
 
-This project is for educational purposes as part of the York Tech Apps ecosystem.
+Educational project in the York Tech Apps ecosystem.

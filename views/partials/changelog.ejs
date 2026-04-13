@@ -2,21 +2,91 @@
     <header class="changelog-header">
         <h1>Jukebar Changelog</h1>
         <p>Track all the latest updates, fixes, and improvements</p>
+        <% const changelogData = typeof changelog !== 'undefined' && Array.isArray(changelog) ? changelog : []; %>
+        <!-- Debug: <%= JSON.stringify({ hasChangelog: typeof changelog !== 'undefined', isArray: Array.isArray(changelog), length: changelogData.length }) %> -->
+        <% if (changelogData && changelogData.length > 0) { %>
+            <div class="changelog-nav">
+                <button id="changelog-prev" class="changelog-nav-btn" aria-label="Previous version">← Prev</button>
+                <span id="changelog-version-display" class="changelog-version-display">1 / <%= changelogData.length %></span>
+                <button id="changelog-next" class="changelog-nav-btn" aria-label="Next version">Next →</button>
+            </div>
+        <% } %>
     </header>
 
-    <section class="version-block">
-        <div class="version-header">
-            <h2>v1.3.0</h2>
-            <span class="release-date">03/02/26</span>
-        </div>
-        <div class="changes">
-            <h3>What's new?</h3>
-            <ul>
-                <li>The leaderboard now only shows people who have used Jukebar for that week, rather than all the users
-                who have accounts</li>
-                <li>Skip Shields can now be purchased in bulk up to 1000 which is also the max limit on a song too</li>
-                <li> emojis have been replaced with the proper Skip Shield icon </li>
-            </ul>
-        </div>
-    </section>
+    <% if (changelogData && Array.isArray(changelogData) && changelogData.length > 0) { %>
+        <% changelogData.forEach((entry, idx) => { %>
+            <section class="version-block <% if (idx === 0) { %>active<% } %>" data-version-index="<%= idx %>" data-version="<%= entry.version %>">
+                <div class="version-header">
+                    <h2><%= entry.version %></h2>
+                    <span class="release-date"><%= entry.releaseDate %></span>
+                </div>
+                <div class="changes">
+                    <h3>What's new?</h3>
+                    <ul>
+                        <% if (entry.changes && Array.isArray(entry.changes)) { %>
+                            <% entry.changes.forEach((change) => { %>
+                                <li><%- change.text %></li>
+                            <% }); %>
+                        <% } %>
+                    </ul>
+                </div>
+            </section>
+        <% }); %>
+    <% } else { %>
+        <p style="padding: 20px; text-align: center; color: #b3b3b3;">No changelog entries found.</p>
+    <% } %>
 </div>
+
+<script>
+(function() {
+    const container = document.querySelector('.changelog-container');
+    if (!container) return;
+    
+    const blocks = Array.from(container.querySelectorAll('.version-block'));
+    const versionDisplay = document.getElementById('changelog-version-display');
+    const prevBtn = document.getElementById('changelog-prev');
+    const nextBtn = document.getElementById('changelog-next');
+    
+    if (blocks.length === 0) return;
+    
+    // Start at the first entry (newest)
+    let currentIndex = 0;
+    
+    function updateDisplay() {
+        blocks.forEach((block, idx) => {
+            block.classList.toggle('active', idx === currentIndex);
+        });
+        if (versionDisplay) {
+            // Show version number counting down from total (2/2 for newest, 1/2 for older, etc.)
+            versionDisplay.textContent = `${blocks.length - currentIndex}/${blocks.length}`;
+        }
+        if (prevBtn) prevBtn.disabled = currentIndex === blocks.length - 1;
+        if (nextBtn) nextBtn.disabled = currentIndex === 0;
+    }
+    
+    function goToPrevious() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            updateDisplay();
+        }
+    }
+    
+    function goToNext() {
+        if (currentIndex < blocks.length - 1) {
+            currentIndex++;
+            updateDisplay();
+        }
+    }
+    
+    if (prevBtn) prevBtn.addEventListener('click', goToNext);
+    if (nextBtn) nextBtn.addEventListener('click', goToPrevious);
+    
+    // Arrow key navigation
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') goToPrevious();
+        if (e.key === 'ArrowRight') goToNext();
+    });
+    
+    updateDisplay();
+})();
+</script>

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../utils/database');
+const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
 const { isOwner, getFirstOwnerId } = require('../utils/owners');
 const { transfer, refund: poolRefund } = require('../utils/transferManager');
 
@@ -11,13 +12,103 @@ if (!POOL_ID || isNaN(POOL_ID)) {
     console.error('[payment.js] FATAL: POOL_ID is not set or invalid in .env. Payments will be rejected.');
 }
 
+function computePlaylistCost(trackCount) {
+    const songAmount = Number(process.env.SONG_AMOUNT) || 50;
+    return Math.min(trackCount * songAmount, 500);
+}
+
+// Returns the top non-owner user IDs ranked by plays in the last 7 days (same source as the leaderboard)
+function getRollingTopUsers() {
+    return new Promise((resolve, reject) => {
+        const ownerIds = require('../utils/owners').getOwnerIds();
+        const ownerFilter = ownerIds.length
+            ? `AND t.user_id NOT IN (${ownerIds.map(() => '?').join(',')})`
+            : '';
+
+        db.all(
+            `SELECT t.user_id as id
+             FROM transactions t
+             WHERE t.action = 'play'
+               AND t.timestamp >= datetime('now', '-7 days')
+               ${ownerFilter}
+             GROUP BY t.user_id
+             ORDER BY COUNT(*) DESC
+             LIMIT 10`,
+            ownerIds,
+            (err, rows) => {
+                if (err) return reject(err);
+                resolve((rows || []).map(r => Number(r.id)));
+            }
+        );
+    });
+}
+
+async function fetchPlaylistTrackItems(playlistId) {
+    await ensureSpotifyAccessToken();
+    const items = [];
+    let offset = 0;
+    const limit = 100;
+
+    while (true) {
+        const response = await spotifyApi.getPlaylistTracks(playlistId, { limit, offset });
+        const batch = response.body?.items || [];
+        items.push(...batch);
+        if (batch.length < limit) break;
+        offset += limit;
+    }
+
+    return items;
+}
+
+async function getCurrentTrackUri() {
+    await ensureSpotifyAccessToken();
+    const playback = await spotifyApi.getMyCurrentPlayingTrack();
+    return playback?.body?.item?.uri || null;
+}
+
+async function isPlaylistCurrentlyPlaying(playlistId, playlistItems = null) {
+    const currentTrackUri = await getCurrentTrackUri();
+    if (!currentTrackUri) return false;
+
+    const items = playlistItems || await fetchPlaylistTrackItems(playlistId);
+    return items.some((item) => item?.track?.uri === currentTrackUri);
+}
+
+async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
+    const items = playlistItems || await fetchPlaylistTrackItems(playlistId);
+    let playableCount = 0;
+
+    for (const item of items) {
+        const track = item?.track;
+        if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
+            continue;
+        }
+        playableCount += 1;
+    }
+
+    return playableCount;
+}
+
+function isPlaylistAllowed(playlistId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            'SELECT is_allowed FROM allowed_playlists WHERE spotify_playlist_id = ?',
+            [playlistId],
+            (err, row) => {
+                if (err) return reject(err);
+                resolve(!!row?.is_allowed);
+            }
+        );
+    });
+}
+
 router.post('/transfer', async (req, res) => {
     try {
         const to = POOL_ID;
         if (!to || isNaN(to)) {
             return res.status(500).json({ ok: false, error: 'Server misconfigured: POOL_ID is not set. Contact your administrator.' });
         }
-        let { pin, reason } = req.body || {};
+        let { pin, reason, playlistId } = req.body || {};
         const pendingAction = req.body?.pendingAction;
         
         console.log('=== PAYMENT TRANSFER REQUEST ===');
@@ -25,23 +116,12 @@ router.post('/transfer', async (req, res) => {
         console.log('reason:', reason);
 
         //gets the top 3 users to apply a discount (filter out ALL owners)
-        const topUsers = await new Promise((resolve, reject) => {
-            db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
-                if (rows) {
-                    rows = rows.filter(r => !isOwner(r.id));
-                }
-                if (err) return reject(err);
-                resolve(rows.map(r => Number(r.id)));
-            });
-        });
+        const topUsers = await getRollingTopUsers();
 
         const userRow = await new Promise((resolve, reject) => {
-            db.get("SELECT id, songsPlayed FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row);
-                }
+            db.get("SELECT id FROM users WHERE id = ?", [req.session.token?.id], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
             });
         });
 
@@ -50,6 +130,24 @@ router.post('/transfer', async (req, res) => {
         if (pendingAction === 'skip') {
             // Skips are a fixed cost (no discounts)
             amount = Number(process.env.SKIP_AMOUNT) || 100;
+        } else if (pendingAction === 'playlist') {
+            if (!playlistId) {
+                return res.status(400).json({ ok: false, error: 'playlistId is required for playlist payments' });
+            }
+            const allowed = await isPlaylistAllowed(playlistId);
+            if (!allowed) {
+                return res.status(403).json({ ok: false, error: 'This playlist is not allowed' });
+            }
+            const playlistItems = await fetchPlaylistTrackItems(playlistId);
+            const alreadyPlaying = await isPlaylistCurrentlyPlaying(playlistId, playlistItems);
+            if (alreadyPlaying) {
+                return res.status(409).json({ ok: false, code: 'PLAYLIST_ALREADY_PLAYING', error: 'This playlist is already playing' });
+            }
+            const queueableCount = await getPlaylistPlayableTrackCount(playlistId, playlistItems);
+            amount = computePlaylistCost(queueableCount);
+            if (amount <= 0) {
+                return res.status(400).json({ ok: false, error: 'No queueable tracks found in this playlist' });
+            }
         } else if (pendingAction === 'Skip Shield') {
             // Skip Shields are a fixed cost (no discounts)
             amount = Number(process.env.SKIP_SHIELD) || 75;
@@ -57,7 +155,7 @@ router.post('/transfer', async (req, res) => {
             // Ban Votes are a fixed cost (no discounts)
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else {
-            amount = Number(process.env.TRANSFER_AMOUNT) || 50;
+            amount = Number(process.env.SONG_AMOUNT) || 50;
             if (userRow && userRow.id) {
                 const userIdNum = Number(userRow.id);
                 if (topUsers[0] === userIdNum) {
@@ -67,11 +165,6 @@ router.post('/transfer', async (req, res) => {
                 } else if (topUsers[2] === userIdNum) {
                     amount = Math.max(0, amount - 3);
                 }
-            }
-            // no discount for users who haven't played any songs
-            const songsPlayed = userRow?.songsPlayed || 0;
-            if (songsPlayed == 0) {
-                amount = 50;
             }
         }
 
@@ -117,6 +210,8 @@ router.post('/transfer', async (req, res) => {
                 from: Number(userRow.id),
                 to: Number(to),
                 amount: Number(amount),
+                pendingAction: pendingAction || null,
+                playlistId: pendingAction === 'playlist' ? String(playlistId || '') : null,
                 at: Date.now()
             };
             return req.session.save((err) => {
@@ -307,26 +402,35 @@ router.post('/getAmount', async (req, res) => {
         const db = require('../utils/database');
         const userId = req.session.token?.id;
         const pendingAction = req.body.pendingAction;
+        const playlistId = req.body.playlistId;
         let amount;
         let discountApplied = false;
 
         if (pendingAction === 'skip') {
             amount = Number(process.env.SKIP_AMOUNT) || 100;
+        } else if (pendingAction === 'playlist') {
+            if (!playlistId) {
+                return res.status(400).json({ ok: false, error: 'playlistId is required for playlist amount' });
+            }
+            const allowed = await isPlaylistAllowed(playlistId);
+            if (!allowed) {
+                return res.status(403).json({ ok: false, error: 'This playlist is not allowed' });
+            }
+            const playlistItems = await fetchPlaylistTrackItems(playlistId);
+            const alreadyPlaying = await isPlaylistCurrentlyPlaying(playlistId, playlistItems);
+            if (alreadyPlaying) {
+                return res.status(409).json({ ok: false, code: 'PLAYLIST_ALREADY_PLAYING', error: 'This playlist is already playing' });
+            }
+            const queueableCount = await getPlaylistPlayableTrackCount(playlistId, playlistItems);
+            amount = computePlaylistCost(queueableCount);
         } else if (pendingAction === 'Skip Shield') {
             amount = Number(process.env.SKIP_SHIELD) || 75;
         } else if (pendingAction === 'Ban Vote') {
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
-            // Get top 3 user IDs in order
-            const topUsers = await new Promise((resolve, reject) => {
-                db.all("SELECT id FROM users ORDER BY songsPlayed DESC LIMIT 3", (err, rows) => {
-                    if (err) return reject(err);
-                    // Filter out ALL owner IDs
-                    const filteredRows = rows.filter(r => !isOwner(r.id));
-                    resolve(filteredRows.map(r => Number(r.id)));
-                });
-            });
+            // Get top 3 user IDs from the rolling 7-day leaderboard (same source as the displayed leaderboard)
+            const topUsers = await getRollingTopUsers();
             // discount
             if (userId) {
                 const userIdNum = Number(userId);

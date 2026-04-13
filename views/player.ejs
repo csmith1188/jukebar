@@ -11,57 +11,115 @@
 
 </head>
 
-<body>
+<body class="player-page">
     <div id="notification" class="notification">
         <span class="close-btn" id="close-notification">&times;</span>
         <p id="notification-text"></p>
     </div>
     <%- include('partials/header', { page: 'player' }) %>
-        <div class="main-content">
-            <p class="user-greeting">Logged in as: <strong>
-                    <%= user %>
-                </strong> <span class="user-count">(<span id="onlineUserCount">1</span> online)</span></p>
-            <div class="container">
-                <div id="spotifyPlayer">
-                    <form id="searchForm">
-                        <div class="search-container">
-                            <input type="text" id="searchInput" placeholder="Search for a song, artist, or album"
-                                required>
-                            <button type="submit" id="searchButton">
-                                <img src="/img/search.png" alt="Search" class="search-icon">
-                            </button>
-                        </div>
-                    </form>
-                    <% if (ownerIDs.includes(userID)) { %>
-                        <div class="owner-anon-container">
-                            <label class="owner-anon-label">
-                                <input type="checkbox" id="owner-anon-mode">
-                                Add songs anonymously
-                            </label>
-                        </div>
-                        <% } %>
-                            <div id="searchResults"></div>
-                </div>
-                <div id="songStats">
-                    <h2>Now Playing:</h2>
-                    <hr>
-                    <div id="currentlyPlaying">
+        <div class="main-content player-main-content">
+            <div class="player-topbar">
+                <p class="user-greeting">Logged in as: <strong>
+                        <%= user %>
+                    </strong> <span class="user-count">(<span id="onlineUserCount">1</span> online)</span></p>
+            </div>
+
+            <div class="player-shell">
+                <aside class="player-sidebar" aria-label="Playlists">
+                    <div class="player-sidebar-header">
+                        <div class="player-sidebar-title">Playlists</div>
                     </div>
-                    <div>
-                        <button id="skip-button" class="skip-button">Skip</button>
+                    <div id="studentPlaylistsList" class="player-sidebar-list">
+                        <p style="text-align:center;color:#b3b3b3;">Loading...</p>
                     </div>
-                    <h2>Up Next:</h2>
-                    <hr>
-                    <div id="queue">
+                </aside>
+
+                <main class="player-main" aria-label="Search">
+                    <div id="spotifyPlayer" class="player-search-panel">
+                        <form id="searchForm">
+                            <div class="search-container">
+                                <input type="text" id="searchInput" placeholder="Search for a song, artist, or album"
+                                    required>
+                                <button type="submit" id="searchButton">
+                                    <img src="/img/search.png" alt="Search" class="search-icon">
+                                </button>
+                            </div>
+                        </form>
+                        <% if (ownerIDs.includes(userID)) { %>
+                            <div class="owner-anon-container">
+                                <label class="owner-anon-label">
+                                    <input type="checkbox" id="owner-anon-mode">
+                                    Add songs anonymously
+                                </label>
+                            </div>
+                            <% } %>
+                                <div id="searchResults"></div>
                     </div>
-                </div>
+                </main>
+
+                <aside class="player-right-rail" aria-label="Now playing details">
+                    <div class="player-rail-title">Queue</div>
+                    <div id="queue" class="player-rail-queue"></div>
+                </aside>
             </div>
         </div>
+
+        <footer class="player-bottom-bar" aria-label="Now playing">
+            <div id="songStats" class="player-nowplaying">
+                <div class="player-nowplaying-left">
+                    <div id="currentlyPlaying"></div>
+                </div>
+                <div class="player-nowplaying-center">
+                    <div class="player-controls" aria-label="Playback controls">
+                        <button id="now-ban-button" class="player-control-btn player-control-btn--action" type="button"
+                            aria-label="Vote Ban" title="Vote Ban" disabled>
+                            <img src="/img/ban.png" alt="Ban" class="player-control-icon">
+                        </button>
+                        <button id="skip-button" class="player-control-btn player-control-btn--primary" type="button"
+                            aria-label="Skip" disabled>
+                            <div id="skip-button-showie-shield">
+                                1
+                            </div>
+                            <img src="/img/skip.png" alt="Skip" class="player-control-icon player-control-icon--skip">
+                        </button>
+                        <button id="now-shield-button" class="player-control-btn player-control-btn--action"
+                            type="button" aria-label="Skip Shield" title="Skip Shield" disabled>
+                            <img src="/img/skipShield.png" alt="Skip Shield" class="player-control-icon">
+                        </button>
+                    </div>
+                </div>
+                <div class="player-nowplaying-right">
+                </div>
+            </div>
+        </footer>
         <div id="paymentModal" class="payment-modal">
             <div class="payment-content">
                 <button id="hide-payment">&times;</button>
 
                 <%- include('partials/pay') %>
+            </div>
+        </div>
+
+        <div id="playlistPaymentModal" class="payment-modal" style="display:none;">
+            <div class="payment-content playlist-pay-content">
+                <h3 class="ban-reason-title">Play Playlist</h3>
+                <div class="playlist-pay-summary">
+                    <div id="playlistPayTitle" class="playlist-pay-title">Playlist</div>
+                    <div id="playlistPayMeta" class="playlist-pay-meta">0 queueable tracks</div>
+                    <div id="playlistPayCost" class="playlist-pay-cost">0 Digipogs</div>
+                </div>
+                <p style="color:#ffaa00; font-size:0.85em; text-align:center; margin:8px 0;">Note: Playing a playlist
+                    will clear the current queue.</p>
+                <input id="playlist-pay-pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
+                    placeholder="Enter PIN" oninput="this.value = this.value.replace(/[^0-9]/g,'');" />
+                <label class="medium label-inline playlist-pay-save" for="playlistSavePIN">
+                    Save PIN for next purchase
+                    <input id="playlistSavePIN" type="checkbox" />
+                </label>
+                <div class="ban-reason-actions" style="display:flex; gap:8px; justify-content:flex-start;">
+                    <button id="playlist-pay-confirm" class="unban-button" type="button">Pay & Queue</button>
+                    <button id="playlist-pay-cancel" class="ban-button" type="button">Cancel</button>
+                </div>
             </div>
         </div>
 
@@ -87,19 +145,6 @@
                         ">
                 </div>
                 <button id="owner-shield-confirm" class="owner-shield-confirm-btn">Add Shields</button>
-            </div>
-        </div>
-
-        <div id="banReasonModal" class="payment-modal" style="display:none;">
-            <div class="payment-content" style="max-width: 520px;">
-                <button id="ban-reason-close">&times;</button>
-                <h3 style="margin-bottom: 12px;">Reason for ban</h3>
-                <input type="text" id="banReasonInput" placeholder="Enter reason (required)" maxlength="200"
-                    style="width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#1f1f1f;color:#fff;">
-                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-                    <button id="ban-reason-cancel" class="unban-button" type="button">Cancel</button>
-                    <button id="ban-reason-confirm" class="ban-button" type="button">Continue</button>
-                </div>
             </div>
         </div>
 
@@ -193,6 +238,8 @@
             let pendingBanReason = null;
             let pendingAction = null;
             let pendingShieldQuantity = 1;
+            let pendingPlaylistId = null;
+            let selectedPlaylistQuote = null;
 
             // Global letiables that need to be accessed by multiple functions
             let currentlyPlayingUri = null;
@@ -216,11 +263,139 @@
         <%- include('partials/songMenu') %>
 
             <script>
+                let currentTrackActionState = null;
+
                 (function () {
                     'use strict';
 
                     let useJukebar = true;
                     let userIsBanned = false;
+
+                    async function fetchAllowedPlaylistsForSidebar() {
+                        const list = document.getElementById('studentPlaylistsList');
+                        if (!list) return;
+
+                        list.innerHTML = '<p style="text-align:center;color:#b3b3b3;">Loading...</p>';
+
+                        try {
+                            const res = await fetch('/api/playlists/allowed', { headers: { 'Accept': 'application/json' } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load playlists');
+
+                            const playlists = data.playlists || [];
+                            if (!playlists.length) {
+                                list.innerHTML = '<p style="text-align:center;color:#b3b3b3;">No playlists yet.</p>';
+                                return;
+                            }
+
+                            list.innerHTML = '';
+                            playlists.slice(0, 30).forEach((p) => {
+                                const row = document.createElement('button');
+                                row.type = 'button';
+                                row.className = 'player-sidebar-item';
+                                row.title = p.name || 'Playlist';
+
+                                const img = document.createElement('img');
+                                img.className = 'player-sidebar-cover';
+                                img.src = p.image || '/img/placeholder.png';
+                                img.alt = p.name || 'Playlist';
+
+                                const meta = document.createElement('div');
+                                meta.className = 'player-sidebar-meta';
+
+                                const name = document.createElement('div');
+                                name.className = 'player-sidebar-name';
+                                name.textContent = p.name || 'Untitled Playlist';
+
+                                const sub = document.createElement('div');
+                                sub.className = 'player-sidebar-sub';
+                                sub.textContent = p.owner ? `By ${p.owner}` : 'Playlist';
+
+                                meta.appendChild(name);
+                                meta.appendChild(sub);
+
+                                row.appendChild(img);
+                                row.appendChild(meta);
+
+                                row.addEventListener('click', () => handlePlaylistClick(p));
+
+                                list.appendChild(row);
+                            });
+                        } catch (err) {
+                            console.error('Sidebar playlists load error:', err);
+                            list.innerHTML = '<p style="text-align:center;color:#ff4444;">Failed to load playlists.</p>';
+                        }
+                    }
+
+                    async function handlePlaylistClick(playlist) {
+                        if (userIsBanned) {
+                            Notify('You are banned from using Jukebar.', 'error');
+                            return;
+                        }
+
+                        Notify('Loading playlist...', 'success');
+
+                        // Owners skip payment — queue directly
+                        if (isOwnerClient(currentID)) {
+                            await queuePlaylist(playlist.id);
+                            return;
+                        }
+
+                        // Get a cost quote first
+                        try {
+                            const quoteRes = await fetch('/api/playlists/quote', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ playlistId: playlist.id })
+                            });
+                            const quoteData = await quoteRes.json();
+                            if (!quoteRes.ok || !quoteData.ok) {
+                                Notify(quoteData.error || 'Cannot play this playlist', 'error');
+                                return;
+                            }
+
+                            if (!quoteData.queueableCount || quoteData.cost <= 0) {
+                                Notify('No queueable tracks in this playlist right now.', 'error');
+                                return;
+                            }
+
+                            // Show the dedicated playlist payment modal
+                            selectedPlaylistQuote = {
+                                playlistId: playlist.id,
+                                playlist: quoteData.playlist,
+                                queueableCount: quoteData.queueableCount,
+                                cost: quoteData.cost
+                            };
+                            document.getElementById('playlistPayTitle').textContent = quoteData.playlist?.name || 'Playlist';
+                            document.getElementById('playlistPayMeta').textContent = `${quoteData.queueableCount} queueable tracks`;
+                            document.getElementById('playlistPayCost').textContent = `${quoteData.cost} Digipogs`;
+                            document.getElementById('playlistPaymentModal').style.display = 'block';
+                            document.querySelector('.main-content').classList.add('blurred');
+                        } catch (err) {
+                            console.error('Playlist quote error:', err);
+                            Notify('Something went wrong. Try again.', 'error');
+                        }
+                    }
+
+                    async function queuePlaylist(playlistId) {
+                        try {
+                            const res = await fetch('/api/playlists/queue', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ playlistId })
+                            });
+                            const data = await res.json();
+                            if (res.ok && data.ok) {
+                                Notify(data.message || 'Playlist is now playing!', 'success');
+                            } else {
+                                Notify(data.error || 'Failed to play playlist', 'error');
+                            }
+                        } catch (err) {
+                            console.error('Queue playlist error:', err);
+                            Notify('Something went wrong. Try again.', 'error');
+                        }
+                    }
+
 
                     // Check if user is banned on page load
                     async function checkBanStatus() {
@@ -251,6 +426,75 @@
                     }
 
                     checkBanStatus();
+                    fetchAllowedPlaylistsForSidebar();
+
+                    document.getElementById('now-ban-button')?.addEventListener('click', async () => {
+                        const actionTrack = currentTrackActionState;
+                        if (!actionTrack) {
+                            Notify('No track is currently playing.', 'error');
+                            return;
+                        }
+                        if (userIsBanned) {
+                            Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
+                            return;
+                        }
+
+                        try {
+                            const res = await fetch('/api/online-count');
+                            const data = await res.json().catch(() => ({}));
+                            const onlineCount = data.count || 0;
+                            if (onlineCount < 5) {
+                                Notify('At least 5 users must be online to start a ban vote', 'error');
+                                return;
+                            }
+                        } catch (err) {
+                            console.error('Failed to check online count:', err);
+                            Notify('Failed to verify online users. Please try again.', 'error');
+                            return;
+                        }
+
+                        const userIsOwner = isOwnerClient(currentID);
+                        if (userIsOwner) {
+                            startBanVote(actionTrack.uri, actionTrack.name, actionTrack.artist, 'student ban');
+                        } else {
+                            pendingAction = 'Ban Vote';
+                            pendingTrackUri = actionTrack.uri;
+                            pendingTrackName = actionTrack.name;
+                            pendingTrackArtist = actionTrack.artist;
+                            pendingBanReason = 'student ban';
+                            showPayment();
+                        }
+                    });
+
+                    document.getElementById('now-shield-button')?.addEventListener('click', async () => {
+                        const actionTrack = currentTrackActionState;
+                        if (!actionTrack?.uri) {
+                            Notify('No track is currently playing.', 'error');
+                            return;
+                        }
+
+                        try {
+                            const checkResponse = await fetch('/checkTrackExists', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ trackUri: actionTrack.uri })
+                            });
+                            const result = await checkResponse.json().catch(() => ({}));
+                            if (!result.exists) {
+                                Notify('This song has left the queue and can no longer be shielded.');
+                                return;
+                            }
+
+                            if (typeof window.purchaseShield === 'function') {
+                                window.purchaseShield(actionTrack.uri, actionTrack.addedAt || 0);
+                            } else {
+                                Notify('Unable to purchase shield.', 'error');
+                            }
+                        } catch (err) {
+                            console.error('Error checking track for shield:', err);
+                            Notify('Unable to verify track status', 'error');
+                        }
+                    });
 
                     // Real-time ban/unban via WebSocket
                     socket.on('userBanned', (data) => {
@@ -417,46 +661,158 @@
                             });
                     }
 
-                    async function searchSpotify() {
-                        const query = document.getElementById('searchInput').value;
-                        if (!query) return;
+                    let searchNextOffset = 0;
+                    let searchCurrentQuery = '';
+
+                    function renderSearchResults(tracks, resultsDiv) {
+                        tracks.forEach(track => {
+                            const trackDiv = document.createElement('div');
+                            trackDiv.className = 'search-result-item';
+                            trackDiv.innerHTML = `
+                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
+                        <div class="search-result-content-outer">
+                            <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                            <div class="search-result-content-pushies">
+                                <div class="search-result-title" title="${track.name}">${track.name}</div>
+                                <div class="search-result-artist" title="${track.artist}">${track.artist}</div>
+                                <div class="search-result-actions">
+                                    <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
+                                        <img src="/img/play.png" alt="Play" class="play-icon">
+                                    </button>
+                                    <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
+                                        <img src="/img/ban.png" alt="Ban" class="ban-icon">
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                            resultsDiv.appendChild(trackDiv);
+                        });
+                    }
+
+                    function removeLoadMoreButton() {
+                        document.getElementById('loadMoreBtn')?.remove();
+                    }
+
+                    function addLoadMoreButton(resultsDiv) {
+                        removeLoadMoreButton();
+                        const btn = document.createElement('button');
+                        btn.id = 'loadMoreBtn';
+                        btn.className = 'load-more-btn';
+                        btn.textContent = 'Load More';
+                        btn.addEventListener('click', () => loadMoreResults());
+                        resultsDiv.appendChild(btn);
+                    }
+
+                    async function loadMoreResults() {
+                        if (!searchCurrentQuery || searchNextOffset <= 0) return;
+                        const btn = document.getElementById('loadMoreBtn');
+                        if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
 
                         try {
                             const response = await fetch('/search', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ query })
+                                body: JSON.stringify({ query: searchCurrentQuery, offset: searchNextOffset })
+                            });
+                            const data = await response.json();
+                            const resultsDiv = document.getElementById('searchResults');
+                            removeLoadMoreButton();
+
+                            if (data.tracks && data.tracks.items.length > 0) {
+                                renderSearchResults(data.tracks.items, resultsDiv);
+                                searchNextOffset = data.nextOffset || 0;
+                                if (data.hasMore) {
+                                    addLoadMoreButton(resultsDiv);
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error loading more results:', error);
+                            if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+                        }
+                    }
+
+                    async function searchSpotify() {
+                        const query = document.getElementById('searchInput').value;
+                        if (!query) return;
+                        searchCurrentQuery = query;
+
+                        try {
+                            const response = await fetch('/search', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ query, offset: 0 })
                             });
                             const data = await response.json();
                             const resultsDiv = document.getElementById('searchResults');
                             resultsDiv.innerHTML = '';
 
                             if (data.tracks && data.tracks.items.length > 0) {
-                                data.tracks.items.forEach(track => {
-                                    const trackDiv = document.createElement('div');
-                                    trackDiv.className = 'search-result-item';
-                                    trackDiv.innerHTML = `
-                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
-                        <div class="search-result-content">
-                            <div class="search-result-title">${track.name}</div>
-                            <div class="search-result-artist">${track.artist}</div>
-                        </div>
-                        <div class="search-result-actions">
-                            <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
-                                <img src="/img/play.png" alt="Play" class="play-icon">
-                            </button>
-                            <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
-                                <img src="/img/ban.png" alt="Ban" class="ban-icon">
-                            </button>
-                        </div>
-                    `;
-                                    resultsDiv.appendChild(trackDiv);
-                                });
+                                renderSearchResults(data.tracks.items, resultsDiv);
+                                searchNextOffset = data.nextOffset || 0;
+                                if (data.hasMore) {
+                                    addLoadMoreButton(resultsDiv);
+                                }
                             } else {
                                 resultsDiv.innerHTML = '<p>No results found.</p>';
                             }
                         } catch (error) {
                             console.error('Error searching Spotify:', error);
+                        }
+                    }
+
+                    async function loadRecentlyQueued() {
+                        try {
+                            const response = await fetch('/recentlyQueued');
+                            const data = await response.json();
+                            const resultsDiv = document.getElementById('searchResults');
+
+                            if (!resultsDiv || resultsDiv.children.length > 0) return;
+
+                            if (data.ok && data.tracks.length > 0) {
+                                const header = document.createElement('div');
+                                header.className = 'recently-queued-header';
+                                header.style.display = 'flex';
+                                header.style.justifyContent = 'space-between';
+                                header.style.alignItems = 'center';
+
+                                const titleSpan = document.createElement('span');
+                                titleSpan.textContent = 'Recently Queued';
+                                header.appendChild(titleSpan);
+
+                                const clearLink = document.createElement('a');
+                                clearLink.textContent = 'Clear Queue History';
+                                clearLink.href = '#';
+                                clearLink.style.cssText = 'font-size: 0.85em; color: rgba(255, 255, 255, 0.6); text-decoration: none; cursor: pointer; transition: color 0.2s;';
+                                clearLink.onmouseover = () => clearLink.style.color = 'rgba(255, 255, 255, 0.9)';
+                                clearLink.onmouseout = () => clearLink.style.color = 'rgba(255, 255, 255, 0.6)';
+                                clearLink.onclick = (e) => {
+                                    e.preventDefault();
+                                    if (confirm('Are you sure you want to clear your queue history?')) {
+                                        fetch('/clearQueueHistory', { method: 'POST' })
+                                            .then(res => res.json())
+                                            .then(data => {
+                                                if (data.ok) {
+                                                    Notify('Queue history cleared', 'info');
+                                                    loadRecentlyQueued(); // Reload
+                                                } else {
+                                                    Notify('Failed to clear history', 'error');
+                                                }
+                                            })
+                                            .catch(err => {
+                                                console.error('Error clearing history:', err);
+                                                Notify('Error clearing history', 'error');
+                                            });
+                                    }
+                                };
+                                header.appendChild(clearLink);
+
+                                resultsDiv.appendChild(header);
+                                renderSearchResults(data.tracks, resultsDiv);
+                            }
+
+                        } catch (error) {
+                            console.error('Error loading recently queued:', error);
                         }
                     }
 
@@ -592,7 +948,7 @@
                             const uri = pendingTrackUri;
                             const trackName = pendingTrackName || 'Unknown Track';
                             const trackArtist = pendingTrackArtist || 'Unknown Artist';
-                            const reason = pendingBanReason || '';
+                            const reason = pendingBanReason || 'student ban';
                             pendingTrackUri = null;
                             pendingTrackName = null;
                             pendingTrackArtist = null;
@@ -629,6 +985,121 @@
                     document.getElementById('hide-payment')?.addEventListener('click', hidePayment);
                     document.getElementById('close-notification')?.addEventListener('click', closeNotification);
 
+                    // Playlist payment modal handlers
+                    document.getElementById('playlist-pay-cancel')?.addEventListener('click', () => {
+                        document.getElementById('playlistPaymentModal').style.display = 'none';
+                        document.querySelector('.main-content').classList.remove('blurred');
+                        selectedPlaylistQuote = null;
+                    });
+
+                    document.getElementById('playlist-pay-confirm')?.addEventListener('click', async () => {
+                        if (!selectedPlaylistQuote?.playlistId) {
+                            Notify('No playlist selected.', 'error');
+                            return;
+                        }
+
+                        const pin = document.getElementById('playlist-pay-pin').value.trim();
+                        if (!pin) {
+                            Notify('Please enter your PIN.', 'error');
+                            return;
+                        }
+
+                        const confirmBtn = document.getElementById('playlist-pay-confirm');
+                        confirmBtn.disabled = true;
+
+                        try {
+                            if (document.getElementById('playlistSavePIN')?.checked) {
+                                await fetch('/savePin', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pin })
+                                }).catch(() => { });
+                            }
+
+                            const reason = `Jukebar Payment - Play Playlist (${selectedPlaylistQuote.playlist?.name || 'Playlist'})`;
+                            const transferRes = await fetch('/transfer', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    pin,
+                                    reason,
+                                    pendingAction: 'playlist',
+                                    playlistId: selectedPlaylistQuote.playlistId
+                                })
+                            });
+                            const transferData = await transferRes.json();
+                            if (!transferRes.ok || !(transferData.ok || transferData.success || transferData.token)) {
+                                throw new Error(transferData.error || 'Transfer failed');
+                            }
+
+                            // Payment succeeded — queue the playlist
+                            const playlistId = selectedPlaylistQuote.playlistId;
+                            document.getElementById('playlistPaymentModal').style.display = 'none';
+                            document.querySelector('.main-content').classList.remove('blurred');
+                            selectedPlaylistQuote = null;
+
+                            await queuePlaylist(playlistId);
+                        } catch (err) {
+                            console.error('Playlist purchase error:', err);
+                            Notify(err.message || 'Could not queue playlist', 'error');
+                        } finally {
+                            confirmBtn.disabled = false;
+                        }
+                    });
+
+                    // Load saved PIN into playlist modal too
+                    (async () => {
+                        try {
+                            const res = await fetch('/getPin', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            const data = await res.json();
+                            if (data.ok && data.userPin) {
+                                document.getElementById('playlist-pay-pin').value = data.userPin;
+                                document.getElementById('playlistSavePIN').checked = true;
+                            }
+                        } catch (_) { }
+                    })();
+
+                    // Skip activity box minimize/expand toggle
+                    (function initSkipActivityToggle() {
+                        const box = document.getElementById('skipActivityBox');
+                        const btn = document.getElementById('skipActivityToggle');
+                        if (!box || !btn) return;
+
+                        const STORAGE_KEY = 'skipActivityMinimized';
+
+                        function applyState(minimized) {
+                            box.classList.toggle('minimized', minimized);
+                            btn.innerHTML = minimized ? '&#43;' : '&minus;';
+                            btn.title = minimized ? 'Expand' : 'Minimize';
+                            btn.setAttribute('aria-label', minimized ? 'Expand skip activity' : 'Minimize skip activity');
+                        }
+
+                        applyState(localStorage.getItem(STORAGE_KEY) === 'true');
+
+                        btn.addEventListener('click', () => {
+                            const nowMinimized = !box.classList.contains('minimized');
+                            localStorage.setItem(STORAGE_KEY, nowMinimized);
+                            applyState(nowMinimized);
+                        });
+                    })();
+
+                    // When search input is cleared, restore recently queued
+                    document.getElementById('searchInput')?.addEventListener('input', (e) => {
+                        if (e.target.value.trim() === '') {
+                            const searchResults = document.getElementById('searchResults');
+                            if (searchResults) {
+                                searchResults.innerHTML = '';
+                            }
+                            loadRecentlyQueued();
+                        }
+                    });
+
+                    // Load recently queued songs on page load
+                    loadRecentlyQueued();
+
                     // Owner shield modal
                     document.getElementById('owner-shield-close')?.addEventListener('click', () => {
                         document.getElementById('ownerShieldModal').style.display = 'none';
@@ -657,6 +1128,7 @@
 
                     document.getElementById('close-changelog')?.addEventListener('click', () => {
                         document.getElementById('changelogModal').style.display = 'none';
+                        localStorage.setItem('changelog_seen', 'v2.0');
                     });
 
                     // Close modal when clicking outside of it
@@ -664,8 +1136,14 @@
                         const changelogModal = document.getElementById('changelogModal');
                         if (event.target === changelogModal) {
                             changelogModal.style.display = 'none';
+                            localStorage.setItem('changelog_seen', 'v2.0');
                         }
                     });
+
+                    // Show changelog on first visit or new version
+                    if (localStorage.getItem('changelog_seen') !== 'v2.0') {
+                        document.getElementById('changelogModal').style.display = 'block';
+                    }
 
                     // Event delegation for dynamically created play and ban buttons
                     document.getElementById('searchResults')?.addEventListener('click', (e) => {
@@ -692,25 +1170,16 @@
                             // Check if user is owner (owners can start votes for free)
                             const userIsOwner = isOwnerClient(currentID);
 
-                            if (typeof window.openBanReasonModal !== 'function') {
-                                Notify('Unable to open reason input box.', 'error');
-                                return;
+                            if (userIsOwner) {
+                                startBanVote(uri, name, artist, 'student ban');
+                            } else {
+                                pendingAction = 'Ban Vote';
+                                pendingTrackUri = uri;
+                                pendingTrackName = name;
+                                pendingTrackArtist = artist;
+                                pendingBanReason = 'student ban';
+                                showPayment();
                             }
-
-                            window.openBanReasonModal((reason) => {
-                                if (userIsOwner) {
-                                    // Owner bypass - start vote immediately
-                                    startBanVote(uri, name, artist, reason);
-                                } else {
-                                    // Regular user - show payment modal first
-                                    pendingAction = 'Ban Vote';
-                                    pendingTrackUri = uri;
-                                    pendingTrackName = name;
-                                    pendingTrackArtist = artist;
-                                    pendingBanReason = reason;
-                                    showPayment();
-                                }
-                            });
                         }
                     });
 
@@ -725,6 +1194,7 @@
                             hasPaid: hasPaid,
                             pendingAction: pendingAction,
                             pendingTrackUri: pendingTrackUri,
+                            pendingPlaylistId: pendingPlaylistId,
                             currentID: currentID
                         };
                     };
@@ -826,6 +1296,11 @@
 
                         socket.on('skip', (data) => {
                             showNotification('Track skipped', 'info');
+                            updateSkipActivity(data);
+                        });
+
+                        socket.on('skipHistory', (history) => {
+                            renderSkipActivityHistory(history);
                         });
 
                         // Handle shield purchase confirmation
@@ -865,6 +1340,62 @@
                         socket.on('banVoteError', (data) => {
                             console.log('banVoteError received:', data);
                             Notify(data.error || 'Ban vote error', 'error');
+                        });
+
+                        socket.on('recentlyQueuedUpdate', (track) => {
+                            const searchInput = document.getElementById('searchInput');
+                            const searchResults = document.getElementById('searchResults');
+                            if (!searchResults) return;
+
+                            const isSearchActive = searchInput && searchInput.value.trim() !== '';
+
+                            if (!isSearchActive) {
+                                // Recently queued is visible — prepend the new track without a full refetch.
+                                // Remove any existing entry for this URI so it moves to the top (dedup).
+                                searchResults.querySelectorAll(`.search-result-item[data-uri="${track.uri}"]`).forEach(el => el.remove());
+
+                                const header = searchResults.querySelector('.recently-queued-header');
+                                const insertBefore = header ? header.nextElementSibling : null;
+
+                                const trackDiv = document.createElement('div');
+                                trackDiv.className = 'search-result-item';
+                                trackDiv.dataset.uri = track.uri;
+                                trackDiv.innerHTML = `
+                                    <img src="${track.album?.image || ''}" alt="${track.album?.name || ''}" class="album-cover" />
+                                    <div class="search-result-content-outer">
+                                        <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                                        <div class="search-result-content-pushies">
+                                            <div class="search-result-title" title="${track.name}">${track.name}</div>
+                                            <div class="search-result-artist" title="${track.artist}">${track.artist}</div>
+                                            <div class="search-result-actions">
+                                                <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
+                                                    <img src="/img/play.png" alt="Play" class="play-icon">
+                                                </button>
+                                                <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
+                                                    <img src="/img/ban.png" alt="Ban" class="ban-icon">
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+
+                                if (insertBefore) {
+                                    searchResults.insertBefore(trackDiv, insertBefore);
+                                } else {
+                                    // No header yet — do a full reload to get the header too
+                                    loadRecentlyQueued();
+                                }
+                            }
+                            // If search is active we leave it alone; the list will be fresh next time the input is cleared.
+                        });
+
+                        socket.on('queueHistoryUpdated', () => {
+                            // Fired when the user clears their queue history
+                            const searchResults = document.getElementById('searchResults');
+                            if (searchResults) {
+                                searchResults.innerHTML = '';
+                            }
+                            loadRecentlyQueued();
                         });
                     }
 
@@ -939,14 +1470,30 @@
                 // Track the last displayed track to avoid unnecessary re-renders
                 let lastDisplayedTrackUri = null;
 
+                function setControlButtonsDisabled(disabled) {
+                    ['skip-button', 'now-ban-button', 'now-shield-button'].forEach(id => {
+                        const btn = document.getElementById(id);
+                        if (btn) btn.disabled = disabled;
+                    });
+                }
+
                 // Update currently playing with WebSocket data
                 function updateCurrentlyPlaying(track, isPlaying) {
                     const currentDiv = document.getElementById('currentlyPlaying');
+                    const railDiv = document.getElementById('railNowPlaying');
                     if (!currentDiv) return;
 
                     if (track) {
                         // Get the current track URI
                         const trackUri = track.uri || track.id;
+                        const trackUriForActions = trackUri;
+                        const addedAtForActions = track.addedAt || 0;
+                        currentTrackActionState = {
+                            uri: trackUriForActions,
+                            addedAt: addedAtForActions,
+                            name: track.name,
+                            artist: track.artist
+                        };
 
                         // Update global currentlyPlayingUri for skip functionality
                         if (track.uri) {
@@ -969,6 +1516,21 @@
                             // Don't update progress - let the interval handle it
                         }
                         isCurrentlyPlaying = isPlaying;
+
+                        // Enable controls when a track is active
+                        setControlButtonsDisabled(false);
+
+                        // Update shield badge on skip button (must be before early return)
+                        const currentShieldCount = track.skipShields || 0;
+                        const skipBtnShield = document.getElementById('skip-button-showie-shield');
+                        if (skipBtnShield) {
+                            skipBtnShield.innerText = currentShieldCount;
+                            if (currentShieldCount < 1) {
+                                skipBtnShield.classList.add('hidiethebutton');
+                            } else {
+                                skipBtnShield.classList.remove('hidiethebutton');
+                            }
+                        }
 
                         // If same track, just update progress bar without re-rendering
                         if (lastDisplayedTrackUri === trackUri) {
@@ -1033,6 +1595,19 @@
                         </div>
                     `;
 
+                        if (railDiv) {
+                            railDiv.innerHTML = `
+                            <div class="player-rail-track">
+                                <img src="${imageUrl}" alt="${track.name}" class="player-rail-cover">
+                                <div class="player-rail-track-meta">
+                                    <div class="player-rail-track-title">${track.name}</div>
+                                    <div class="player-rail-track-artist">${track.artist}</div>
+                                    <div class="player-rail-track-by">Added by ${addedByDisplay}</div>
+                                </div>
+                            </div>
+                            `;
+                        }
+
                         // Update progress bar immediately after render
                         updateProgressDisplay();
 
@@ -1044,8 +1619,11 @@
                         currentProgress = 0;
                         currentDuration = 0;
                         isCurrentlyPlaying = false;
+                        currentTrackActionState = null;
                         stopProgressInterval();
+                        setControlButtonsDisabled(true);
                         currentDiv.innerHTML = '<p>No track is currently playing. Ask your teacher to start spotify</p>';
+                        if (railDiv) railDiv.innerHTML = '<p class="player-rail-empty">No track currently playing.</p>';
                     }
                 }
 
@@ -1113,6 +1691,81 @@
                     setTimeout(() => {
                         notification.remove();
                     }, 3000);
+                }
+
+                function formatSkipActivityTime(timestamp) {
+                    const date = timestamp ? new Date(timestamp) : new Date();
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                function createSkipActivityItem(data) {
+                    const skipTime = formatSkipActivityTime(data?.skippedAt);
+                    const skipUser = data?.skippedBy || 'Someone';
+                    const skippedSong = data?.skippedTrack?.name || 'Unknown song';
+                    const skippedType = data?.skippedType === 'shield' ? 'shield' : 'song';
+
+                    const listItem = document.createElement('li');
+                    listItem.className = 'skip-activity-item';
+
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'skip-time';
+                    timeSpan.textContent = `(${skipTime}) : `;
+
+                    const userSpan = document.createElement('span');
+                    userSpan.className = 'skip-user';
+                    userSpan.textContent = skipUser;
+
+                    const actionSpan = document.createElement('span');
+                    actionSpan.className = 'skip-action';
+                    actionSpan.textContent = skippedType === 'shield' ? ' just skipped a shield on ' : ' just skipped ';
+
+                    const songSpan = document.createElement('span');
+                    songSpan.className = 'skip-song';
+                    songSpan.textContent = skippedSong;
+
+                    listItem.appendChild(timeSpan);
+                    listItem.appendChild(userSpan);
+                    listItem.appendChild(actionSpan);
+                    listItem.appendChild(songSpan);
+
+                    return listItem;
+                }
+
+                function renderSkipActivityHistory(history) {
+                    const skipList = document.getElementById('skipActivityList');
+                    if (!skipList) return;
+
+                    skipList.innerHTML = '';
+
+                    const items = Array.isArray(history) ? history : [];
+                    if (items.length === 0) {
+                        const emptyItem = document.createElement('li');
+                        emptyItem.className = 'skip-activity-item skip-activity-empty';
+                        emptyItem.textContent = 'No skips yet.';
+                        skipList.appendChild(emptyItem);
+                        return;
+                    }
+
+                    for (const item of items) {
+                        skipList.appendChild(createSkipActivityItem(item));
+                    }
+                }
+
+                function updateSkipActivity(data) {
+                    const skipList = document.getElementById('skipActivityList');
+                    if (!skipList) return;
+
+                    const emptyItem = skipList.querySelector('.skip-activity-empty');
+                    if (emptyItem) emptyItem.remove();
+
+                    const listItem = createSkipActivityItem(data);
+                    skipList.prepend(listItem);
+                    skipList.scrollTop = 0;
+
+                    const maxItems = 5;
+                    while (skipList.children.length > maxItems) {
+                        skipList.removeChild(skipList.lastElementChild);
+                    }
                 }
 
                 function openSongMenu(uri, name, artist, imageUrl, addedAt, event) {

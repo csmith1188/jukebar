@@ -14,21 +14,10 @@
         <%- include('partials/jukePixSettings') %>
 
             <div class="main-content">
-                <div class="jukepix-toggle">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
-                            <div class="switch-track">
-                                <div class="switch-thumb"></div>
-                            </div>
-                            <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%=jukepixEnabled
-                                ? 'checked' : '' %>
-                            style="display: none;">
-                        </div>
-                        <p>Enable Jukepix</p>
-                        <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
-                            <img src="/img/settings.png" alt="JukePix Settings">
-                        </button>
-                    </div>
+                <div class="teacher-toolbar">
+                    <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
+                        <img src="/img/settings.png" alt="JukePix Settings">
+                    </button>
                     <p class="user-greeting">Logged in as: <strong>
                             <%= user %>
                         </strong></p>
@@ -44,6 +33,15 @@
                         </div>
                         <div style="text-align: center; margin-top: 20px;">
                             <button id="loadMoreHistory">Load More</button>
+                        </div>
+                    </div>
+                    <div id="playlistColumn">
+                        <div class="section-header">
+                            <h2>Playlists</h2>
+                            <p class="section-subtitle">Your playlists</p>
+                        </div>
+                        <div id="playlistList">
+                            <p style="text-align: center; color: #b3b3b3;">Loading...</p>
                         </div>
                     </div>
                     <div id="spotifyPlayer">
@@ -93,12 +91,10 @@
             </div>
 
             <div id="teacherBanReasonModal" class="payment-modal" style="display:none;">
-                <div class="payment-content" style="max-width: 520px;">
-                    <button id="teacher-ban-reason-close">&times;</button>
-                    <h3 style="margin-bottom: 12px;">Reason for ban</h3>
-                    <input type="text" id="teacherBanReasonInput" placeholder="Enter reason (required)" maxlength="200"
-                        style="width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#1f1f1f;color:#fff;">
-                    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+                <div class="payment-content">
+                    <h3 class="ban-reason-title">Reason for ban</h3>
+                    <input type="text" id="teacherBanReasonInput" placeholder="Enter reason (required)" maxlength="200">
+                    <div class="ban-reason-actions">
                         <button id="teacher-ban-reason-cancel" class="unban-button" type="button">Cancel</button>
                         <button id="teacher-ban-reason-confirm" class="ban-button" type="button">Ban Song</button>
                     </div>
@@ -171,34 +167,6 @@
             }, 500);
         }, 3000);
     }
-
-    document.getElementById('jukepixToggleCheckbox').addEventListener('change', async (e) => {
-        try {
-            const trackRes = await fetch('/api/currentTrack');
-            const data = await trackRes.json();
-            if (data.track) {
-                const res = await fetch('/toggleJukepix', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: e.target.checked })
-                });
-                const responseData = await res.json();
-                if (!res.ok || responseData.error) {
-                    showNotification(responseData.error || 'Failed to update Jukepix setting', 'error');
-                    e.target.checked = !e.target.checked;
-                } else {
-                    showNotification('Jukepix ' + (e.target.checked ? 'enabled' : 'disabled'), 'success');
-                }
-            } else {
-                showNotification('No track is currently playing. Cannot toggle Jukepix.', 'error');
-                e.target.checked = !e.target.checked;
-            }
-        } catch (err) {
-            console.error('Error updating Jukepix setting:', err);
-            showNotification('Network error updating Jukepix setting', 'error');
-            e.target.checked = !e.target.checked;
-        }
-    });
 
     async function fetchUsers() {
         try {
@@ -365,6 +333,108 @@
         } catch (err) {
             console.error('Error loading banned songs:', err);
             list.innerHTML = '<p style="text-align: center; color: #ff4444;">Failed to load banned songs.</p>';
+        }
+    }
+
+    async function fetchUserPlaylists() {
+        const list = document.getElementById('playlistList');
+        if (!list) return;
+
+        list.innerHTML = '<p style="text-align: center; color: #b3b3b3;">Loading...</p>';
+
+        try {
+            const res = await fetch('/api/spotify/playlists');
+            const data = await res.json();
+
+            if (!res.ok || !data.ok) {
+                throw new Error(data.error || 'Failed to fetch playlists');
+            }
+
+            const playlists = data.playlists || [];
+            if (!playlists.length) {
+                list.innerHTML = '<p style="text-align: center; color: #b3b3b3;">No playlists found.</p>';
+                return;
+            }
+
+            list.innerHTML = '';
+            playlists.forEach((playlist) => {
+                const item = document.createElement('div');
+                item.className = 'playlist-item teacher-playlist-item';
+
+                const img = document.createElement('img');
+                img.className = 'playlist-cover';
+                img.src = playlist.image || '/img/placeholder.png';
+                img.alt = playlist.name || 'Playlist';
+
+                const meta = document.createElement('div');
+                meta.className = 'playlist-meta';
+
+                const name = document.createElement('div');
+                name.className = 'playlist-name';
+                name.textContent = playlist.name || 'Untitled Playlist';
+
+                const details = document.createElement('div');
+                details.className = 'playlist-details';
+                details.textContent = `${playlist.owner || 'Unknown'} • ${playlist.totalTracks || 0} tracks`;
+
+                meta.appendChild(name);
+                meta.appendChild(details);
+
+                const actionBtn = document.createElement('button');
+                let isAllowed = !!playlist.isAllowed;
+                actionBtn.className = isAllowed ? 'unban-button playlist-allow-btn' : 'ban-button playlist-allow-btn';
+                actionBtn.type = 'button';
+                actionBtn.textContent = isAllowed ? 'Disallow' : 'Allow';
+                actionBtn.title = isAllowed ? 'Disallow playlist for students' : 'Allow playlist for students';
+
+                actionBtn.addEventListener('click', async () => {
+                    const endpoint = isAllowed ? '/api/spotify/playlists/disallow' : '/api/spotify/playlists/allow';
+                    actionBtn.disabled = true;
+                    try {
+                        const r = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                playlistId: playlist.id,
+                                name: playlist.name,
+                                owner: playlist.owner,
+                                image: playlist.image,
+                                totalTracks: playlist.totalTracks
+                            })
+                        });
+                        const result = await r.json();
+                        if (!r.ok || !result.ok) {
+                            throw new Error(result.error || 'Failed to update playlist permission');
+                        }
+                        console.log('Playlist allow/disallow response:', result);
+                        showNotification(
+                            `${playlist.name} ${isAllowed ? 'disallowed' : 'allowed'} for students`,
+                            'success'
+                        );
+                        // Toggle button state locally instead of re-fetching all playlists
+                        playlist.isAllowed = !isAllowed;
+                        const nowAllowed = playlist.isAllowed;
+                        actionBtn.className = nowAllowed ? 'unban-button playlist-allow-btn' : 'ban-button playlist-allow-btn';
+                        actionBtn.textContent = nowAllowed ? 'Disallow' : 'Allow';
+                        actionBtn.title = nowAllowed ? 'Disallow playlist for students' : 'Allow playlist for students';
+                        // Re-bind: swap the endpoint for the next click
+                        isAllowed = nowAllowed;
+                        actionBtn.disabled = false;
+                    } catch (error) {
+                        console.error('Playlist allow/disallow error:', error);
+                        showNotification(error.message || 'Failed to update playlist', 'error');
+                        actionBtn.disabled = false;
+                    }
+                });
+
+                item.appendChild(img);
+                item.appendChild(meta);
+                item.appendChild(actionBtn);
+                list.appendChild(item);
+            });
+        } catch (err) {
+            console.error('Error loading playlists:', err);
+            list.innerHTML = '<p style="text-align: center; color: #ff4444;">Failed to load playlists.</p>';
         }
     }
 
@@ -638,6 +708,7 @@
         fetchUsers();
         fetchQueueHistory(true);
         fetchBannedSongs();
+        fetchUserPlaylists();
     });
     function handleSearchSubmit(event) {
         event.preventDefault();

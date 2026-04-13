@@ -1,112 +1,147 @@
-// Store the raw token globally (you might want a better approach)
 let cachedRawToken = null;
-
-// Store the current classroom state
 let currentClassroom = null;
-
-// Store reference to formbar socket
+let currentClassId = null;
 let formbarSocketRef = null;
-
+let apiKey = '';
+let classRetryTimer = null;
 
 function setRawToken(token) {
     cachedRawToken = token;
-    console.log('Raw token cached for Formbar auth');
-    console.log('Token length:', token ? token.length : 0);
-    
-    // If formbar socket is already connected, authenticate immediately
-    if (formbarSocketRef && formbarSocketRef.connected) {
-        console.log('Re-authenticating with Formbar using new token...');
-        formbarSocketRef.emit('auth', { token: cachedRawToken });
-        
-        // Request current classroom state after auth
-        setTimeout(() => {
-            console.log('Requesting current classroom state from Formbar...');
-            formbarSocketRef.emit('getClassroom');
-        }, 500);
-    }
 }
 
-function setupFormbarSocket(io, formbarSocket) {
-    // Store reference for later use
+function setupFormbarSocket(io, formbarSocket, key) {
     formbarSocketRef = formbarSocket;
-    
-    formbarSocket.on('connect', () => {
-        console.log('Connected to Formbar socket');
+    apiKey = key || '';
 
-        if (cachedRawToken) {
-            console.log('Sending auth token to Formbar...');
-            formbarSocket.emit('auth', { token: cachedRawToken });
-            
-            // Request current classroom state after auth
-            setTimeout(() => {
-                console.log('Requesting current classroom state from Formbar...');
-                formbarSocket.emit('getClassroom');
-            }, 500);
-        } else {
-            console.log('WARNING: No cached token available for Formbar auth');
-        }
+    formbarSocket.on('connect', () => {
+        console.log('[socket] Connected to Formbar');
+        formbarSocket.emit('getActiveClass', apiKey);
     });
-    
-    formbarSocket.on('classUpdate', (classroomData) => {
-        console.log('Received classroom update from Formbar:', classroomData);
-        
-        // Store the current classroom state
-        currentClassroom = classroomData;
-        
-        // Extract and broadcast auxiliary permission
-        if (classroomData && classroomData.permissions && classroomData.permissions.auxiliary) {
-            const auxiliaryPermission = parseInt(classroomData.permissions.auxiliary);
-            console.log('=== AUXILIARY PERMISSION EXTRACTED ===');
-            console.log('Raw value:', classroomData.permissions.auxiliary);
-            console.log('Parsed value:', auxiliaryPermission);
-            console.log('Broadcasting to all clients...');
-            io.emit('auxiliaryPermission', auxiliaryPermission);
-        } else {
-            console.log('WARNING: No auxiliary permission found in classroom data');
+
+    formbarSocket.on('setClass', (userClassId) => {
+        if (classRetryTimer) {
+            clearTimeout(classRetryTimer);
+            classRetryTimer = null;
         }
-        
-        // Relay the classroom data to all connected clients
+
+        if (userClassId == null) {
+            // Formbar sends null when leaving old class - reconnect to pick up the new one
+            classRetryTimer = setTimeout(() => {
+                classRetryTimer = null;
+                formbarSocket.disconnect();
+                formbarSocket.connect();
+            }, 0);
+        } else {
+            if (currentClassId !== userClassId) {
+                console.log(`[socket] Class switched: ${userClassId} (was ${currentClassId})`);
+            }
+            formbarSocket.emit('classUpdate');
+        }
+
+        currentClassId = userClassId;
+    });
+
+    formbarSocket.on('classUpdate', (classroomData) => {
+        currentClassroom = classroomData;
+
+        const incomingId = classroomData?.id;
+        if (incomingId != null) {
+            if (currentClassId !== incomingId) {
+                console.log(`[socket] Class updated: ${classroomData?.className} (id: ${incomingId}, was ${currentClassId})`);
+            }
+            currentClassId = incomingId;
+        }
+
+        if (classroomData?.permissions?.auxiliary) {
+            io.emit('auxiliaryPermission', parseInt(classroomData.permissions.auxiliary));
+        }
+
         io.emit('classUpdate', classroomData);
     });
 
     formbarSocket.on('event', (data) => {
-        console.log('Received event from Formbar:', data);
         io.emit('formbarEvent', data);
     });
 
     formbarSocket.on('connect_error', (err) => {
-        console.error('Formbar connection error:', err.message);
-        console.error('Error details:', err);
+        console.error('[socket] Formbar connection error:', err.message);
     });
 
     formbarSocket.on('disconnect', (reason) => {
-        console.log('WARNING: Disconnected from Formbar. Reason:', reason);
-    });
-
-    formbarSocket.on('reconnect_attempt', (attemptNumber) => {
-        console.log(`Attempting to reconnect to Formbar (attempt ${attemptNumber})...`);
-    });
-
-    formbarSocket.on('reconnect', (attemptNumber) => {
-        console.log(`Reconnected to Formbar after ${attemptNumber} attempts`);
-    });
-
-    formbarSocket.on('reconnect_error', (err) => {
-        console.error('Reconnection error:', err.message);
+        if (reason !== 'io client disconnect') {
+            console.warn('[socket] Disconnected from Formbar:', reason);
+        }
     });
 
     formbarSocket.on('reconnect_failed', () => {
-        console.error('Failed to reconnect to Formbar after all attempts');
+        console.error('[socket] Failed to reconnect to Formbar');
     });
+
+    // Poll Formbar every 30s to catch class switches
+    setInterval(() => {
+        if (formbarSocket.connected) {
+            formbarSocket.emit('getActiveClass', apiKey);
+        }
+    }, 30000);
 }
 
-function checkPermissions(io, formbarSocket) {
-
-}
-
-// Function to get current classroom data
 function getCurrentClassroom() {
     return currentClassroom;
 }
 
-module.exports = { setupFormbarSocket, setRawToken, getCurrentClassroom };
+function getCurrentClassId() {
+    return currentClassId;
+}
+
+module.exports = { setupFormbarSocket, setRawToken, getCurrentClassroom, getCurrentClassId, requestAndWaitForClassId };
+
+/**
+ * Requests the active class ID from Formbar and waits for the response.
+ * @param {number} timeoutMs
+ * @returns {Promise<any>} the class ID, or null on timeout
+ */
+function requestAndWaitForClassId(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+        if (currentClassId != null) return resolve(currentClassId);
+
+        if (!formbarSocketRef || !formbarSocketRef.connected) {
+            return resolve(null);
+        }
+
+        let settled = false;
+
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            formbarSocketRef.off('setClass', onSetClass);
+            formbarSocketRef.off('classUpdate', onClassUpdate);
+            resolve(currentClassId);
+        }, timeoutMs);
+
+        function onSetClass(userClassId) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            formbarSocketRef.off('classUpdate', onClassUpdate);
+            currentClassId = userClassId;
+            resolve(currentClassId);
+        }
+
+        function onClassUpdate(classroomData) {
+            if (settled) return;
+            const id = classroomData?.id;
+            if (id != null) {
+                settled = true;
+                clearTimeout(timer);
+                formbarSocketRef.off('setClass', onSetClass);
+                currentClassId = id;
+                resolve(currentClassId);
+            }
+        }
+
+        formbarSocketRef.on('setClass', onSetClass);
+        formbarSocketRef.on('classUpdate', onClassUpdate);
+
+        formbarSocketRef.emit('getActiveClass', apiKey);
+    });
+}

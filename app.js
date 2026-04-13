@@ -1,4 +1,3 @@
-// Initialize leaderboardLastReset on server start if not set
 const express = require('express');
 const session = require('express-session');
 const dotenv = require('dotenv');
@@ -20,7 +19,6 @@ const io = new Server(server);
 app.set('io', io);
 
 app.set('view engine', 'ejs');
-app.set('leaderboardLastReset', Date.now());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
@@ -47,11 +45,29 @@ const { isAuthenticated } = require('./middleware/auth');
 const { router: authRoutes } = require('./routes/auth');
 const spotifyRoutes = require('./routes/spotify');
 const paymentRoutes = require('./routes/payment');
-const { router: leaderboardRoutes, checkAndResetLeaderboard, startResetScheduler } = require('./routes/leaderboard');
+const { router: leaderboardRoutes } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
+const { getRecentSkipActivity } = require('./utils/skipActivity');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
+const path = require('path');
+const fs = require('fs');
+
+let changelog = [];
+try {
+    const changelogPath = path.join(__dirname, 'changelog.json');
+    const changelogContent = fs.readFileSync(changelogPath, 'utf8');
+    const parsedChangelog = JSON.parse(changelogContent);
+    // Keep array as-is (newest first in JSON file)
+    changelog = Array.isArray(parsedChangelog) ? parsedChangelog : [];
+    console.log(`Loaded changelog with ${changelog.length} entries`);
+} catch (err) {
+    console.warn('Failed to load changelog.json:', err.message);
+    changelog = [];
+}
+
+const SKIP_ACTIVITY_SEND_LIMIT = Math.max(1, Math.min(50, Number(process.env.SKIP_ACTIVITY_SEND_LIMIT) || 5));
 
 // Helper function to handle ban - removes from queue and skips if currently playing
 async function handleBanPassed(trackName, trackArtist, trackUri) {
@@ -95,7 +111,7 @@ const formbarSocket = ioClient(FORMBAR_ADDRESS, {
 
 console.log('Formbar socket client created, attempting connection...');
 
-setupFormbarSocket(io, formbarSocket);
+setupFormbarSocket(io, formbarSocket, API_KEY);
 
 // WebSocket connection handling for queue sync
 // Initialize VoteManager
@@ -104,6 +120,12 @@ const voteManager = new VoteManager();
 
 io.on('connection', (socket) => {
     //console.log('Client connected for queue sync');
+
+    // Join user-specific room for targeted events (e.g. recently queued updates)
+    const userId = socket.request?.session?.token?.id;
+    if (userId) {
+        socket.join(`user:${userId}`);
+    }
 
     // Broadcast updated user count to all clients
     io.emit('userCount', io.engine.clientsCount);
@@ -125,6 +147,14 @@ io.on('connection', (socket) => {
     // Add client to queue manager
     queueManager.addClient(socket);
 
+    getRecentSkipActivity(SKIP_ACTIVITY_SEND_LIMIT)
+        .then((history) => {
+            socket.emit('skipHistory', history);
+        })
+        .catch((error) => {
+            console.error('Failed to load skip history for socket client:', error.message);
+        });
+
     // Handle client disconnect
     socket.on('disconnect', () => {
         //console.log('Client disconnected from queue sync');
@@ -143,12 +173,7 @@ io.on('connection', (socket) => {
         try {
             const { trackUri, trackName, trackArtist, initiator, reason } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
-            const banReason = typeof reason === 'string' ? reason.trim() : '';
-
-            if (!banReason) {
-                socket.emit('banVoteError', { error: 'Please provide a reason for banning this song' });
-                return;
-            }
+            const banReason = (typeof reason === 'string' && reason.trim()) ? reason.trim() : 'student ban';
 
             if (banReason.length > 200) {
                 socket.emit('banVoteError', { error: 'Ban reason must be 200 characters or fewer' });
@@ -377,6 +402,7 @@ if (process.env.SPOTIFY_CLIENT_ID) {
 app.get('/', isAuthenticated, (req, res) => {
     try {
         console.log('Session permission:', req.session.permission);
+        console.log('Changelog to render:', changelog.length, 'entries');
         res.render('player.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
@@ -387,7 +413,8 @@ app.get('/', isAuthenticated, (req, res) => {
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
-            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500
+            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+            changelog: changelog
         });
     } catch (error) {
         res.send(error.message);
@@ -407,7 +434,8 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
-            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500
+            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+            changelog: changelog
         });
     } catch (error) {
         res.send(error.message);
@@ -439,14 +467,10 @@ app.get('/debug/formbar', isAuthenticated, (req, res) => {
 
 app.get('/leaderboard', isAuthenticated, (req, res) => {
     try {
-        if (Date.now() - (req.app.get('leaderboardLastReset') || 0) > 6 * 24 * 60 * 60 * 1000) {
-            checkAndResetLeaderboard(req.app);
-        }
         res.render('leaderboard.ejs', {
             user: req.session.user,
             userID: req.session.token?.id,
             userPermission: req.session.permission || null,
-            resetDate: req.app.get('leaderboardLastReset'),
             ownerIDs: getOwnerIds()
         });
     }
@@ -484,9 +508,6 @@ app.use('/', require('./routes/settings'));
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
-
-    // Start the leaderboard auto-reset scheduler
-    startResetScheduler(app);
 });
 
 module.exports = { app, io, formbarSocket };

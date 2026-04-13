@@ -209,6 +209,96 @@ db.run(`CREATE TABLE IF NOT EXISTS track_bans (
     banned_at INTEGER NOT NULL
 )`);
 
+db.run(`CREATE TABLE IF NOT EXISTS skip_activity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    skipped_by TEXT NOT NULL,
+    skipped_at INTEGER NOT NULL,
+    skipped_type TEXT NOT NULL DEFAULT 'song',
+    skipped_track_name TEXT,
+    skipped_track_uri TEXT
+)`);
+
+db.run(`CREATE TABLE IF NOT EXISTS allowed_playlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spotify_playlist_id TEXT NOT NULL,
+    name TEXT,
+    owner_name TEXT,
+    image_url TEXT,
+    total_tracks INTEGER DEFAULT 0,
+    is_allowed INTEGER DEFAULT 0,
+    updated_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    class_id INTEGER,
+    UNIQUE(spotify_playlist_id, class_id)
+)`);
+
+// Migrate: recreate allowed_playlists with composite unique key if old schema detected
+db.all("PRAGMA index_list(allowed_playlists)", (err, indexes) => {
+    if (err) return;
+    // Check if there's a unique index on spotify_playlist_id alone (old schema)
+    // We detect by trying to find a unique index that doesn't include class_id
+    let needsMigration = false;
+    let checksRemaining = indexes ? indexes.length : 0;
+    if (checksRemaining === 0) return;
+
+    indexes.forEach(idx => {
+        if (!idx.unique) {
+            checksRemaining--;
+            if (checksRemaining === 0 && needsMigration) runMigration();
+            return;
+        }
+        db.all(`PRAGMA index_info('${idx.name}')`, (err, cols) => {
+            if (!err && cols.length === 1 && cols[0].name === 'spotify_playlist_id') {
+                needsMigration = true;
+            }
+            checksRemaining--;
+            if (checksRemaining === 0 && needsMigration) runMigration();
+        });
+    });
+
+    function runMigration() {
+        console.log('Detected old allowed_playlists schema, migrating to composite unique key...');
+        db.serialize(() => {
+            db.run("ALTER TABLE allowed_playlists RENAME TO allowed_playlists_old");
+            db.run(`CREATE TABLE allowed_playlists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                spotify_playlist_id TEXT NOT NULL,
+                name TEXT,
+                owner_name TEXT,
+                image_url TEXT,
+                total_tracks INTEGER DEFAULT 0,
+                is_allowed INTEGER DEFAULT 0,
+                updated_by INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                class_id INTEGER,
+                UNIQUE(spotify_playlist_id, class_id)
+            )`);
+            // Copy data; old rows get class_id = NULL from old table
+            const oldCols = 'id, spotify_playlist_id, name, owner_name, image_url, total_tracks, is_allowed, updated_by, created_at, updated_at';
+            db.all("PRAGMA table_info(allowed_playlists_old)", (err, columns) => {
+                const hasClassId = columns && columns.some(c => c.name === 'class_id');
+                const selectCols = hasClassId ? oldCols + ', class_id' : oldCols;
+                const insertCols = hasClassId ? oldCols + ', class_id' : oldCols;
+                db.run(`INSERT INTO allowed_playlists (${insertCols}) SELECT ${selectCols} FROM allowed_playlists_old`);
+                db.run("DROP TABLE allowed_playlists_old", (err) => {
+                    if (err) console.error('Error migrating allowed_playlists:', err.message);
+                    else console.log('Migrated allowed_playlists to composite unique key with class_id');
+                });
+            });
+        });
+    }
+});
+
+// Clean up duplicate allowed_playlists rows with NULL class_id (caused by old bug)
+db.run(`DELETE FROM allowed_playlists WHERE id NOT IN (
+    SELECT MIN(id) FROM allowed_playlists GROUP BY spotify_playlist_id, COALESCE(class_id, '__NULL__')
+)`, function (err) {
+    if (err) console.error('Error cleaning up duplicate allowed_playlists:', err.message);
+    else if (this.changes) console.log(`Cleaned up ${this.changes} duplicate allowed_playlists row(s)`);
+});
+
 // JukePix custom settings per artist/song
 db.run(`CREATE TABLE IF NOT EXISTS jukepix_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
