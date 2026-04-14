@@ -8,127 +8,139 @@
     </div>
     <div class="jp-drawer-body">
 
-        <div class="jp-section jp-power-section">
-            <h3>JukePix Enable/Disable</h3>
-            <p class="jp-hint">Enable or disable JukePix output for the currently playing track.</p>
-            <div class="jp-toggle-row">
-                <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
-                    <div class="switch-track">
-                        <div class="switch-thumb"></div>
+        <% if (typeof jukepixFeatureEnabled==='undefined' || jukepixFeatureEnabled) { %>
+            <div class="jp-section jp-power-section">
+                <h3>JukePix Enable/Disable</h3>
+                <p class="jp-hint">Enable or disable JukePix output for the currently playing track.</p>
+                <div class="jp-toggle-row">
+                    <div class="toggle-switch" onclick="document.getElementById('jukepixToggleCheckbox').click()">
+                        <div class="switch-track">
+                            <div class="switch-thumb"></div>
+                        </div>
+                        <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%=jukepixEnabled
+                            ? 'checked' : '' %> style="display: none;">
                     </div>
-                    <input type="checkbox" id="jukepixToggleCheckbox" autocomplete="off" <%= jukepixEnabled ? 'checked' : '' %> style="display: none;">
-                </div>
-                <label id="jukepixToggleLabel" for="jukepixToggleCheckbox"><%= jukepixEnabled ? 'Disable JukePix' : 'Enable JukePix' %></label>
-            </div>
-        </div>
-
-        <!-- Global Defaults -->
-        <div class="jp-section">
-            <h3>Global Defaults</h3>
-            <p class="jp-hint">Base settings used for every track unless overridden below.</p>
-
-            <div class="jp-form-grid">
-                <div class="jp-form-group">
-                    <label>Text Color</label>
-                    <div class="jp-color-row">
-                        <input type="color" id="def-text-color" value="#ffffff">
-                        <input type="text" id="def-text-color-hex" value="#ffffff" maxlength="7">
-                    </div>
-                </div>
-                <div class="jp-form-group">
-                    <label>Background Color</label>
-                    <div class="jp-color-row">
-                        <input type="color" id="def-bg-color" value="#000000">
-                        <input type="text" id="def-bg-color-hex" value="#000000" maxlength="7">
-                    </div>
-                </div>
-                <div class="jp-form-group">
-                    <label>Progress Bar Color 1</label>
-                    <div class="jp-color-row">
-                        <input type="color" id="def-fg1" value="#00ff00">
-                        <input type="text" id="def-fg1-hex" value="#00ff00" maxlength="7">
-                    </div>
-                </div>
-                <div class="jp-form-group">
-                    <label>Progress Bar Color 2</label>
-                    <div class="jp-color-row">
-                        <input type="color" id="def-fg2" value="#29ff29">
-                        <input type="text" id="def-fg2-hex" value="#29ff29" maxlength="7">
-                    </div>
-                </div>
-                <div class="jp-form-group jp-full-width">
-                    <label>Scroll Speed</label>
-                    <div class="jp-range-row">
-                        <input type="range" id="def-scroll-speed" min="10" max="200" value="50">
-                        <span class="jp-range-val" id="def-scroll-speed-val">50</span>
-                    </div>
-                </div>
-                <div class="jp-form-group">
-                    <label>Skip Sound</label>
-                    <select id="def-skip-sound">
-                        <option value="">None</option>
-                    </select>
-                </div>
-                <div class="jp-form-group">
-                    <label>Shield Sound</label>
-                    <select id="def-shield-sound">
-                        <option value="">None</option>
-                    </select>
+                    <label id="jukepixToggleLabel" for="jukepixToggleCheckbox">
+                        <%= jukepixEnabled ? 'Disable JukePix' : 'Enable JukePix' %>
+                    </label>
                 </div>
             </div>
-
-            <div class="jp-preview-wrap">
-                <label>Preview</label>
-                <div class="jp-preview-text" id="def-preview-text">♪♫ Track Name - Artist ♪♫</div>
-                <div class="jp-preview-bar">
-                    <div class="jp-preview-fill" id="def-preview-fill"></div>
+            <% } else { %>
+                <div class="jp-section jp-power-section">
+                    <h3>JukePix Disabled</h3>
+                    <p class="jp-hint">JukePix is turned off in the environment, so it cannot be enabled from this
+                        panel.</p>
                 </div>
-            </div>
+                <% } %>
 
-            <div class="jp-btn-row">
-                <button class="jp-btn jp-btn-primary" onclick="jpSaveDefaults()">Save Defaults</button>
-                <button class="jp-btn jp-btn-secondary" onclick="jpResetDefaults()">Reset to Default</button>
-            </div>
-        </div>
+                    <!-- Global Defaults -->
+                    <div class="jp-section">
+                        <h3>Global Defaults</h3>
+                        <p class="jp-hint">Base settings used for every track unless overridden below.</p>
 
-        <!-- Overrides -->
-        <div class="jp-section">
-            <h3>Artist &amp; Song Overrides</h3>
-            <p class="jp-hint">
-                Priority: <strong>Song</strong> &gt; <strong>Artist</strong> &gt; <strong>Defaults</strong>
-            </p>
-            <button class="jp-btn jp-btn-primary jp-btn-sm" onclick="openJPModal()">+ Add Override</button>
+                        <div class="jp-form-grid">
+                            <div class="jp-form-group">
+                                <label>Text Color</label>
+                                <div class="jp-color-row">
+                                    <input type="color" id="def-text-color" value="#ffffff">
+                                    <input type="text" id="def-text-color-hex" value="#ffffff" maxlength="7">
+                                </div>
+                            </div>
+                            <div class="jp-form-group">
+                                <label>Background Color</label>
+                                <div class="jp-color-row">
+                                    <input type="color" id="def-bg-color" value="#000000">
+                                    <input type="text" id="def-bg-color-hex" value="#000000" maxlength="7">
+                                </div>
+                            </div>
+                            <div class="jp-form-group">
+                                <label>Progress Bar Color 1</label>
+                                <div class="jp-color-row">
+                                    <input type="color" id="def-fg1" value="#00ff00">
+                                    <input type="text" id="def-fg1-hex" value="#00ff00" maxlength="7">
+                                </div>
+                            </div>
+                            <div class="jp-form-group">
+                                <label>Progress Bar Color 2</label>
+                                <div class="jp-color-row">
+                                    <input type="color" id="def-fg2" value="#29ff29">
+                                    <input type="text" id="def-fg2-hex" value="#29ff29" maxlength="7">
+                                </div>
+                            </div>
+                            <div class="jp-form-group jp-full-width">
+                                <label>Scroll Speed</label>
+                                <div class="jp-range-row">
+                                    <input type="range" id="def-scroll-speed" min="10" max="200" value="50">
+                                    <span class="jp-range-val" id="def-scroll-speed-val">50</span>
+                                </div>
+                            </div>
+                            <div class="jp-form-group">
+                                <label>Skip Sound</label>
+                                <select id="def-skip-sound">
+                                    <option value="">None</option>
+                                </select>
+                            </div>
+                            <div class="jp-form-group">
+                                <label>Shield Sound</label>
+                                <select id="def-shield-sound">
+                                    <option value="">None</option>
+                                </select>
+                            </div>
+                        </div>
 
-            <div class="jp-table-wrap">
-                <table class="jp-table">
-                    <colgroup>
-                        <col class="col-type">
-                        <col class="col-match">
-                        <col class="col-swatch">
-                        <col class="col-swatch">
-                        <col class="col-swatch">
-                        <col class="col-spd">
-                        <col class="col-act">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>Type</th>
-                            <th>Match</th>
-                            <th title="Text color">Txt</th>
-                            <th title="Bar color 1">B1</th>
-                            <th title="Bar color 2">B2</th>
-                            <th>Spd</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="jp-overrides-body">
-                        <tr>
-                            <td colspan="7" class="jp-empty">No overrides yet.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                        <div class="jp-preview-wrap">
+                            <label>Preview</label>
+                            <div class="jp-preview-text" id="def-preview-text">♪♫ Track Name - Artist ♪♫</div>
+                            <div class="jp-preview-bar">
+                                <div class="jp-preview-fill" id="def-preview-fill"></div>
+                            </div>
+                        </div>
+
+                        <div class="jp-btn-row">
+                            <button class="jp-btn jp-btn-primary" onclick="jpSaveDefaults()">Save Defaults</button>
+                            <button class="jp-btn jp-btn-secondary" onclick="jpResetDefaults()">Reset to
+                                Default</button>
+                        </div>
+                    </div>
+
+                    <!-- Overrides -->
+                    <div class="jp-section">
+                        <h3>Artist &amp; Song Overrides</h3>
+                        <p class="jp-hint">
+                            Priority: <strong>Song</strong> &gt; <strong>Artist</strong> &gt; <strong>Defaults</strong>
+                        </p>
+                        <button class="jp-btn jp-btn-primary jp-btn-sm" onclick="openJPModal()">+ Add Override</button>
+
+                        <div class="jp-table-wrap">
+                            <table class="jp-table">
+                                <colgroup>
+                                    <col class="col-type">
+                                    <col class="col-match">
+                                    <col class="col-swatch">
+                                    <col class="col-swatch">
+                                    <col class="col-swatch">
+                                    <col class="col-spd">
+                                    <col class="col-act">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Match</th>
+                                        <th title="Text color">Txt</th>
+                                        <th title="Bar color 1">B1</th>
+                                        <th title="Bar color 2">B2</th>
+                                        <th>Spd</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="jp-overrides-body">
+                                    <tr>
+                                        <td colspan="7" class="jp-empty">No overrides yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
     </div><!-- /jp-drawer-body -->
 </div>

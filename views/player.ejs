@@ -211,7 +211,7 @@
                 </div>
                 <div class="playlist-modal-actions">
                     <button class="primary small-btn" onclick="playCurrentCustomPlaylist()">▶ Play Playlist</button>
-                    <button class="primary small-btn" onclick="openAddSongToCustomPlaylist()">+ Add Song</button>
+                    <button id="customPlaylistAddSongBtn" class="primary small-btn" onclick="openAddSongToCustomPlaylist()">+ Add Song</button>
                 </div>
             </div>
         </div>
@@ -339,6 +339,7 @@
             let createPlaylistSelectedUris = [];
             let currentCustomPlaylistId = null;
             let currentCustomPlaylistName = null;
+            let currentCustomPlaylistCanEdit = false;
             let customPlaylistContextTarget = null;
             let userIsBanned = false;
 
@@ -1542,6 +1543,17 @@
                     initializeQueueSync();
                 })();
 
+                // Escape values used inside inline onclick handlers
+                function escapeForInlineOnclick(value) {
+                    return String(value ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/\\/g, '\\\\')
+                        .replace(/'/g, "\\'")
+                        .replace(/"/g, '&quot;');
+                }
+
                 // Update queue display with WebSocket data
                 function updateQueueDisplay(data) {
                     const queueDiv = document.getElementById('queue');
@@ -1565,6 +1577,11 @@
 
                             const shieldCount = track.skipShields || 0;
 
+                            const safeUri = escapeForInlineOnclick(track.uri);
+                            const safeName = escapeForInlineOnclick(track.name);
+                            const safeArtist = escapeForInlineOnclick(track.artist);
+                            const safeImage = escapeForInlineOnclick(track.image);
+
                             return `
                         <div class="queue-item">
                             <img src="${track.image}" alt="${track.name}" class="album-cover-small">
@@ -1574,7 +1591,7 @@
                                 <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge"><img src="/img/skipShield.png" alt="shield" class="shield-badge-icon"> ${shieldCount}</span>` : ''}
                             </div>
-                            <button class="ellipsis-button" onclick="openSongMenu('${track.uri}', '${track.name.replace(/'/g, "\\'")}', '${track.artist.replace(/'/g, "\\'")}', '${track.image}', ${track.addedAt || 0}, event)" title="More options">
+                            <button class="ellipsis-button" onclick="openSongMenu('${safeUri}', '${safeName}', '${safeArtist}', '${safeImage}', ${track.addedAt || 0}, event)" title="More options">
                                 <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <circle cx="2" cy="2" r="2" fill="currentColor"/>
                                     <circle cx="8" cy="2" r="2" fill="currentColor"/>
@@ -1688,6 +1705,11 @@
 
                         const imageUrl = track.image || track.album?.image || '/img/placeholder.png';
 
+                        const safeCurrentUri = escapeForInlineOnclick(track.uri);
+                        const safeCurrentName = escapeForInlineOnclick(track.name);
+                        const safeCurrentArtist = escapeForInlineOnclick(track.artist);
+                        const safeCurrentImage = escapeForInlineOnclick(imageUrl);
+
                         currentDiv.innerHTML = `
                         <div class="current-item queue-item">
                             <img src="${imageUrl}" alt="${track.name}" class="album-cover-small">
@@ -1703,6 +1725,13 @@
                                     <div class="progress-time" id="track-progress-display">${currentTime} / ${totalTime}</div>
                                 </div>
                             </div>
+                            <button class="ellipsis-button" onclick="openSongMenu('${safeCurrentUri}', '${safeCurrentName}', '${safeCurrentArtist}', '${safeCurrentImage}', ${track.addedAt || 0}, event)" title="More options">
+                                <svg width="16" height="4" viewBox="0 0 16 4" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="2" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="8" cy="2" r="2" fill="currentColor"/>
+                                    <circle cx="14" cy="2" r="2" fill="currentColor"/>
+                                </svg>
+                            </button>
                         </div>
                     `;
 
@@ -2076,6 +2105,8 @@
                         }
                         listEl.innerHTML = '';
                         data.playlists.forEach(pl => {
+                            const canEdit = true;
+                            const isCreator = !!pl.is_owner;
                             const row = document.createElement('button');
                             row.type = 'button';
                             row.className = 'player-sidebar-item';
@@ -2095,7 +2126,10 @@
 
                             const sub = document.createElement('div');
                             sub.className = 'player-sidebar-sub';
-                            sub.textContent = `${pl.song_count} song${pl.song_count !== 1 ? 's' : ''}`;
+                            const songsText = `${pl.song_count} song${pl.song_count !== 1 ? 's' : ''}`;
+                            sub.textContent = pl.owner_name
+                                ? `${songsText} · by ${pl.owner_name}${isCreator ? ' (you)' : ''}`
+                                : songsText;
 
                             meta.appendChild(name);
                             meta.appendChild(sub);
@@ -2104,7 +2138,7 @@
 
                             row.addEventListener('click', () => {
                                 closeCustomPlaylistContextMenu();
-                                openCustomPlaylistTracks(pl.id, pl.name);
+                                openCustomPlaylistTracks(pl.id, pl.name, canEdit);
                             });
 
                             row.addEventListener('contextmenu', (event) => {
@@ -2125,7 +2159,8 @@
 
                     customPlaylistContextTarget = {
                         id: Number(playlist.id),
-                        name: String(playlist.name || 'Playlist')
+                        name: String(playlist.name || 'Playlist'),
+                        canEdit: true
                     };
 
                     menu.style.display = 'block';
@@ -2215,6 +2250,7 @@
                 function openAddSongToCustomPlaylistFromMenu(playlistId, playlistName) {
                     currentCustomPlaylistId = Number(playlistId);
                     currentCustomPlaylistName = playlistName || 'Playlist';
+                    currentCustomPlaylistCanEdit = true;
                     document.getElementById('customPlaylistTracksTitle').textContent = formatCustomPlaylistTitle(currentCustomPlaylistName);
                     openAddSongToCustomPlaylist();
                 }
@@ -2339,9 +2375,9 @@
                         createPlaylistSelectedUris.map((t, i) => `
                             <div class="playlist-selected-item">
                                 <img src="${t.image || ''}" alt="" />
-                                <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:600;font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(t.name)}</div>
-                                    <div style="color:#b3b3b3;font-size:0.75em;">${escapeHtml(t.artist)}</div>
+                                <div class="playlist-selected-meta">
+                                    <div class="playlist-selected-title">${escapeHtml(t.name)}</div>
+                                    <div class="playlist-selected-artist">${escapeHtml(t.artist)}</div>
                                 </div>
                                 <button class="ban-button" style="padding:2px 8px;font-size:0.75em;flex-shrink:0;" onclick="removeFromCreatePlaylistSelection(${i})">✕</button>
                             </div>`).join('') + `</div>`;
@@ -2387,18 +2423,25 @@
                 }
 
                 // --- View Custom Playlist Tracks ---
-                window.openCustomPlaylistTracks = async function (playlistId, playlistName) {
+                window.openCustomPlaylistTracks = async function (playlistId, playlistName, canEdit = true) {
                     currentCustomPlaylistId = playlistId;
                     currentCustomPlaylistName = playlistName || 'Playlist';
+                    currentCustomPlaylistCanEdit = !!canEdit;
                     document.getElementById('customPlaylistTracksTitle').textContent = formatCustomPlaylistTitle(currentCustomPlaylistName);
                     const addTitleEl = document.getElementById('addSongToPlaylistTitle');
                     if (addTitleEl) addTitleEl.textContent = formatCustomPlaylistTitle(currentCustomPlaylistName);
+                    const addSongBtn = document.getElementById('customPlaylistAddSongBtn');
+                    if (addSongBtn) addSongBtn.style.display = currentCustomPlaylistCanEdit ? '' : 'none';
                     document.getElementById('customPlaylistTracksList').innerHTML = '<p style="color:#b3b3b3;text-align:center;">Loading...</p>';
                     document.getElementById('customPlaylistTracksModal').style.display = 'flex';
                     window.refreshModalBlurState();
                     try {
                         const res = await fetch(`/api/custom-playlists/${playlistId}/tracks`);
                         const data = await res.json();
+                        if (data?.playlist && typeof data.playlist.canEdit === 'boolean') {
+                            currentCustomPlaylistCanEdit = data.playlist.canEdit;
+                            if (addSongBtn) addSongBtn.style.display = currentCustomPlaylistCanEdit ? '' : 'none';
+                        }
                         renderCustomPlaylistTracks(data);
                     } catch {
                         document.getElementById('customPlaylistTracksList').innerHTML = '<p style="color:#ff5555;">Failed to load tracks.</p>';
@@ -2429,6 +2472,7 @@
                     window.refreshModalBlurState();
                     currentCustomPlaylistId = null;
                     currentCustomPlaylistName = null;
+                    currentCustomPlaylistCanEdit = false;
                 };
 
                 window.initiateRemoveSong = function (trackUri) {
@@ -2456,7 +2500,7 @@
                         Notify('Song removed from playlist.', 'success');
                         pendingCustomPlaylistTrackUri = null;
                         if (currentCustomPlaylistId) {
-                            openCustomPlaylistTracks(currentCustomPlaylistId, currentCustomPlaylistName || 'Playlist');
+                            openCustomPlaylistTracks(currentCustomPlaylistId, currentCustomPlaylistName || 'Playlist', currentCustomPlaylistCanEdit);
                         }
                         pendingCustomPlaylistId = null;
                         loadMyPlaylists();
@@ -2541,7 +2585,7 @@
                         if (!data.ok) { Notify(data.error || 'Failed to add song.', 'error'); return; }
                         Notify('Song added to playlist!', 'success');
                         if (currentCustomPlaylistId) {
-                            openCustomPlaylistTracks(currentCustomPlaylistId, currentCustomPlaylistName || 'Playlist');
+                            openCustomPlaylistTracks(currentCustomPlaylistId, currentCustomPlaylistName || 'Playlist', currentCustomPlaylistCanEdit);
                         }
                         pendingCustomPlaylistId = null;
                         loadMyPlaylists();

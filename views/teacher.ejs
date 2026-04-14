@@ -15,12 +15,14 @@
 
             <div class="main-content">
                 <div class="teacher-toolbar">
-                    <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
-                        <img src="/img/settings.png" alt="JukePix Settings">
-                    </button>
-                    <p class="user-greeting">Logged in as: <strong>
-                            <%= user %>
-                        </strong></p>
+                    <% if (typeof jukepixFeatureEnabled==='undefined' || jukepixFeatureEnabled) { %>
+                        <button class="changelog-button" onclick="openJPSettings()" title="JukePix Settings">
+                            <img src="/img/settings.png" alt="JukePix Settings">
+                        </button>
+                        <% } %>
+                            <p class="user-greeting">Logged in as: <strong>
+                                    <%= user %>
+                                </strong></p>
                 </div>
                 <div class="container teacher-layout">
                     <div id="queueHistory">
