@@ -1,5 +1,15 @@
 [
     {
+        "version": "2.2.0",
+        "releaseDate": "04/14/26",
+        "changes": [
+            {
+                "type": "feature",
+                "text": "Custom playlists are now available! You can create your own playlist for 700 digipogs and add 5 songs for free. After purchasing, you can add or remove additional songs for 50 digipogs each."
+            }
+        ]
+    },
+    {
         "version": "2.1.1",
         "releaseDate": "04/08/26",
         "changes": [

@@ -14,7 +14,7 @@ function setupFormbarSocket(io, formbarSocket, key) {
     apiKey = key || '';
 
     formbarSocket.on('connect', () => {
-        console.log('[socket] Connected to Formbar');
+        // console.log('[socket] Connected to Formbar');
         formbarSocket.emit('getActiveClass', apiKey);
     });
 
