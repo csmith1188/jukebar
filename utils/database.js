@@ -306,6 +306,7 @@ db.run(`CREATE TABLE IF NOT EXISTS custom_playlists (
     spotify_playlist_id TEXT NOT NULL,
     name TEXT NOT NULL,
     song_count INTEGER DEFAULT 0,
+    image_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )`);
@@ -316,6 +317,13 @@ db.all("PRAGMA table_info(custom_playlists)", (err, columns) => {
         db.run("ALTER TABLE custom_playlists ADD COLUMN class_id INTEGER", (alterErr) => {
             if (alterErr) console.error('Error adding class_id to custom_playlists:', alterErr);
             else console.log('Added class_id column to custom_playlists table');
+        });
+    }
+
+    if (!err && columns && !columns.some(c => c.name === 'image_url')) {
+        db.run("ALTER TABLE custom_playlists ADD COLUMN image_url TEXT", (alterErr) => {
+            if (alterErr) console.error('Error adding image_url to custom_playlists:', alterErr);
+            else console.log('Added image_url column to custom_playlists table');
         });
     }
 });

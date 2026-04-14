@@ -137,6 +137,9 @@
             } else if (pendingAction === 'removePlaylistSong') {
                 reason += ' - Remove Song from Playlist';
                 amount = <%= removePlaylistSongAmount %>;
+            } else if (pendingAction === 'customPlaylistPlay') {
+                reason += ' - Play Custom Playlist';
+                amount = <%= customPlaylistPlayAmount %>;
             } else {
                 console.error('Unknown pending action:', pendingAction);
                 alert('Unknown action. Please try again. Your digipogs have not been charged.');
@@ -150,7 +153,7 @@
 
             try {
                 const transferBody = { pin, reason, pendingAction };
-                if (pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong') {
+                if (pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') {
                     const state2 = window.getPlayerState?.() || {};
                     if (state2.pendingPlaylistId) transferBody.playlistId = state2.pendingPlaylistId;
                 }
@@ -191,7 +194,7 @@
                 const res = await fetch('/getAmount', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pendingAction })
+                    body: JSON.stringify({ pendingAction, playlistId: state.pendingPlaylistId || null })
                 });
                 const data = await res.json();
 

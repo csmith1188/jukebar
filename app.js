@@ -417,6 +417,7 @@ app.get('/', isAuthenticated, (req, res) => {
             createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
             addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
             removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
+            customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
             changelog: changelog
         });
     } catch (error) {
@@ -441,6 +442,7 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
             addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
             removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
+            customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
             changelog: changelog
         });
     } catch (error) {

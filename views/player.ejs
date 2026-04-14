@@ -28,8 +28,10 @@
                 <aside class="player-sidebar" aria-label="Playlists">
                     <div class="player-sidebar-header">
                         <div class="player-sidebar-tabs">
-                            <button class="sidebar-tab active" id="tab-playlists" onclick="switchSidebarTab('playlists')">Teacher Playlists</button>
-                            <button class="sidebar-tab" id="tab-my-playlists" onclick="switchSidebarTab('my-playlists')">Class Playlists</button>
+                            <button class="sidebar-tab active" id="tab-playlists"
+                                onclick="switchSidebarTab('playlists')">Teacher Playlists</button>
+                            <button class="sidebar-tab" id="tab-my-playlists"
+                                onclick="switchSidebarTab('my-playlists')">Class Playlists</button>
                         </div>
                     </div>
                     <div id="tab-playlists-panel">
@@ -39,7 +41,8 @@
                     </div>
                     <div id="tab-my-playlists-panel" style="display:none;">
                         <div class="player-sidebar-list-actions">
-                            <button class="primary small-btn" id="createPlaylistBtn" onclick="openCreatePlaylistModal()">+ New Playlist (<%= createPlaylistAmount %> digipogs)</button>
+                            <button class="primary small-btn" id="createPlaylistBtn"
+                                onclick="openCreatePlaylistModal()">+ New Playlist</button>
                         </div>
                         <div id="myPlaylistsList" class="player-sidebar-list">
                             <p style="text-align:center;color:#b3b3b3;">Loading...</p>
@@ -121,7 +124,8 @@
                     <div id="playlistPayMeta" class="playlist-pay-meta">0 queueable tracks</div>
                     <div id="playlistPayCost" class="playlist-pay-cost">0 Digipogs</div>
                 </div>
-                <p style="color:#ffaa00; font-size:0.85em; text-align:center; margin:8px 0;">Note: Playing a playlist will clear the current queue.</p>
+                <p style="color:#ffaa00; font-size:0.85em; text-align:center; margin:8px 0;">Note: Playing a playlist
+                    will clear the current queue.</p>
                 <input id="playlist-pay-pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
                     placeholder="Enter PIN" oninput="this.value = this.value.replace(/[^0-9]/g,'');" />
                 <label class="medium label-inline playlist-pay-save" for="playlistSavePIN">
@@ -162,29 +166,34 @@
 
         <!-- Create Custom Playlist Modal -->
         <div id="createPlaylistModal" class="payment-modal" style="display:none;">
-            <div class="payment-content">
-                <button class="close-modal-btn" onclick="closeCreatePlaylistModal()">&times;</button>
+            <div class="payment-content playlist-modal-content">
+                <button class="close-modal-btn" onclick="closeCreatePlaylistModal()">
+                    <img src="img/close.svg" alt="Close" style="width:16px;height:16px;filter:invert(1)">
+                </button>
                 <h3 class="ban-reason-title">Create Custom Playlist</h3>
                 <div class="playlist-modal-body">
-                    <p style="color:#b3b3b3;font-size:0.85em;margin:0;">Name your playlist and add up to 5 songs for free. Additional songs cost <%= addPlaylistSongAmount %> digipogs each.</p>
-                    <div class="row" style="margin:0;">
+                    <p class="playlist-modal-help">Name your playlist and add up to 5 songs for free. Additional songs
+                        cost <%= addPlaylistSongAmount %> digipogs each.</p>
+                    <div class="row playlist-modal-field">
                         <label class="small">Playlist Name</label>
-                        <input type="text" id="newPlaylistName" maxlength="100" placeholder="My Awesome Playlist" style="width:100%;box-sizing:border-box;" />
+                        <input type="text" id="newPlaylistName" maxlength="100" placeholder="My Awesome Playlist" />
                     </div>
-                    <div style="margin:0;">
-                        <label class="small">Initial Songs (up to 5)</label>
-                        <form id="createPlaylistSearchForm" style="margin-top:6px;">
-                            <div class="search-container">
-                                <input type="text" id="createPlaylistSearchInput" placeholder="Search for a song" style="flex:1;" />
-                                <button type="submit" class="primary" style="padding:6px 12px;">Search</button>
-                            </div>
-                        </form>
-                        <div id="createPlaylistSearchResults" class="playlist-search-results"></div>
+                    <div class="playlist-modal-body-but-better">
+                        <div class="playlist-modal-field create-playlist-songs">
+                            <label class="small">Initial Songs (up to 5)</label>
+                            <form id="createPlaylistSearchForm" class="playlist-modal-search-form">
+                                <div class="search-container">
+                                    <input type="text" id="createPlaylistSearchInput" placeholder="Search for a song" />
+                                    <button type="submit" class="primary playlist-modal-search-btn">Search</button>
+                                </div>
+                            </form>
+                            <div id="createPlaylistSearchResults" class="playlist-search-results"></div>
+                        </div>
+                        <div id="createPlaylistSelectedSongs" class="playlist-selected-songs"></div>
                     </div>
-                    <div id="createPlaylistSelectedSongs" class="playlist-selected-songs"></div>
                 </div>
-                <div class="playlist-modal-footer ban-reason-actions" style="display:flex;gap:8px;">
-                    <button class="unban-button" onclick="submitCreatePlaylist()">Create &amp; Pay (<%= createPlaylistAmount %> digipogs)</button>
+                <div class="playlist-modal-footer ban-reason-actions">
+                    <button class="unban-button" onclick="submitCreatePlaylist()">Create</button>
                     <button class="ban-button" onclick="closeCreatePlaylistModal()">Cancel</button>
                 </div>
             </div>
@@ -192,31 +201,42 @@
 
         <!-- Custom Playlist Tracks Modal -->
         <div id="customPlaylistTracksModal" class="payment-modal" style="display:none;">
-            <div class="payment-content" style="max-height:85vh;overflow-y:auto;">
-                <button class="close-modal-btn" onclick="closeCustomPlaylistTracksModal()">&times;</button>
-                <h3 class="ban-reason-title" id="customPlaylistTracksTitle">Playlist</h3>
-                <div style="margin-bottom:10px;">
-                    <button class="primary small-btn" onclick="openAddSongToCustomPlaylist()">+ Add Song (<%= addPlaylistSongAmount %> digipogs)</button>
-                </div>
+            <div class="payment-content playlist-modal-content">
+                <button class="close-modal-btn" onclick="closeCustomPlaylistTracksModal()">
+                    <img src="img/close.svg" alt="Close" style="width:16px;height:16px;filter:invert(1)">
+                </button>
+                <h3 class="ban-reason-title" id="customPlaylistTracksTitle">Custom Playlist</h3>
                 <div id="customPlaylistTracksList" class="playlist-tracks-list">
                     <p style="color:#b3b3b3;text-align:center;padding:12px;">Loading tracks...</p>
+                </div>
+                <div class="playlist-modal-actions">
+                    <button class="primary small-btn" onclick="playCurrentCustomPlaylist()">▶ Play Playlist</button>
+                    <button class="primary small-btn" onclick="openAddSongToCustomPlaylist()">+ Add Song</button>
                 </div>
             </div>
         </div>
 
         <!-- Add Song to Custom Playlist Modal -->
         <div id="addSongToPlaylistModal" class="payment-modal" style="display:none;">
-            <div class="payment-content" style="max-height:85vh;overflow-y:auto;">
-                <button class="close-modal-btn" onclick="closeAddSongToPlaylistModal()">&times;</button>
-                <h3 class="ban-reason-title">Add Song to Playlist</h3>
-                <form id="addSongSearchForm" style="margin-bottom:8px;">
+            <div class="payment-content playlist-modal-content">
+                <button class="close-modal-btn" onclick="closeAddSongToPlaylistModal()">
+                    <img src="img/close.svg" alt="Close" style="width:16px;height:16px;filter:invert(1)">
+                </button>
+                <h3 class="ban-reason-title" id="addSongToPlaylistTitle">Custom Playlist</h3>
+                <form id="addSongSearchForm" class="playlist-modal-search-form playlist-modal-search-form--compact">
                     <div class="search-container">
-                        <input type="text" id="addSongSearchInput" placeholder="Search for a song" style="flex:1;" />
-                        <button type="submit" class="primary" style="padding:6px 12px;">Search</button>
+                        <input type="text" id="addSongSearchInput" placeholder="Search for a song" />
+                        <button type="submit" class="primary playlist-modal-search-btn">Search</button>
                     </div>
                 </form>
                 <div id="addSongSearchResults" class="playlist-search-results"></div>
             </div>
+        </div>
+
+        <div id="customPlaylistContextMenu" class="playlist-context-menu" style="display:none;" role="menu"
+            aria-label="Custom playlist actions">
+            <button id="customPlaylistMenuPlay" type="button" role="menuitem">Play Playlist</button>
+            <button id="customPlaylistMenuAdd" type="button" role="menuitem">Add More Songs</button>
         </div>
 
         <button id="changelog-button" class="changelog-button" title="View Changelog">
@@ -318,6 +338,9 @@
             let pendingCustomPlaylistTrackUri = null;
             let createPlaylistSelectedUris = [];
             let currentCustomPlaylistId = null;
+            let currentCustomPlaylistName = null;
+            let customPlaylistContextTarget = null;
+            let userIsBanned = false;
 
             // Global letiables that need to be accessed by multiple functions
             let currentlyPlayingUri = null;
@@ -347,7 +370,6 @@
                     'use strict';
 
                     let useJukebar = true;
-                    let userIsBanned = false;
 
                     async function fetchAllowedPlaylistsForSidebar() {
                         const list = document.getElementById('studentPlaylistsList');
@@ -979,9 +1001,33 @@
                         }
                     }
 
+                    window.isModalVisible = function (id) {
+                        const el = document.getElementById(id);
+                        return !!el && window.getComputedStyle(el).display !== 'none';
+                    };
+
+                    window.refreshModalBlurState = function () {
+                        const shouldBlurMain =
+                            window.isModalVisible('paymentModal') ||
+                            window.isModalVisible('playlistPaymentModal') ||
+                            window.isModalVisible('createPlaylistModal') ||
+                            window.isModalVisible('customPlaylistTracksModal') ||
+                            window.isModalVisible('addSongToPlaylistModal') ||
+                            window.isModalVisible('ownerShieldModal');
+
+                        const shouldBlurBottomBar =
+                            window.isModalVisible('createPlaylistModal') ||
+                            window.isModalVisible('customPlaylistTracksModal') ||
+                            window.isModalVisible('addSongToPlaylistModal') ||
+                            window.isModalVisible('ownerShieldModal');
+
+                        document.querySelector('.main-content')?.classList.toggle('blurred', shouldBlurMain);
+                        document.querySelector('.player-bottom-bar')?.classList.toggle('blurred', shouldBlurBottomBar);
+                    };
+
                     function showPayment() {
                         document.getElementById('paymentModal').style.display = 'block';
-                        document.querySelector('.main-content').classList.add('blurred');
+                        window.refreshModalBlurState();
                         // Reset shield quantity on open
                         if (pendingAction === 'Skip Shield') {
                             const input = document.getElementById('shield-quantity-input');
@@ -996,7 +1042,7 @@
 
                     function hidePayment() {
                         document.getElementById('paymentModal').style.display = 'none';
-                        document.querySelector('.main-content').classList.remove('blurred');
+                        window.refreshModalBlurState();
                         window.dispatchEvent(new CustomEvent('paymentHidden'));
                     }
 
@@ -1042,6 +1088,11 @@
                             const uri = pendingCustomPlaylistTrackUri;
                             pendingCustomPlaylistTrackUri = null;
                             finalizeRemoveSongFromPlaylist(uri);
+                        } else if (action === 'customPlaylistPlay' && pendingCustomPlaylistId) {
+                            const playlistId = Number(pendingCustomPlaylistId);
+                            pendingCustomPlaylistId = null;
+                            pendingPlaylistId = null;
+                            playCustomPlaylist(playlistId);
                         }
                     }
 
@@ -2003,6 +2054,7 @@
                 // ============================================================
 
                 function switchSidebarTab(tab) {
+                    closeCustomPlaylistContextMenu();
                     document.getElementById('tab-playlists-panel').style.display = tab === 'playlists' ? '' : 'none';
                     document.getElementById('tab-my-playlists-panel').style.display = tab === 'my-playlists' ? '' : 'none';
                     document.getElementById('tab-playlists').classList.toggle('active', tab === 'playlists');
@@ -2024,26 +2076,178 @@
                         }
                         listEl.innerHTML = '';
                         data.playlists.forEach(pl => {
-                            const div = document.createElement('div');
-                            div.className = 'playlist-item';
-                            div.innerHTML = `
-                                <div class="playlist-item-info" style="cursor:pointer;" onclick="openCustomPlaylistTracks(${pl.id}, ${JSON.stringify(pl.name)})">
-                                    <div class="playlist-item-name">${escapeHtml(pl.name)}</div>
-                                    <div class="playlist-item-meta">${pl.song_count} song${pl.song_count !== 1 ? 's' : ''}</div>
-                                </div>`;
-                            listEl.appendChild(div);
+                            const row = document.createElement('button');
+                            row.type = 'button';
+                            row.className = 'player-sidebar-item';
+                            row.title = pl.name || 'Playlist';
+
+                            const img = document.createElement('img');
+                            img.className = 'player-sidebar-cover';
+                            img.src = pl.image_url || '/img/placeholder.png';
+                            img.alt = pl.name || 'Playlist';
+
+                            const meta = document.createElement('div');
+                            meta.className = 'player-sidebar-meta';
+
+                            const name = document.createElement('div');
+                            name.className = 'player-sidebar-name';
+                            name.textContent = pl.name || 'Untitled Playlist';
+
+                            const sub = document.createElement('div');
+                            sub.className = 'player-sidebar-sub';
+                            sub.textContent = `${pl.song_count} song${pl.song_count !== 1 ? 's' : ''}`;
+
+                            meta.appendChild(name);
+                            meta.appendChild(sub);
+                            row.appendChild(img);
+                            row.appendChild(meta);
+
+                            row.addEventListener('click', () => {
+                                closeCustomPlaylistContextMenu();
+                                openCustomPlaylistTracks(pl.id, pl.name);
+                            });
+
+                            row.addEventListener('contextmenu', (event) => {
+                                event.preventDefault();
+                                openCustomPlaylistContextMenu(pl, event);
+                            });
+
+                            listEl.appendChild(row);
                         });
                     } catch (err) {
                         listEl.innerHTML = '<p style="text-align:center;color:#ff5555;">Failed to load playlists.</p>';
                     }
                 }
 
+                function openCustomPlaylistContextMenu(playlist, event) {
+                    const menu = document.getElementById('customPlaylistContextMenu');
+                    if (!menu) return;
+
+                    customPlaylistContextTarget = {
+                        id: Number(playlist.id),
+                        name: String(playlist.name || 'Playlist')
+                    };
+
+                    menu.style.display = 'block';
+
+                    const margin = 8;
+                    const rect = menu.getBoundingClientRect();
+                    let left = event.clientX;
+                    let top = event.clientY;
+
+                    if (left + rect.width + margin > window.innerWidth) {
+                        left = window.innerWidth - rect.width - margin;
+                    }
+                    if (top + rect.height + margin > window.innerHeight) {
+                        top = window.innerHeight - rect.height - margin;
+                    }
+
+                    menu.style.left = `${Math.max(margin, left)}px`;
+                    menu.style.top = `${Math.max(margin, top)}px`;
+                }
+
+                function closeCustomPlaylistContextMenu() {
+                    const menu = document.getElementById('customPlaylistContextMenu');
+                    if (menu) menu.style.display = 'none';
+                    customPlaylistContextTarget = null;
+                }
+
+                function formatCustomPlaylistTitle(playlistName) {
+                    const safeName = String(playlistName || 'Playlist').trim();
+                    return `Custom Playlist: ${safeName}`;
+                }
+
+                async function playCustomPlaylist(playlistId) {
+                    try {
+                        const res = await fetch('/api/custom-playlists/queue', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playlistId })
+                        });
+                        const data = await res.json();
+                        if (!data.ok) {
+                            Notify(data.error || 'Failed to play playlist.', 'error');
+                            if (res.status === 410) {
+                                loadMyPlaylists();
+                            }
+                            return;
+                        }
+                        Notify(data.message || 'Playlist started!', 'success');
+                        socket.emit('getQueue');
+                    } catch {
+                        Notify('Network error playing playlist.', 'error');
+                    }
+                }
+
+                function initiateCustomPlaylistPlay(playlistId) {
+                    const parsedPlaylistId = Number(playlistId);
+                    if (!parsedPlaylistId) {
+                        Notify('Invalid playlist.', 'error');
+                        return;
+                    }
+
+                    if (userIsBanned) {
+                        Notify('You are banned from using Jukebar.', 'error');
+                        return;
+                    }
+
+                    if (isOwnerClient(currentID)) {
+                        playCustomPlaylist(parsedPlaylistId);
+                        return;
+                    }
+
+                    pendingCustomPlaylistId = parsedPlaylistId;
+                    pendingPlaylistId = parsedPlaylistId;
+                    pendingAction = 'customPlaylistPlay';
+                    showPayment();
+                }
+
+                window.playCurrentCustomPlaylist = function () {
+                    const playlistId = Number(currentCustomPlaylistId);
+                    if (!playlistId) {
+                        Notify('No playlist selected.', 'error');
+                        return;
+                    }
+                    closeCustomPlaylistTracksModal();
+                    initiateCustomPlaylistPlay(playlistId);
+                };
+
+                function openAddSongToCustomPlaylistFromMenu(playlistId, playlistName) {
+                    currentCustomPlaylistId = Number(playlistId);
+                    currentCustomPlaylistName = playlistName || 'Playlist';
+                    document.getElementById('customPlaylistTracksTitle').textContent = formatCustomPlaylistTitle(currentCustomPlaylistName);
+                    openAddSongToCustomPlaylist();
+                }
+
+                document.getElementById('customPlaylistMenuPlay')?.addEventListener('click', async () => {
+                    if (!customPlaylistContextTarget) return;
+                    const target = { ...customPlaylistContextTarget };
+                    closeCustomPlaylistContextMenu();
+                    initiateCustomPlaylistPlay(target.id);
+                });
+
+                document.getElementById('customPlaylistMenuAdd')?.addEventListener('click', () => {
+                    if (!customPlaylistContextTarget) return;
+                    const target = { ...customPlaylistContextTarget };
+                    closeCustomPlaylistContextMenu();
+                    openAddSongToCustomPlaylistFromMenu(target.id, target.name);
+                });
+
+                document.addEventListener('click', (event) => {
+                    const menu = document.getElementById('customPlaylistContextMenu');
+                    if (!menu || menu.style.display === 'none') return;
+                    if (!menu.contains(event.target)) closeCustomPlaylistContextMenu();
+                });
+
+                window.addEventListener('resize', closeCustomPlaylistContextMenu);
+                window.addEventListener('scroll', closeCustomPlaylistContextMenu, true);
+
                 function escapeHtml(str) {
-                    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 }
 
                 // --- Create Playlist ---
-                window.openCreatePlaylistModal = function() {
+                window.openCreatePlaylistModal = function () {
                     createPlaylistSelectedUris = [];
                     document.getElementById('newPlaylistName').value = '';
                     document.getElementById('createPlaylistSearchInput').value = '';
@@ -2054,7 +2258,7 @@
                     document.querySelector('.player-bottom-bar')?.classList.add('blurred');
                 };
 
-                window.closeCreatePlaylistModal = function() {
+                window.closeCreatePlaylistModal = function () {
                     document.getElementById('createPlaylistModal').style.display = 'none';
                     document.querySelector('.main-content').classList.remove('blurred');
                     document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
@@ -2089,26 +2293,45 @@
                                     <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
                                     <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
                                 </div>
-                                <button class="primary small-btn" ${alreadyAdded || createPlaylistSelectedUris.length >= 5 ? 'disabled' : ''} onclick="addToCreatePlaylistSelection('${track.uri}', '${escapeHtml(track.name).replace(/'/g,"\\'")}', '${escapeHtml(track.artist).replace(/'/g,"\\'")}', '${track.album?.image || ''}')">${alreadyAdded ? 'Added' : 'Add'}</button>`;
+                                <button class="primary small-btn create-playlist-add-btn ${alreadyAdded ? 'is-added' : ''}" data-uri="${track.uri}" ${alreadyAdded || createPlaylistSelectedUris.length >= 5 ? 'disabled' : ''} onclick="addToCreatePlaylistSelection('${track.uri}', '${escapeHtml(track.name).replace(/'/g, "\\'")}', '${escapeHtml(track.artist).replace(/'/g, "\\'")}', '${track.album?.image || ''}', this)">${alreadyAdded ? 'Added' : 'Add'}</button>`;
                             resultsEl.appendChild(div);
                         });
+                        syncCreatePlaylistSearchButtons();
                     } catch {
                         resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
                     }
                 });
 
-                window.addToCreatePlaylistSelection = function(uri, name, artist, image) {
+                function syncCreatePlaylistSearchButtons() {
+                    const buttons = document.querySelectorAll('#createPlaylistSearchResults .create-playlist-add-btn');
+                    const reachedLimit = createPlaylistSelectedUris.length >= 5;
+                    buttons.forEach((btn) => {
+                        const uri = btn.dataset.uri;
+                        const alreadyAdded = !!uri && createPlaylistSelectedUris.some(t => t.uri === uri);
+                        if (alreadyAdded) {
+                            btn.disabled = true;
+                            btn.textContent = 'Added';
+                            btn.classList.add('is-added');
+                            return;
+                        }
+                        btn.classList.remove('is-added');
+                        btn.textContent = 'Add';
+                        btn.disabled = reachedLimit;
+                    });
+                }
+
+                window.addToCreatePlaylistSelection = function (uri, name, artist, image, buttonEl) {
                     if (createPlaylistSelectedUris.length >= 5 || createPlaylistSelectedUris.find(t => t.uri === uri)) return;
                     createPlaylistSelectedUris.push({ uri, name, artist, image });
                     renderCreatePlaylistSelectedSongs();
-                    document.getElementById('createPlaylistSearchResults').innerHTML = '';
-                    document.getElementById('createPlaylistSearchInput').value = '';
+                    syncCreatePlaylistSearchButtons();
                 };
 
                 function renderCreatePlaylistSelectedSongs() {
                     const el = document.getElementById('createPlaylistSelectedSongs');
                     if (!createPlaylistSelectedUris.length) {
                         el.innerHTML = '';
+                        syncCreatePlaylistSearchButtons();
                         return;
                     }
                     el.innerHTML = `<p style="color:#b3b3b3;font-size:0.8em;margin:0 0 4px;">Selected (${createPlaylistSelectedUris.length}/5 free):</p>
@@ -2122,19 +2345,25 @@
                                 </div>
                                 <button class="ban-button" style="padding:2px 8px;font-size:0.75em;flex-shrink:0;" onclick="removeFromCreatePlaylistSelection(${i})">✕</button>
                             </div>`).join('') + `</div>`;
+                    syncCreatePlaylistSearchButtons();
                 }
 
-                window.removeFromCreatePlaylistSelection = function(index) {
+                window.removeFromCreatePlaylistSelection = function (index) {
                     createPlaylistSelectedUris.splice(index, 1);
                     renderCreatePlaylistSelectedSongs();
                 };
 
-                window.submitCreatePlaylist = function() {
+                window.submitCreatePlaylist = function () {
                     const name = document.getElementById('newPlaylistName').value.trim();
                     if (!name) { Notify('Please enter a playlist name.', 'error'); return; }
                     pendingCustomPlaylistName = name;
-                    pendingAction = 'createPlaylist';
                     closeCreatePlaylistModal();
+                    if (isOwnerClient(currentID)) {
+                        pendingAction = null;
+                        finalizeCreatePlaylist();
+                        return;
+                    }
+                    pendingAction = 'createPlaylist';
                     showPayment();
                 };
 
@@ -2158,13 +2387,15 @@
                 }
 
                 // --- View Custom Playlist Tracks ---
-                window.openCustomPlaylistTracks = async function(playlistId, playlistName) {
+                window.openCustomPlaylistTracks = async function (playlistId, playlistName) {
                     currentCustomPlaylistId = playlistId;
-                    document.getElementById('customPlaylistTracksTitle').textContent = playlistName;
+                    currentCustomPlaylistName = playlistName || 'Playlist';
+                    document.getElementById('customPlaylistTracksTitle').textContent = formatCustomPlaylistTitle(currentCustomPlaylistName);
+                    const addTitleEl = document.getElementById('addSongToPlaylistTitle');
+                    if (addTitleEl) addTitleEl.textContent = formatCustomPlaylistTitle(currentCustomPlaylistName);
                     document.getElementById('customPlaylistTracksList').innerHTML = '<p style="color:#b3b3b3;text-align:center;">Loading...</p>';
                     document.getElementById('customPlaylistTracksModal').style.display = 'flex';
-                    document.querySelector('.main-content').classList.add('blurred');
-                    document.querySelector('.player-bottom-bar')?.classList.add('blurred');
+                    window.refreshModalBlurState();
                     try {
                         const res = await fetch(`/api/custom-playlists/${playlistId}/tracks`);
                         const data = await res.json();
@@ -2188,24 +2419,28 @@
                                 <div class="queue-item-title">${escapeHtml(track.name)}</div>
                                 <div class="queue-item-artist">${escapeHtml(track.artist)}</div>
                             </div>
-                            <button class="ban-button" style="font-size:0.75em;padding:4px 8px;white-space:nowrap;" onclick="initiateRemoveSong('${track.uri}')">Remove (50)</button>`;
+                            <button class="ban-button" style="font-size:0.75em;padding:4px 8px;white-space:nowrap;" onclick="initiateRemoveSong('${track.uri}')">Remove</button>`;
                         el.appendChild(div);
                     });
                 }
 
-                window.closeCustomPlaylistTracksModal = function() {
+                window.closeCustomPlaylistTracksModal = function () {
                     document.getElementById('customPlaylistTracksModal').style.display = 'none';
-                    document.querySelector('.main-content').classList.remove('blurred');
-                    document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
+                    window.refreshModalBlurState();
                     currentCustomPlaylistId = null;
+                    currentCustomPlaylistName = null;
                 };
 
-                window.initiateRemoveSong = function(trackUri) {
+                window.initiateRemoveSong = function (trackUri) {
                     pendingCustomPlaylistTrackUri = trackUri;
                     pendingCustomPlaylistId = currentCustomPlaylistId;
                     pendingPlaylistId = currentCustomPlaylistId;
+                    if (isOwnerClient(currentID)) {
+                        pendingAction = null;
+                        finalizeRemoveSongFromPlaylist(trackUri);
+                        return;
+                    }
                     pendingAction = 'removePlaylistSong';
-                    closeCustomPlaylistTracksModal();
                     showPayment();
                 };
 
@@ -2219,6 +2454,10 @@
                         const data = await res.json();
                         if (!data.ok) { Notify(data.error || 'Failed to remove song.', 'error'); return; }
                         Notify('Song removed from playlist.', 'success');
+                        pendingCustomPlaylistTrackUri = null;
+                        if (currentCustomPlaylistId) {
+                            openCustomPlaylistTracks(currentCustomPlaylistId, currentCustomPlaylistName || 'Playlist');
+                        }
                         pendingCustomPlaylistId = null;
                         loadMyPlaylists();
                     } catch {
@@ -2227,18 +2466,18 @@
                 }
 
                 // --- Add Song to Custom Playlist ---
-                window.openAddSongToCustomPlaylist = function() {
+                window.openAddSongToCustomPlaylist = function () {
+                    const addTitleEl = document.getElementById('addSongToPlaylistTitle');
+                    if (addTitleEl) addTitleEl.textContent = formatCustomPlaylistTitle(currentCustomPlaylistName || 'Playlist');
                     document.getElementById('addSongSearchInput').value = '';
                     document.getElementById('addSongSearchResults').innerHTML = '';
                     document.getElementById('addSongToPlaylistModal').style.display = 'flex';
-                    document.querySelector('.main-content').classList.add('blurred');
-                    document.querySelector('.player-bottom-bar')?.classList.add('blurred');
+                    window.refreshModalBlurState();
                 };
 
-                window.closeAddSongToPlaylistModal = function() {
+                window.closeAddSongToPlaylistModal = function () {
                     document.getElementById('addSongToPlaylistModal').style.display = 'none';
-                    document.querySelector('.main-content').classList.remove('blurred');
-                    document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
+                    window.refreshModalBlurState();
                 };
 
                 document.getElementById('addSongSearchForm')?.addEventListener('submit', async (e) => {
@@ -2269,7 +2508,7 @@
                                     <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
                                     <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
                                 </div>
-                                <button class="primary small-btn" onclick="initiateAddSongToPlaylist('${track.uri}')">Add (100)</button>`;
+                                <button class="primary small-btn" onclick="initiateAddSongToPlaylist('${track.uri}')">Add</button>`;
                             resultsEl.appendChild(div);
                         });
                     } catch {
@@ -2277,13 +2516,17 @@
                     }
                 });
 
-                window.initiateAddSongToPlaylist = function(trackUri) {
+                window.initiateAddSongToPlaylist = function (trackUri) {
                     pendingCustomPlaylistTrackUri = trackUri;
                     pendingCustomPlaylistId = currentCustomPlaylistId;
                     pendingPlaylistId = currentCustomPlaylistId;
-                    pendingAction = 'addPlaylistSong';
                     closeAddSongToPlaylistModal();
-                    closeCustomPlaylistTracksModal();
+                    if (isOwnerClient(currentID)) {
+                        pendingAction = null;
+                        finalizeAddSongToPlaylist(trackUri);
+                        return;
+                    }
+                    pendingAction = 'addPlaylistSong';
                     showPayment();
                 };
 
@@ -2297,12 +2540,18 @@
                         const data = await res.json();
                         if (!data.ok) { Notify(data.error || 'Failed to add song.', 'error'); return; }
                         Notify('Song added to playlist!', 'success');
+                        if (currentCustomPlaylistId) {
+                            openCustomPlaylistTracks(currentCustomPlaylistId, currentCustomPlaylistName || 'Playlist');
+                        }
                         pendingCustomPlaylistId = null;
                         loadMyPlaylists();
                     } catch {
                         Notify('Network error adding song.', 'error');
                     }
                 }
+
+            const chance2 = Math.floor(Math.random() * 100);
+            if (chance2 === 69) document.querySelector('.changelog-header h1').innerText = "Jubekar Changelog";
 
 
             </script>

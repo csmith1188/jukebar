@@ -160,6 +160,11 @@ router.post('/transfer', async (req, res) => {
             amount = Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100;
         } else if (pendingAction === 'removePlaylistSong') {
             amount = Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50;
+        } else if (pendingAction === 'customPlaylistPlay') {
+            if (!playlistId) {
+                return res.status(400).json({ ok: false, error: 'playlistId is required for custom playlist payments' });
+            }
+            amount = Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
             if (userRow && userRow.id) {
@@ -217,7 +222,7 @@ router.post('/transfer', async (req, res) => {
                 to: Number(to),
                 amount: Number(amount),
                 pendingAction: pendingAction || null,
-                playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong') ? String(playlistId || '') : null,
+                playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') ? String(playlistId || '') : null,
                 at: Date.now()
             };
             return req.session.save((err) => {
@@ -439,6 +444,8 @@ router.post('/getAmount', async (req, res) => {
             amount = Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100;
         } else if (pendingAction === 'removePlaylistSong') {
             amount = Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50;
+        } else if (pendingAction === 'customPlaylistPlay') {
+            amount = Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250;
         } else {
             amount = Number(process.env.SONG_AMOUNT) || 50;
             // Get top 3 user IDs from the rolling 7-day leaderboard (same source as the displayed leaderboard)
