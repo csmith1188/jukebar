@@ -97,6 +97,19 @@ function getCustomPlaylist(playlistDbId, userId) {
     });
 }
 
+function getCustomPlaylistForClass(playlistDbId, classId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            'SELECT id, spotify_playlist_id, name, song_count, image_url, user_id, class_id FROM custom_playlists WHERE id = ? AND class_id IS ?',
+            [playlistDbId, classId],
+            (err, row) => {
+                if (err) return reject(err);
+                resolve(row || null);
+            }
+        );
+    });
+}
+
 function isSpotifyNotFoundError(err) {
     return err?.statusCode === 404 || err?.body?.error?.status === 404;
 }
@@ -166,7 +179,7 @@ async function ensureCustomPlaylistExistsOrCleanup(playlistRow, options = {}) {
     }
 }
 
-// GET /api/custom-playlists — list the calling user's custom playlists for the current class
+// GET /api/custom-playlists — list custom playlists for the caller's current class
 router.get('/api/custom-playlists', isAuthenticated, async (req, res) => {
     const userId = req.session?.token?.id;
     if (!userId) return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -175,8 +188,13 @@ router.get('/api/custom-playlists', isAuthenticated, async (req, res) => {
         const classId = await getClassId();
         const rows = await new Promise((resolve, reject) => {
             db.all(
-                'SELECT id, spotify_playlist_id, name, song_count, image_url, created_at FROM custom_playlists WHERE user_id = ? AND class_id IS ? ORDER BY created_at DESC',
-                [userId, classId],
+                `SELECT cp.id, cp.spotify_playlist_id, cp.name, cp.song_count, cp.image_url, cp.created_at, cp.user_id,
+                        COALESCE(u.displayName, 'Unknown') as owner_name
+                 FROM custom_playlists cp
+                 LEFT JOIN users u ON u.id = cp.user_id
+                 WHERE cp.class_id IS ?
+                 ORDER BY cp.created_at DESC`,
+                [classId],
                 (err, rows) => err ? reject(err) : resolve(rows || [])
             );
         });
@@ -185,10 +203,17 @@ router.get('/api/custom-playlists', isAuthenticated, async (req, res) => {
             try {
                 const check = await ensureCustomPlaylistExistsOrCleanup(row, { spotifyUserId });
                 if (!check.exists) return null;
-                return { ...row, image_url: check.imageUrl || row.image_url || null };
+                return {
+                    ...row,
+                    image_url: check.imageUrl || row.image_url || null,
+                    is_owner: Number(row.user_id) === Number(userId)
+                };
             } catch (verifyErr) {
                 console.warn('[custom-playlists:list] verify failed for row', row.id, verifyErr.message);
-                return row;
+                return {
+                    ...row,
+                    is_owner: Number(row.user_id) === Number(userId)
+                };
             }
         }));
 
@@ -329,7 +354,8 @@ router.get('/api/custom-playlists/:id/tracks', isAuthenticated, async (req, res)
     if (isNaN(playlistDbId)) return res.status(400).json({ ok: false, error: 'Invalid playlist ID' });
 
     try {
-        const playlist = await getCustomPlaylist(playlistDbId, userId);
+        const classId = await getClassId();
+        const playlist = await getCustomPlaylistForClass(playlistDbId, classId);
         if (!playlist) return res.status(403).json({ ok: false, error: 'Playlist not found' });
 
         const playlistCheck = await ensureCustomPlaylistExistsOrCleanup(playlist);
@@ -357,7 +383,15 @@ router.get('/api/custom-playlists/:id/tracks', isAuthenticated, async (req, res)
             album: { image: item.track.album?.images?.[0]?.url || null }
         }));
 
-        res.json({ ok: true, playlist: { id: playlistDbId, name: playlist.name }, tracks: simplified });
+        res.json({
+            ok: true,
+            playlist: {
+                id: playlistDbId,
+                name: playlist.name,
+                canEdit: true
+            },
+            tracks: simplified
+        });
     } catch (err) {
         console.error('[custom-playlists:tracks]', err);
         res.status(500).json({ ok: false, error: 'Failed to load tracks' });
@@ -395,7 +429,8 @@ router.post('/api/custom-playlists/add-song', isAuthenticated, async (req, res) 
     if (!isValidTrackUri(trackUri)) return res.status(400).json({ ok: false, error: 'Invalid track URI' });
 
     try {
-        const playlist = await getCustomPlaylist(playlistDbId, userId);
+        const classId = await getClassId();
+        const playlist = await getCustomPlaylistForClass(playlistDbId, classId);
         if (!playlist) return res.status(403).json({ ok: false, error: 'Playlist not found' });
 
         const playlistCheck = await ensureCustomPlaylistExistsOrCleanup(playlist);
@@ -451,7 +486,6 @@ router.post('/api/custom-playlists/add-song', isAuthenticated, async (req, res) 
 });
 
 // POST /api/custom-playlists/remove-song — remove a song from a custom playlist (50 digipogs).
-// Only works on custom_playlists rows owned by the user — pre-existing Spotify playlists cannot be targeted.
 router.post('/api/custom-playlists/remove-song', isAuthenticated, async (req, res) => {
     const userId = req.session?.token?.id;
     if (!userId) return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -482,8 +516,8 @@ router.post('/api/custom-playlists/remove-song', isAuthenticated, async (req, re
     if (!isValidTrackUri(trackUri)) return res.status(400).json({ ok: false, error: 'Invalid track URI' });
 
     try {
-        // Ownership check is enforced here — only custom_playlists rows owned by this user are accessible
-        const playlist = await getCustomPlaylist(playlistDbId, userId);
+        const classId = await getClassId();
+        const playlist = await getCustomPlaylistForClass(playlistDbId, classId);
         if (!playlist) return res.status(403).json({ ok: false, error: 'Playlist not found' });
 
         const playlistCheck = await ensureCustomPlaylistExistsOrCleanup(playlist);
@@ -561,7 +595,8 @@ router.post('/api/custom-playlists/queue', isAuthenticated, async (req, res) => 
             }
         }
 
-        const playlist = await getCustomPlaylist(playlistDbId, userId);
+        const classId = await getClassId();
+        const playlist = await getCustomPlaylistForClass(playlistDbId, classId);
         if (!playlist) return res.status(403).json({ ok: false, error: 'Playlist not found' });
 
         const playlistCheck = await ensureCustomPlaylistExistsOrCleanup(playlist);
