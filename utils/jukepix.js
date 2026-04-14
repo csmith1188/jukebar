@@ -8,10 +8,28 @@ const apikey = process.env.JUKEPIX_API_KEY;
 const jukepix = process.env.JUKEPIX_URL;
 const jukepixLength = process.env.JUKEPIX_LENGTH;
 
+function isTruthyEnvValue(value) {
+    if (value === undefined || value === null) return false;
+
+    const normalized = String(value).trim().toLowerCase();
+    return !['false', '0', 'no', 'off', ''].includes(normalized);
+}
+
+function isJukepixFeatureEnabled() {
+    const rawValue = process.env.JUKEPIX_ENABLED;
+
+    if (rawValue === undefined || rawValue === null) {
+        return true;
+    }
+
+    return isTruthyEnvValue(rawValue);
+}
+
 console.log('[JUKEPIX] Configuration:', {
     url: jukepix,
     length: jukepixLength,
-    hasApiKey: !!apikey
+    hasApiKey: !!apikey,
+    envEnabled: isJukepixFeatureEnabled()
 });
 
 let jukepixEnabled = false;
@@ -97,7 +115,7 @@ async function resolveTrackSettings(trackName, artistName) {
 }
 
 const trackCheckInterval = setInterval(async () => {
-    if (!jukepixEnabled) {
+    if (!isJukepixEnabled()) {
         if (!trackCheckInterval._lastSkipLog || Date.now() - trackCheckInterval._lastSkipLog > 60000) {
             console.log('[JUKEPIX] Track check skipped - Jukepix not enabled');
             trackCheckInterval._lastSkipLog = Date.now();
@@ -279,6 +297,12 @@ function displayTrack(track, settings = null) {
 }
 
 function setJukepix(enabled) {
+    if (enabled && !isJukepixFeatureEnabled()) {
+        console.log('[JUKEPIX] Jukepix cannot be enabled because JUKEPIX_ENABLED is disabled');
+        jukepixEnabled = false;
+        return jukepixEnabled;
+    }
+
     jukepixEnabled = enabled;
 
     try {
@@ -418,12 +442,13 @@ function setJukepix(enabled) {
 }
 
 function isJukepixEnabled() {
-    return jukepixEnabled;
+    return isJukepixFeatureEnabled() && jukepixEnabled;
 }
 
 module.exports = {
     displayTrack,
     setJukepix,
     isJukepixEnabled,
+    isJukepixFeatureEnabled,
     jukepix
 };
