@@ -4570,6 +4570,28 @@ p {
     object-fit: cover;
 }
 
+.playlist-selected-meta {
+    flex: 1;
+    min-width: 0;
+}
+
+.playlist-selected-title,
+.playlist-selected-artist {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlist-selected-title {
+    font-weight: 600;
+    font-size: 0.85em;
+}
+
+.playlist-selected-artist {
+    color: #b3b3b3;
+    font-size: 0.75em;
+}
+
 @media (max-width: 560px) {
     .playlist-modal-content {
         width: min(96vw, 96vw) !important;
