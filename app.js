@@ -414,6 +414,10 @@ app.get('/', isAuthenticated, (req, res) => {
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
             voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+            createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
+            addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
+            removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
+            customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
             changelog: changelog
         });
     } catch (error) {
@@ -435,6 +439,10 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
             skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
             voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+            createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
+            addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
+            removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
+            customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
             changelog: changelog
         });
     } catch (error) {
@@ -504,6 +512,7 @@ app.use('/', leaderboardRoutes);
 app.use('/', userRoutes);
 app.use('/', require('./routes/jukepix'));
 app.use('/', require('./routes/settings'));
+app.use('/', require('./routes/customPlaylists'));
 
 server.listen(port, async () => {
     io.disconnectSockets();
