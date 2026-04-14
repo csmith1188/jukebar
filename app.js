@@ -30,7 +30,7 @@ const sessionMiddleware = session({
     cookie: {
         secure: process.env.NODE_ENV === 'production', // true on HTTPS in production
         httpOnly: true,
-        sameSite: 'lax', // helps mitigate CSRF for top-level navigations
+        sameSite: 'lax', // helps mitigate CSRF for top-level navigation
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 });
@@ -481,11 +481,13 @@ app.get('/leaderboard', isAuthenticated, (req, res) => {
 
 app.get('/teacher', isAuthenticated, (req, res) => {
     try {
+        const jukepixUtils = require('./utils/jukepix');
         if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
             res.render('teacher.ejs', {
                 user: req.session.user,
                 userID: req.session.token?.id,
-                jukepixEnabled: require('./utils/jukepix').isJukepixEnabled(),
+                jukepixEnabled: jukepixUtils.isJukepixEnabled(),
+                jukepixFeatureEnabled: jukepixUtils.isJukepixFeatureEnabled(),
                 userPermission: req.session.permission || null,
                 ownerIDs: getOwnerIds()
             });

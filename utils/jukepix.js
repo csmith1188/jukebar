@@ -449,5 +449,6 @@ module.exports = {
     displayTrack,
     setJukepix,
     isJukepixEnabled,
+    isJukepixFeatureEnabled,
     jukepix
 };
