@@ -241,6 +241,30 @@ io.on('connection', (socket) => {
 
             // Start the vote with expiration callback
             const voteId = `${trackUri}-${Date.now()}`;
+            /* Formbar song ban maybe?
+
+            socket.emit('startPoll', {
+                responseNumber: 1,
+                responseTextBox: false,
+                pollPrompt: `Ban ${songName} by ${artist}?`,
+
+                polls: [
+                    {answer: 'Yes', weight: 0, color: 'green'},
+                    {answer: 'No', weight: 0, color: 'red'}
+                ]
+
+                blind: false
+                weight: 0
+                tags: []
+                boxes: []
+                indeterminate: []
+                lastResponse: []
+                multiRes: false
+                allowVoteChanges: true
+            });
+
+            Do something next idk
+            */
             const voteData = voteManager.startBanVote(
                 voteId,
                 trackUri,
