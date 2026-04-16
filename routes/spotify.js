@@ -680,7 +680,7 @@ router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, asyn
             const formatted = {
             id: playlist.id,
             name: playlist.name || 'Untitled Playlist',
-            totalTracks: playlist.tracks?.total ?? 0,
+            totalTracks: playlist.items?.total ?? playlist.tracks?.total ?? 0,
             image: playlist.images?.[0]?.url || null,
             owner: playlist.owner?.display_name || playlist.owner?.id || 'Unknown',
             url: playlist.external_urls?.spotify || null,
@@ -878,7 +878,7 @@ router.post('/api/playlists/queue', isAuthenticated, async (req, res) => {
         }
 
         if (!queueableCount) {
-            return res.status(400).json({ ok: false, error: 'No queueable tracks found in this playlist', skipped: queueData.skipped });
+            return res.status(400).json({ ok: false, error: 'No queueable tracks found in this playlist', skipped: playlistStats.skipped });
         }
 
         const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
