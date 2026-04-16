@@ -58,9 +58,9 @@ async function validateTrackUris(uris) {
     }
 
     await ensureSpotifyAccessToken();
-    const ids = uris.map(extractTrackId);
-    const res = await spotifyApi.getTracks(ids);
-    const tracks = res.body.tracks || [];
+    // Batch GET /tracks was removed for Dev Mode apps in Feb 2026; fetch individually in parallel
+    const trackResults = await Promise.all(uris.map(uri => spotifyApi.getTrack(extractTrackId(uri)).catch(() => null)));
+    const tracks = trackResults.map(r => r?.body || null);
 
     const bannedSongs = await getBannedSongs();
     const bannedPairs = new Set(
@@ -114,21 +114,6 @@ function isSpotifyNotFoundError(err) {
     return err?.statusCode === 404 || err?.body?.error?.status === 404;
 }
 
-async function getCurrentSpotifyUserId() {
-    await ensureSpotifyAccessToken();
-    const me = await spotifyApi.getMe();
-    return me.body?.id || null;
-}
-
-async function isPlaylistInCurrentUsersLibrary(playlistOwnerId, playlistId, spotifyUserId) {
-    if (!playlistId) return false;
-    if (!playlistOwnerId) return true;
-    const currentSpotifyUserId = spotifyUserId || await getCurrentSpotifyUserId();
-    if (!currentSpotifyUserId) return false;
-
-    const followsRes = await spotifyApi.areFollowingPlaylist(playlistOwnerId, playlistId, [currentSpotifyUserId]);
-    return Boolean(Array.isArray(followsRes.body) ? followsRes.body[0] : false);
-}
 
 function deleteCustomPlaylistById(playlistDbId) {
     return new Promise((resolve, reject) => {
@@ -148,20 +133,17 @@ function updateCustomPlaylistImage(playlistDbId, imageUrl) {
     });
 }
 
-async function ensureCustomPlaylistExistsOrCleanup(playlistRow, options = {}) {
+async function ensureCustomPlaylistExistsOrCleanup(playlistRow) {
     if (!playlistRow?.spotify_playlist_id) {
         return { exists: false, deleted: true, imageUrl: null };
     }
 
     await ensureSpotifyAccessToken();
     try {
-        const playlistMeta = await spotifyApi.getPlaylist(playlistRow.spotify_playlist_id, { fields: 'id,images,owner(id)' });
-        const playlistOwnerId = playlistMeta.body?.owner?.id || null;
-        const inLibrary = await isPlaylistInCurrentUsersLibrary(playlistOwnerId, playlistRow.spotify_playlist_id, options.spotifyUserId);
-        if (!inLibrary) {
-            await deleteCustomPlaylistById(playlistRow.id);
-            return { exists: false, deleted: true, imageUrl: null };
-        }
+        // areFollowingPlaylist was removed in the Feb 2026 Spotify API changes for Dev Mode apps.
+        // A successful getPlaylist response is sufficient to confirm the playlist still exists
+        // and is accessible — all custom playlists are owned by the Jukebar account.
+        const playlistMeta = await spotifyApi.getPlaylist(playlistRow.spotify_playlist_id, { fields: 'id,images' });
 
         const imageUrl = playlistMeta.body?.images?.[0]?.url || null;
 
@@ -198,10 +180,9 @@ router.get('/api/custom-playlists', isAuthenticated, async (req, res) => {
                 (err, rows) => err ? reject(err) : resolve(rows || [])
             );
         });
-        const spotifyUserId = await getCurrentSpotifyUserId();
         const checkedRows = await Promise.all(rows.map(async (row) => {
             try {
-                const check = await ensureCustomPlaylistExistsOrCleanup(row, { spotifyUserId });
+                const check = await ensureCustomPlaylistExistsOrCleanup(row);
                 if (!check.exists) return null;
                 return {
                     ...row,
@@ -263,16 +244,10 @@ router.post('/api/custom-playlists/create', isAuthenticated, async (req, res) =>
         await ensureSpotifyAccessToken();
         const accessToken = spotifyApi.getAccessToken();
 
-        const meRes = await fetch('https://api.spotify.com/v1/me', {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        if (!meRes.ok) throw new Error(`getMe failed: ${meRes.status}`);
-        const meData = await meRes.json();
-        const spotifyUserId = meData.id;
-
         const classId = await getClassId();
 
-        const createRes = await fetch(`https://api.spotify.com/v1/users/${spotifyUserId}/playlists`, {
+        // POST /users/{id}/playlists was removed for Dev Mode apps in Feb 2026; use /me/playlists instead
+        const createRes = await fetch('https://api.spotify.com/v1/me/playlists', {
             method: 'POST',
             headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: trimmedName, public: false, description: 'Custom playlist created via Jukebar' })
