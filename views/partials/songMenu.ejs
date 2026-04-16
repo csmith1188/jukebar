@@ -22,6 +22,7 @@
         currentMenuTrackUri = details.uri;
         dropdown.dataset.trackName = details.name;
         dropdown.dataset.trackArtist = details.artist;
+        dropdown.dataset.trackImage = details.imageUrl || '';
         dropdown.dataset.addedAt = details.addedAt || 0;
 
         // Position the dropdown
@@ -116,15 +117,14 @@
 
                 openBanReasonModal((reason) => {
                     if (userIsOwner) {
-                        // Owner bypass - start vote immediately
-                        startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist, reason);
+                        startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist, reason, trackData.trackImage);
                     } else {
-                        // Regular user - show payment modal first
                         pendingAction = 'Ban Vote';
                         pendingTrackUri = currentMenuTrackUri;
                         pendingTrackName = trackData.trackName || 'Unknown Track';
                         pendingTrackArtist = trackData.trackArtist || 'Unknown Artist';
                         pendingBanReason = reason;
+                        pendingTrackMeta = { image: trackData.trackImage || '' };
                         console.log('Set pendingAction to:', pendingAction);
                         console.log('Set pendingTrackUri to:', pendingTrackUri);
                         console.log('Set pendingTrackName to:', pendingTrackName);
@@ -141,7 +141,7 @@
         dropdown.style.display = 'none';
     });
 
-    function startBanVote(trackUri, trackName, trackArtist, reason) {
+    function startBanVote(trackUri, trackName, trackArtist, reason, trackImage) {
         console.log('Starting ban vote, socket:', window.banVoteSocket);
 
         const trimmedReason = (reason || 'student ban').trim();
@@ -157,7 +157,8 @@
                 trackName: trackName || 'Unknown Track',
                 trackArtist: trackArtist || 'Unknown Artist',
                 initiator: user,
-                reason: trimmedReason
+                reason: trimmedReason,
+                trackImage: trackImage || ''
             });
         } else {
             console.error('Socket connection not available');

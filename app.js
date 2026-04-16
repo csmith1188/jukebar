@@ -161,9 +161,10 @@ io.on('connection', (socket) => {
     // Handle ban vote initiation
     socket.on('initiateBanVote', async (data) => {
         try {
-            const { trackUri, trackName, trackArtist, initiator, reason } = data;
+            const { trackUri, trackName, trackArtist, initiator, reason, trackImage } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
             const banReason = (typeof reason === 'string' && reason.trim()) ? reason.trim() : 'student ban';
+            const imageUrl = typeof trackImage === 'string' ? trackImage : null;
 
             if (banReason.length > 200) {
                 socket.emit('banVoteError', { error: 'Ban reason must be 200 characters or fewer' });
@@ -242,10 +243,9 @@ io.on('connection', (socket) => {
                 async (expiredData) => {
                     if (expiredData.passed) {
                         console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
-                        // Insert into banned_songs table
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
-                            [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                            [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri, imageUrl],
                             async (err) => {
                                 if (err) {
                                     console.error('Database insertion error (ban on expiration):', err);
@@ -261,7 +261,8 @@ io.on('connection', (socket) => {
                         console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
                         io.emit('banVoteFailed', expiredData);
                     }
-                }
+                },
+                { imageUrl }
             );
 
             // Broadcast to all clients
@@ -304,8 +305,8 @@ io.on('connection', (socket) => {
                     await new Promise((resolve, reject) => {
                         console.log('Inserting into banned_songs:', result.trackName, result.trackArtist);
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason) VALUES (?, ?, ?, ?)',
-                            [result.trackName, result.trackArtist, result.userId, result.reason],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                            [result.trackName, result.trackArtist, result.userId, result.reason, result.trackUri || null, result.extra?.imageUrl || null],
                             (err) => {
                                 if (err) {
                                     console.error('Database insertion error:', err);

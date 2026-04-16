@@ -1,6 +1,6 @@
 <div class="transaction-modal-content">
     <div class="transaction-modal-header">
-        <h3>Transactions for <%= username %></h3>
+        <h3>Play History for <%= username %></h3>
         <div class="header-right">
             <div class="pagination-info">
                 <span>Page <%= pagination.currentPage %> of <%= pagination.totalPages %> (<%= pagination.totalCount %> total)</span>
@@ -14,9 +14,9 @@
                 <table class="transaction-table">
                     <thead class="sticky-header">
                         <tr>
+                            <th style="width:50px;"></th>
                             <th>Track</th>
                             <th>Artist</th>
-                            <th>Action</th>
                             <th>Cost</th>
                             <th>Time</th>
                         </tr>
@@ -24,9 +24,15 @@
                     <tbody>
                         <% transactions.forEach(function(transaction) { %>
                             <tr>
+                                <td style="width:50px;padding:4px;">
+                                    <% if (transaction.image_url) { %>
+                                        <img src="<%= transaction.image_url %>" alt="" style="width:40px;height:40px;border-radius:4px;object-fit:cover;" />
+                                    <% } else { %>
+                                        <div style="width:40px;height:40px;background:#282828;border-radius:4px;"></div>
+                                    <% } %>
+                                </td>
                                 <td><%= transaction.track_name || 'Unknown' %></td>
                                 <td><%= transaction.artist_name || 'Unknown' %></td>
-                                <td><span class="action-badge <%= transaction.action.toLowerCase() %>"><%= transaction.action %></span></td>
                                 <td><span class="cost-badge"><%= transaction.cost %> Digipogs</span></td>
                                 <td><%= transaction.formatted_time %></td>
                             </tr>
@@ -35,7 +41,7 @@
                 </table>
             </div>
         <% } else { %>
-            <p class="no-transactions">No transactions found for this user.</p>
+            <p class="no-transactions">No plays found for this user.</p>
         <% } %>
     </div>
     <div class="transaction-modal-footer">
@@ -52,4 +58,3 @@
         </div>
     </div>
 </div>
-

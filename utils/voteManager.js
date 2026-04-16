@@ -26,7 +26,7 @@ class VoteManager {
         };
     }
 
-    startBanVote(voteId, trackUri, trackName, trackArtist, banReason, initiator, onlineCount, onExpireCallback) {
+    startBanVote(voteId, trackUri, trackName, trackArtist, banReason, initiator, onlineCount, onExpireCallback, extra = {}) {
         const requiredVotes = Math.ceil(onlineCount / 2); // Simple majority
 
         console.log(`Starting ban vote: onlineCount=${onlineCount}, requiredVotes=${requiredVotes}`);
@@ -40,6 +40,7 @@ class VoteManager {
             initiator,
             onlineCount,
             requiredVotes,
+            extra,
             yesVotes: new Set([initiator]), // Initiator automatically votes yes
             noVotes: new Set(),
             startTime: Date.now(),
@@ -146,7 +147,8 @@ class VoteManager {
                 trackArtist: voteData.trackArtist,
                 reason: voteData.banReason,
                 outcomeReason: 'majority voted yes',
-                userId: voteData.initiator
+                userId: voteData.initiator,
+                extra: voteData.extra
             };
         }
 

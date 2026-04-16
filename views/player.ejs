@@ -333,6 +333,7 @@
             let selectedPlaylistQuote = null;
 
             // Custom playlist state
+            let pendingTrackMeta = {};
             let pendingCustomPlaylistId = null;
             let pendingCustomPlaylistName = null;
             let pendingCustomPlaylistTrackUri = null;
@@ -556,13 +557,14 @@
 
                         const userIsOwner = isOwnerClient(currentID);
                         if (userIsOwner) {
-                            startBanVote(actionTrack.uri, actionTrack.name, actionTrack.artist, 'student ban');
+                            startBanVote(actionTrack.uri, actionTrack.name, actionTrack.artist, 'student ban', actionTrack.image);
                         } else {
                             pendingAction = 'Ban Vote';
                             pendingTrackUri = actionTrack.uri;
                             pendingTrackName = actionTrack.name;
                             pendingTrackArtist = actionTrack.artist;
                             pendingBanReason = 'student ban';
+                            pendingTrackMeta = { image: actionTrack.image || '' };
                             showPayment();
                         }
                     });
@@ -636,7 +638,7 @@
                         searchSpotify();
                     }
 
-                    async function checkPaymentAndPlay(uri) {
+                    async function checkPaymentAndPlay(uri, trackMeta = {}) {
                         // Check if user is banned
                         if (userIsBanned) {
                             Notify('You have been banned from Jukebar. Contact your teacher.', 'error');
@@ -651,12 +653,13 @@
 
                         if (isOwnerClient(currentID)) {
                             const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
-                            addToQueue(uri, anonMode);
+                            addToQueue(uri, anonMode, trackMeta);
                             return;
                         }
 
                         if (!hasPaid) {
                             pendingTrackUri = uri;
+                            pendingTrackMeta = trackMeta;
                             pendingAction = 'play';
                             showPayment();
                             return;
@@ -664,7 +667,7 @@
 
                         // Reset payment flag after using it
                         hasPaid = false;
-                        addToQueue(uri);
+                        addToQueue(uri, null, trackMeta);
                     }
 
                     async function checkPaymentAndSkip() {
@@ -736,14 +739,14 @@
                         }
                     }
 
-                    function addToQueue(uri, anonMode = null) {
+                    function addToQueue(uri, anonMode = null, trackMeta = {}) {
                         if (anonMode === null) {
                             anonMode = document.getElementById('anonMode')?.checked || false;
                         }
                         fetch('/addToQueue', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ uri, anonMode })
+                            body: JSON.stringify({ uri, anonMode, trackName: trackMeta.name || '', trackArtist: trackMeta.artist || '', trackImage: trackMeta.image || '' })
                         })
                             .then(response => {
                                 if (response.ok) {
@@ -770,17 +773,17 @@
                             const trackDiv = document.createElement('div');
                             trackDiv.className = 'search-result-item';
                             trackDiv.innerHTML = `
-                        <img src="${track.album.image}" alt="${track.album.name}" class="album-cover" />
+                        ${track.album.image ? `<img src="${track.album.image}" alt="${track.album.name || ''}" class="album-cover" />` : `<div class="album-cover" style="background:#282828;border-radius:4px;flex-shrink:0;"></div>`}
                         <div class="search-result-content-outer">
                             <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
                             <div class="search-result-content-pushies">
                                 <div class="search-result-title" title="${track.name}">${track.name}</div>
                                 <div class="search-result-artist" title="${track.artist}">${track.artist}</div>
                                 <div class="search-result-actions">
-                                    <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
+                                    <button class="play-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" data-image="${track.album.image || ''}" title="Add to queue">
                                         <img src="/img/play.png" alt="Play" class="play-icon">
                                     </button>
-                                    <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
+                                    <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" data-image="${track.album.image || ''}" title="Vote to ban">
                                         <img src="/img/ban.png" alt="Ban" class="ban-icon">
                                     </button>
                                 </div>
@@ -946,7 +949,7 @@
                                         }
 
                                         itemDiv.innerHTML = `
-                                        <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                                        ${item.album?.image ? `<img src="${item.album.image}" alt="${item.album.name || ''}" class="album-cover" />` : `<div class="album-cover" style="background:#282828;border-radius:4px;flex-shrink:0;"></div>`}
                                         <div class="queue-item-content">
                                             <div class="queue-item-title">${item.name}</div>
                                             <div class="queue-item-artist">${item.artist}</div>
@@ -985,7 +988,7 @@
                                         const itemDiv = document.createElement('div');
                                         itemDiv.className = 'current-item';
                                         itemDiv.innerHTML = `
-                                    <img src="${item.album.image}" alt="${item.album.name}" class="album-cover" />
+                                    ${item.album?.image ? `<img src="${item.album.image}" alt="${item.album.name || ''}" class="album-cover" />` : `<div class="album-cover" style="background:#282828;border-radius:4px;flex-shrink:0;"></div>`}
                                     <div class="current-item-content">
                                         <div class="current-item-title">${item.name}</div>
                                         <div class="current-item-artist">${item.artist}</div>
@@ -1057,8 +1060,10 @@
 
                         if (action === 'play' && pendingTrackUri) {
                             const uri = pendingTrackUri;
+                            const meta = pendingTrackMeta || {};
                             pendingTrackUri = null;
-                            checkPaymentAndPlay(uri);
+                            pendingTrackMeta = {};
+                            checkPaymentAndPlay(uri, meta);
                         } else if (action === 'skip') {
                             checkPaymentAndSkip();
                         } else if (action === 'Skip Shield' && pendingTrackUri) {
@@ -1074,11 +1079,13 @@
                             const trackName = pendingTrackName || 'Unknown Track';
                             const trackArtist = pendingTrackArtist || 'Unknown Artist';
                             const reason = pendingBanReason || 'student ban';
+                            const banImage = pendingTrackMeta?.image || '';
                             pendingTrackUri = null;
                             pendingTrackName = null;
                             pendingTrackArtist = null;
                             pendingBanReason = null;
-                            startBanVote(uri, trackName, trackArtist, reason);
+                            pendingTrackMeta = {};
+                            startBanVote(uri, trackName, trackArtist, reason, banImage);
                         } else if (action === 'createPlaylist') {
                             finalizeCreatePlaylist();
                         } else if (action === 'addPlaylistSong' && pendingCustomPlaylistTrackUri) {
@@ -1267,7 +1274,7 @@
                         if (e.target.matches('.play-button, .play-button-icon') || e.target.closest('.play-button, .play-button-icon')) {
                             const button = e.target.matches('.play-button, .play-button-icon') ? e.target : e.target.closest('.play-button, .play-button-icon');
                             const uri = button.dataset.uri;
-                            if (uri) checkPaymentAndPlay(uri);
+                            if (uri) checkPaymentAndPlay(uri, { name: button.dataset.name || '', artist: button.dataset.artist || '', image: button.dataset.image || '' });
                         }
 
                         // Handle ban button
@@ -1276,6 +1283,7 @@
                             const uri = button.dataset.uri;
                             const name = button.dataset.name;
                             const artist = button.dataset.artist;
+                            const image = button.dataset.image || '';
 
                             // Check if user is banned
                             if (userIsBanned) {
@@ -1287,13 +1295,14 @@
                             const userIsOwner = isOwnerClient(currentID);
 
                             if (userIsOwner) {
-                                startBanVote(uri, name, artist, 'student ban');
+                                startBanVote(uri, name, artist, 'student ban', image);
                             } else {
                                 pendingAction = 'Ban Vote';
                                 pendingTrackUri = uri;
                                 pendingTrackName = name;
                                 pendingTrackArtist = artist;
                                 pendingBanReason = 'student ban';
+                                pendingTrackMeta = { image };
                                 showPayment();
                             }
                         }
@@ -1479,10 +1488,10 @@
                                             <div class="search-result-title" title="${track.name}">${track.name}</div>
                                             <div class="search-result-artist" title="${track.artist}">${track.artist}</div>
                                             <div class="search-result-actions">
-                                                <button class="play-button-icon" data-uri="${track.uri}" title="Add to queue">
+                                                <button class="play-button-icon" data-uri="${track.uri}" data-name="${(track.name||'').replace(/"/g, '&quot;')}" data-artist="${(track.artist||'').replace(/"/g, '&quot;')}" data-image="${track.album?.image || ''}" title="Add to queue">
                                                     <img src="/img/play.png" alt="Play" class="play-icon">
                                                 </button>
-                                                <button class="ban-button-icon" data-uri="${track.uri}" data-name="${track.name.replace(/"/g, '&quot;')}" data-artist="${track.artist.replace(/"/g, '&quot;')}" title="Vote to ban">
+                                                <button class="ban-button-icon" data-uri="${track.uri}" data-name="${(track.name||'').replace(/"/g, '&quot;')}" data-artist="${(track.artist||'').replace(/"/g, '&quot;')}" data-image="${track.album?.image || ''}" title="Vote to ban">
                                                     <img src="/img/ban.png" alt="Ban" class="ban-icon">
                                                 </button>
                                             </div>
@@ -1501,7 +1510,14 @@
                         });
 
                         socket.on('queueHistoryUpdated', () => {
-                            // Fired when the user clears their queue history
+                            const searchResults = document.getElementById('searchResults');
+                            if (searchResults) {
+                                searchResults.innerHTML = '';
+                            }
+                            loadRecentlyQueued();
+                        });
+
+                        socket.on('recentlyQueuedCleared', () => {
                             const searchResults = document.getElementById('searchResults');
                             if (searchResults) {
                                 searchResults.innerHTML = '';
@@ -1603,7 +1619,8 @@
                             uri: trackUriForActions,
                             addedAt: addedAtForActions,
                             name: track.name,
-                            artist: track.artist
+                            artist: track.artist,
+                            image: track.album?.image || ''
                         };
 
                         // Update global currentlyPlayingUri for skip functionality

@@ -49,15 +49,27 @@ async function fetchPlaylistTrackItems(playlistId) {
     let offset = 0;
     const limit = 100;
 
-    // /tracks was renamed to /items in the Feb 2026 Spotify API changes
     while (true) {
         const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}`, {
             headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
         });
+
+        if (!res.ok) {
+            const body = await res.text();
+            console.error(`[payment:fetchPlaylistTrackItems] Spotify returned ${res.status} at offset=${offset}: ${body}`);
+            if (res.status === 403) {
+                throw new Error('Spotify denied access to this playlist. The connected Spotify account must own or collaborate on the playlist (Feb 2026 API change).');
+            } else if (res.status === 429) {
+                const retryAfter = res.headers.get('retry-after');
+                throw new Error(`Rate limited by Spotify. Try again in ${retryAfter || 'a few'} seconds.`);
+            }
+            throw new Error(`Spotify returned HTTP ${res.status} when fetching playlist tracks.`);
+        }
+
         const data = await res.json();
         const batch = data?.items || [];
         items.push(...batch);
-        if (batch.length < limit) break;
+        if (batch.length < limit || (data?.total && items.length >= data.total)) break;
         offset += limit;
     }
 
