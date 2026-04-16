@@ -343,9 +343,13 @@ router.get('/api/custom-playlists/:id/tracks', isAuthenticated, async (req, res)
         let offset = 0;
         const limit = 100;
 
+        // /tracks was renamed to /items in the Feb 2026 Spotify API changes
         while (true) {
-            const response = await spotifyApi.getPlaylistTracks(playlist.spotify_playlist_id, { limit, offset });
-            const items = response.body?.items || [];
+            const res = await fetch(`https://api.spotify.com/v1/playlists/${playlist.spotify_playlist_id}/items?limit=${limit}&offset=${offset}`, {
+                headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
+            });
+            const data = await res.json();
+            const items = data?.items || [];
             tracks.push(...items.filter(item => item?.track && !item.track.is_local && item.track.uri?.startsWith('spotify:track:')));
             if (items.length < limit) break;
             offset += limit;

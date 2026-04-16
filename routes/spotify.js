@@ -327,9 +327,13 @@ async function fetchPlaylistTracks(playlistId) {
     let offset = 0;
     const limit = 100;
 
+    // /tracks was renamed to /items in the Feb 2026 Spotify API changes
     while (true) {
-        const response = await spotifyApi.getPlaylistTracks(playlistId, { limit, offset });
-        const items = response.body?.items || [];
+        const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}`, {
+            headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
+        });
+        const data = await res.json();
+        const items = data?.items || [];
         tracks.push(...items);
         if (items.length < limit) break;
         offset += limit;
