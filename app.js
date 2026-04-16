@@ -94,6 +94,7 @@ async function handleBanPassed(trackName, trackArtist, trackUri) {
 // Formbar Socket.IO connection
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
 const API_KEY = process.env.API_KEY || '';
+const FORMBAR_POLL_BAN_VOTE = process.env.FORMBAR_POLL_BAN_VOTE
 
 console.log('=== Formbar Configuration ===');
 console.log('FORMBAR_ADDRESS:', FORMBAR_ADDRESS);
@@ -241,78 +242,106 @@ io.on('connection', (socket) => {
 
             // Start the vote with expiration callback
             const voteId = `${trackUri}-${Date.now()}`;
-            /* Formbar song ban maybe?
 
-            socket.emit('startPoll', {
-                responseNumber: 1,
-                responseTextBox: false,
-                pollPrompt: `Ban ${songName} by ${artist}?`,
+            // Do the vote ban with formbar
+            if (FORMBAR_POLL_BAN_VOTE) {
 
-                polls: [
-                    {answer: 'Yes', weight: 0, color: 'green'},
-                    {answer: 'No', weight: 0, color: 'red'}
-                ]
+                const fbBanVoteResults = (poll) => {
+                    let votesFor = poll.find(r => r.answer == 'Yes').responses
+                    let votesAgainst = poll.find(r => r.answer == 'No').responses
 
-                blind: false
-                weight: 0
-                tags: []
-                boxes: []
-                indeterminate: []
-                lastResponse: []
-                multiRes: false
-                allowVoteChanges: true
-            });
-
-            Do something next idk
-            */
-            const voteData = voteManager.startBanVote(
-                voteId,
-                trackUri,
-                trackName,
-                trackArtist,
-                banReason,
-                userId,
-                onlineCount,
-                async (expiredData) => {
-                    if (expiredData.passed) {
-                        console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
-                        // Insert into banned_songs table
+                    if (votesFor > votesAgainst) {
                         db.run(
                             'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
-                            [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri],
+                            [trackName, trackArtist, userId, reason, trackUri],
                             async (err) => {
                                 if (err) {
                                     console.error('Database insertion error (ban on expiration):', err);
                                 } else {
                                     console.log('Successfully inserted ban into database (expiration)');
                                     // Handle ban - remove from queue and skip if playing
-                                    await handleBanPassed(expiredData.trackName, expiredData.trackArtist, expiredData.trackUri);
+                                    await handleBanPassed(trackName, trackArtist, trackUri);
                                 }
                             }
                         );
-                        io.emit('banVotePassed', expiredData);
-                    } else {
-                        console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
-                        io.emit('banVoteFailed', expiredData);
+                        io.emit('banVotePassed', data);
                     }
                 }
-            );
 
-            // Broadcast to all clients
-            io.emit('banVoteStarted', {
-                voteId,
-                trackUri,
-                trackName,
-                trackArtist,
-                initiator,
-                initiatorId: userId,
-                onlineCount: onlineCount,
-                totalOnline: onlineCount,
-                yesVotes: 1,
-                noVotes: 0,
-                reason: banReason,
-                expiresIn: voteData.expiresIn
-            });
+                formbarSocket.emit('startPoll', {
+                    prompt: `Ban ${trackName} by ${trackArtist}?`,
+                    answers: [
+                        { answer: "Yes", weight: 0, color: "#3ae457" },
+                        { answer: "No", weight: 0, color: "#9e0909" }
+                    ],
+                    blind: false,
+                    allowVoteChanges: true,
+                    allowTextResponses: false,
+                    allowMultipleResponses: false
+                })
+
+                formbarSocket.once('startPoll', () => {
+                    formbarSocket.on('classUpdate', (data) => {
+                        if (!data.poll.status) {
+                            fbBanVoteResults(data.poll.responses)
+                        } else {
+                            // '\_(0.0)_/`
+                        }
+                    })
+                })
+
+            } else {
+                // Do it normally
+                const voteData = voteManager.startBanVote(
+                    voteId,
+                    trackUri,
+                    trackName,
+                    trackArtist,
+                    banReason,
+                    userId,
+                    onlineCount,
+                    async (expiredData) => {
+                        if (expiredData.passed) {
+                            console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
+                            // Insert into banned_songs table
+                            db.run(
+                                'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
+                                [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri],
+                                async (err) => {
+                                    if (err) {
+                                        console.error('Database insertion error (ban on expiration):', err);
+                                    } else {
+                                        console.log('Successfully inserted ban into database (expiration)');
+                                        // Handle ban - remove from queue and skip if playing
+                                        await handleBanPassed(expiredData.trackName, expiredData.trackArtist, expiredData.trackUri);
+                                    }
+                                }
+                            );
+                            io.emit('banVotePassed', expiredData);
+                        } else {
+                            console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
+                            io.emit('banVoteFailed', expiredData);
+                        }
+                    }
+                );
+                // Broadcast to all clients
+                io.emit('banVoteStarted', {
+                    voteId,
+                    trackUri,
+                    trackName,
+                    trackArtist,
+                    initiator,
+                    initiatorId: userId,
+                    onlineCount: onlineCount,
+                    totalOnline: onlineCount,
+                    yesVotes: 1,
+                    noVotes: 0,
+                    reason: banReason,
+                    expiresIn: voteData.expiresIn
+                });
+            }
+
+
         } catch (error) {
             console.error('Error initiating ban vote:', error);
             socket.emit('banVoteError', { error: 'Failed to initiate ban vote' });
