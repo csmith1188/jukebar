@@ -75,7 +75,7 @@ async function isPlaylistCurrentlyPlaying(playlistId, playlistItems = null) {
     if (!currentTrackUri) return false;
 
     const items = playlistItems || await fetchPlaylistTrackItems(playlistId);
-    return items.some((item) => item?.track?.uri === currentTrackUri);
+    return items.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
 async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
@@ -83,7 +83,7 @@ async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
     let playableCount = 0;
 
     for (const item of items) {
-        const track = item?.track;
+        const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             continue;
         }
