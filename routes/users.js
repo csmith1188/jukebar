@@ -52,6 +52,7 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
                     t.track_name,
                     t.artist_name,
                     t.track_uri,
+                    t.image_url,
                     t.display_name as user,
                     t.timestamp,
                     datetime(t.timestamp) as formatted_time
@@ -70,7 +71,7 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
 
         const enrichedPlays = plays.map(play => ({
             ...play,
-            albumImage: '/img/placeholder.png'
+            albumImage: play.image_url || ''
         }));
 
         res.json({ ok: true, plays: enrichedPlays });
@@ -95,7 +96,13 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
                     b.reason,
                     b.banned_by,
                     b.timestamp,
-                    u.displayName AS banned_by_name
+                    u.displayName AS banned_by_name,
+                    COALESCE(
+                        NULLIF(b.image_url, ''),
+                        (SELECT t.image_url FROM transactions t
+                         WHERE t.track_uri = b.track_uri AND t.image_url IS NOT NULL AND t.image_url != ''
+                         ORDER BY t.timestamp DESC LIMIT 1)
+                    ) AS image_url
                 FROM banned_songs b
                 LEFT JOIN users u ON u.id = CAST(b.banned_by AS INTEGER)
                 ORDER BY datetime(b.timestamp) DESC, b.id DESC
@@ -120,7 +127,7 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
                 banned_by: song.banned_by,
                 banned_by_name: bannedByDisplay,
                 timestamp: song.timestamp,
-                album_image: '/img/placeholder.png'
+                album_image: song.image_url || ''
             };
         });
 
@@ -298,9 +305,9 @@ router.post('/api/users/transactions', isAuthenticated, requireTeacherAccess, as
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Get total count of transactions for this user
+        // Get total count of play transactions for this user
         const totalCount = await new Promise((resolve, reject) => {
-            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [user.id], (err, row) => {
+            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ? AND action = 'play'", [user.id], (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -309,7 +316,7 @@ router.post('/api/users/transactions', isAuthenticated, requireTeacherAccess, as
             });
         });
 
-        // Get paginated transactions for this user
+        // Get paginated play transactions for this user
         const transactions = await new Promise((resolve, reject) => {
             db.all(`
                 SELECT 
@@ -317,10 +324,11 @@ router.post('/api/users/transactions', isAuthenticated, requireTeacherAccess, as
                     artist_name,
                     action,
                     cost,
+                    image_url,
                     timestamp,
                     datetime(timestamp) as formatted_time
                 FROM transactions 
-                WHERE user_id = ? 
+                WHERE user_id = ? AND action = 'play'
                 ORDER BY timestamp DESC 
                 LIMIT ? OFFSET ?
             `, [user.id, limitNum, offset], (err, rows) => {
@@ -384,9 +392,9 @@ router.post('/api/users/transactions/modal', isAuthenticated, requireTeacherAcce
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Get total count of transactions for this user
+        // Get total count of play transactions for this user
         const totalCount = await new Promise((resolve, reject) => {
-            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [user.id], (err, row) => {
+            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ? AND action = 'play'", [user.id], (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -395,7 +403,7 @@ router.post('/api/users/transactions/modal', isAuthenticated, requireTeacherAcce
             });
         });
 
-        // Get paginated transactions for this user
+        // Get paginated play transactions for this user
         const transactions = await new Promise((resolve, reject) => {
             db.all(`
                 SELECT 
@@ -403,10 +411,11 @@ router.post('/api/users/transactions/modal', isAuthenticated, requireTeacherAcce
                     artist_name,
                     action,
                     cost,
+                    image_url,
                     timestamp,
                     datetime(timestamp) as formatted_time
                 FROM transactions 
-                WHERE user_id = ? 
+                WHERE user_id = ? AND action = 'play'
                 ORDER BY timestamp DESC 
                 LIMIT ? OFFSET ?
             `, [user.id, limitNum, offset], (err, rows) => {
