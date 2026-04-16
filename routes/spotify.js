@@ -6,7 +6,6 @@ const { logTransaction } = require('./logging');
 const queueManager = require('../utils/queueManager');
 const { isAuthenticated } = require('../middleware/auth');
 const { isOwner, getFirstOwnerId } = require('../utils/owners');
-const { logSkipActivity } = require('../utils/skipActivity');
 const { refund: poolRefund } = require('../utils/transferManager');
 const { getCurrentClassId, requestAndWaitForClassId } = require('./socket');
 const { exec } = require('child_process');
@@ -277,6 +276,51 @@ function setPlaylistAllowedState(playlistId, isAllowed, teacherId, classId) {
     });
 }
 
+async function fetchAllUserPlaylists() {
+    const allItems = [];
+    const limit = 50;
+    let offset = 0;
+
+    while (true) {
+        const playlistData = await spotifyApi.getUserPlaylists({ limit, offset });
+        const items = playlistData.body?.items || [];
+        allItems.push(...items);
+        if (items.length < limit) break;
+        offset += limit;
+    }
+
+    return allItems;
+}
+
+function pruneAllowedPlaylistsNotInLibrary(classId, playlistIds) {
+    return new Promise((resolve, reject) => {
+        const uniqueIds = [...new Set((playlistIds || []).filter(Boolean))];
+
+        if (uniqueIds.length === 0) {
+            return db.run(
+                `DELETE FROM allowed_playlists WHERE ${CLASS_ID_WHERE}`,
+                [classId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve(this.changes || 0);
+                }
+            );
+        }
+
+        const placeholders = uniqueIds.map(() => '?').join(',');
+        db.run(
+            `DELETE FROM allowed_playlists
+             WHERE ${CLASS_ID_WHERE}
+               AND spotify_playlist_id NOT IN (${placeholders})`,
+            [classId, ...uniqueIds],
+            function (err) {
+                if (err) return reject(err);
+                resolve(this.changes || 0);
+            }
+        );
+    });
+}
+
 async function fetchPlaylistTracks(playlistId) {
     await ensureSpotifyAccessToken();
     const tracks = [];
@@ -393,17 +437,70 @@ async function isPlaylistCurrentlyPlaying(playlistId) {
 
 router.post('/search', async (req, res) => {
     try {
-        let { query, source, offset } = req.body || {};
+        let { query, source, offset, limit, desiredTotal } = req.body || {};
         if (!query || !query.trim()) {
             return res.status(400).json({ ok: false, error: 'Missing query' });
         }
 
-        offset = Math.max(0, parseInt(offset) || 0);
+        const DEFAULT_SEARCH_LIMIT = 5;
+        const MAX_SEARCH_LIMIT = 10;
+        const DEFAULT_DESIRED_TOTAL = 20;
+        const MAX_DESIRED_TOTAL = 50;
+        const MAX_SEARCH_PAGES = 5;
+        const MAX_SEARCH_OFFSET = 1000;
+
+        const parsedLimit = Number.parseInt(limit, 10);
+        const SEARCH_LIMIT = Number.isInteger(parsedLimit)
+            ? Math.min(MAX_SEARCH_LIMIT, Math.max(1, parsedLimit))
+            : DEFAULT_SEARCH_LIMIT;
+
+        const parsedDesiredTotal = Number.parseInt(desiredTotal, 10);
+        const DESIRED_TOTAL = Number.isInteger(parsedDesiredTotal)
+            ? Math.min(MAX_DESIRED_TOTAL, Math.max(1, parsedDesiredTotal))
+            : DEFAULT_DESIRED_TOTAL;
+
+        const parsedOffset = Number.parseInt(offset, 10);
+        offset = Number.isFinite(parsedOffset)
+            ? Math.min(MAX_SEARCH_OFFSET, Math.max(0, parsedOffset))
+            : 0;
+        
+        // Debug logging for pagination and limit issues
+        // console.log('[/search] Request params:', {
+        //     query: query.trim(),
+        //     limit: SEARCH_LIMIT,
+        //     offset,
+        //     desiredTotal: DESIRED_TOTAL,
+        //     limitType: typeof SEARCH_LIMIT,
+        //     offsetType: typeof offset
+        // });
+        
         await ensureSpotifyAccessToken();
 
-        const searchData = await spotifyApi.searchTracks(query, { limit: 50, offset });
-        const items = searchData.body.tracks.items || [];
-        const total = searchData.body.tracks.total || 0;
+        let total = 0;
+        let currentOffset = offset;
+        let pagesFetched = 0;
+        const aggregatedItems = [];
+
+        while (aggregatedItems.length < DESIRED_TOTAL && pagesFetched < MAX_SEARCH_PAGES) {
+            const searchData = await spotifyApi.searchTracks(query.trim(), { limit: SEARCH_LIMIT, offset: currentOffset });
+            const tracks = searchData.body?.tracks;
+            const items = tracks?.items || [];
+            total = tracks?.total || total;
+
+            aggregatedItems.push(...items);
+            pagesFetched += 1;
+
+            if (items.length < SEARCH_LIMIT) break;
+
+            const next = currentOffset + SEARCH_LIMIT;
+            if (next > MAX_SEARCH_OFFSET) break;
+            if (total && next >= total) break;
+            currentOffset = next;
+        }
+
+        // console.log('[/search] Search aggregation:', { pagesFetched, fetchedItems: aggregatedItems.length, total });
+
+        const items = aggregatedItems.slice(0, DESIRED_TOTAL);
 
         let simplified = items.map(t => ({
             id: t.id,
@@ -448,7 +545,7 @@ router.post('/search', async (req, res) => {
                 simplified = simplified.map(t => ({ ...t, isBanned: false }));
             }
         }
-        const nextOffset = offset + 50;
+        const nextOffset = Math.min(offset + (pagesFetched * SEARCH_LIMIT), MAX_SEARCH_OFFSET);
         return res.json({
             ok: true,
             tracks: { items: simplified },
@@ -498,12 +595,20 @@ router.get('/recentlyQueued', async (req, res) => {
             try {
                 await ensureSpotifyAccessToken();
                 const uniqueIds = [...new Set(trackIds)];
-                const trackData = await spotifyApi.getTracks(uniqueIds);
-                for (const t of trackData.body.tracks) {
+                // Batch GET /tracks was removed for Dev Mode apps in Feb 2026; fetch individually in parallel
+                const trackResults = await Promise.all(
+                    uniqueIds.map(id => spotifyApi.getTrack(id).catch(() => null))
+                );
+                for (const result of trackResults) {
+                    const t = result?.body;
                     if (t) imageMap[t.uri] = t.album?.images?.[0]?.url || null;
                 }
             } catch (e) {
-                console.warn('Could not fetch album art for recent tracks:', e.message);
+                if (e?.statusCode === 403) {
+                    console.warn('Spotify denied recent-track album-art lookup (403). Returning results without album art.');
+                } else {
+                    console.warn('Could not fetch album art for recent tracks:', e.message);
+                }
             }
         }
 
@@ -555,8 +660,16 @@ router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, asyn
     try {
         await ensureSpotifyAccessToken();
         const classId = await getClassId();
-        const playlistData = await spotifyApi.getUserPlaylists({ limit: 50 });
-        const items = playlistData.body?.items || [];
+        const items = await fetchAllUserPlaylists();
+
+        const removedCount = await pruneAllowedPlaylistsNotInLibrary(
+            classId,
+            items.map((playlist) => playlist?.id)
+        );
+        if (removedCount > 0) {
+            console.log(`[playlist:sync] Removed ${removedCount} stale allowed playlist row(s) for classId=${classId}`);
+        }
+
         const allowedMap = await getAllowedPlaylistMap(classId);
 
         const playlists = items.map((playlist) => {
@@ -1009,7 +1122,7 @@ router.post('/addToQueue', async (req, res) => {
             //console.log('Adding track to queue with addedBy:', username, 'type:', typeof username); // Debug log
             queueManager.addToQueue(queueTrack);
 
-            // 📝 Save metadata to database (synchronously)
+            // Save metadata to database (synchronously)
             //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
@@ -1427,12 +1540,6 @@ router.post('/skip', async (req, res) => {
                     skippedTrack: { name: trackName }
                 };
 
-                try {
-                    await logSkipActivity(skipEvent);
-                } catch (activityError) {
-                    console.error('Failed to persist shield skip activity:', activityError.message);
-                }
-
                 queueManager.broadcastUpdate('skip', skipEvent);
 
                 console.log('Returning shield blocked response to client');
@@ -1655,7 +1762,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                     reason: 'Jukebar refund - shield purchase failed'
                 });
                 req.session.payment.refundedAt = Date.now();
-                console.log('[purchaseShield] Auto-refund issued for failed shield purchase');
+                // console.log('[purchaseShield] Auto-refund issued for failed shield purchase');
             } catch (refundErr) {
                 console.error('[purchaseShield] Auto-refund failed:', refundErr.message);
             }
@@ -1857,6 +1964,137 @@ router.get('/api/currentTrack', async (req, res) => {
     } catch (err) {
         console.error('Error fetching current track:', err);
         res.status(500).json({ error: 'Failed to fetch current track' });
+    }
+});
+
+// Spotify auth/permission diagnostic endpoint
+router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    const results = {
+        timestamp: new Date().toISOString(),
+        tests: {}
+    };
+
+    try {
+        await ensureSpotifyAccessToken();
+
+        // Test 1: getMe - verify user access
+        // Note: the `product` field (Premium status) was removed from the User object for
+        // Development Mode apps in the February 2026 Spotify API changes.
+        try {
+            const me = await spotifyApi.getMe();
+            results.tests.userAccess = {
+                status: 'pass',
+                message: 'Successfully retrieved user info',
+                user: me.body?.display_name || 'Unknown',
+                note: 'Premium status cannot be verified via API for Development Mode apps (product field removed Feb 2026)'
+            };
+        } catch (error) {
+            results.tests.userAccess = {
+                status: 'fail',
+                message: error.message || 'Failed to get user info',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 2: searchTracks - verify search scope
+        try {
+            const searchResult = await spotifyApi.searchTracks('test', { limit: 1 });
+            results.tests.searchScope = {
+                status: 'pass',
+                message: 'Search endpoint working',
+                totalResults: searchResult.body?.tracks?.total || 0
+            };
+        } catch (error) {
+            results.tests.searchScope = {
+                status: 'fail',
+                message: error.message || 'Search failed',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 3: getTracks - verify album art / playlist-read scope
+        try {
+            // Use a well-known Spotify track ID
+            const trackResult = await spotifyApi.getTrack('3n3Ppam7vgaVa1iaRUc9Lp');
+            results.tests.albumArtLookup = {
+                status: 'pass',
+                message: 'Track lookup working',
+                track: trackResult.body?.name || 'Unknown',
+                hasImage: !!(trackResult.body?.album?.images?.length > 0)
+            };
+        } catch (error) {
+            results.tests.albumArtLookup = {
+                status: 'fail',
+                message: error.message || 'Track lookup failed',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 4: getMyCurrentPlayingTrack - verify playback-state read scope
+        try {
+            const playback = await spotifyApi.getMyCurrentPlayingTrack();
+            const isPlaying = !!playback.body?.item;
+            results.tests.playbackRead = {
+                status: 'pass',
+                message: 'Playback state readable',
+                isCurrentlyPlaying: isPlaying,
+                currentTrack: isPlaying ? playback.body.item.name : null
+            };
+        } catch (error) {
+            results.tests.playbackRead = {
+                status: 'fail',
+                message: error.message || 'Failed to read playback state',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 5: addToQueue - verify playback-modify scope (dry-run check)
+        try {
+            // We won't actually add to queue, just check if the scope is available
+            // by attempting a getMyCurrentPlaybackState call which requires user-modify-playback-state
+            const deviceResult = await spotifyApi.getMyDevices();
+            const hasDevice = (deviceResult.body?.devices?.length || 0) > 0;
+            results.tests.playbackModify = {
+                status: hasDevice ? 'pass' : 'warning',
+                message: hasDevice ? 'Playback modify scope available' : 'No active devices found',
+                activeDevices: deviceResult.body?.devices?.length || 0,
+                deviceNames: deviceResult.body?.devices?.map(d => d.name) || []
+            };
+        } catch (error) {
+            results.tests.playbackModify = {
+                status: 'fail',
+                message: error.message || 'Failed to check playback modify scope',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 6: Summary
+        const passCount = Object.values(results.tests).filter(t => t.status === 'pass').length;
+        const failCount = Object.values(results.tests).filter(t => t.status === 'fail').length;
+        const warnCount = Object.values(results.tests).filter(t => t.status === 'warning').length;
+
+        results.summary = {
+            passed: passCount,
+            failed: failCount,
+            warnings: warnCount,
+            allPassed: failCount === 0,
+            recommendation: failCount > 0 
+                ? 'One or more tests failed. Check the details above. You may need to re-generate your refresh token with all required scopes.'
+                : warnCount > 0
+                ? 'All tests passed but some warnings detected. Check details above.'
+                : 'All tests passed. Spotify credentials appear to be working correctly.'
+        };
+
+        res.json(results);
+    } catch (error) {
+        console.error('Diagnostics endpoint error:', error);
+        results.error = error.message;
+        res.status(500).json(results);
     }
 });
 

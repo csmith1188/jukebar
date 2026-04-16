@@ -25,12 +25,12 @@ function isJukepixFeatureEnabled() {
     return isTruthyEnvValue(rawValue);
 }
 
-console.log('[JUKEPIX] Configuration:', {
-    url: jukepix,
-    length: jukepixLength,
-    hasApiKey: !!apikey,
-    envEnabled: isJukepixFeatureEnabled()
-});
+// console.log('[JUKEPIX] Configuration:', {
+//     url: jukepix,
+//     length: jukepixLength,
+//     hasApiKey: !!apikey,
+//     envEnabled: isJukepixFeatureEnabled()
+// });
 
 let jukepixEnabled = false;
 
@@ -117,13 +117,13 @@ async function resolveTrackSettings(trackName, artistName) {
 const trackCheckInterval = setInterval(async () => {
     if (!isJukepixEnabled()) {
         if (!trackCheckInterval._lastSkipLog || Date.now() - trackCheckInterval._lastSkipLog > 60000) {
-            console.log('[JUKEPIX] Track check skipped - Jukepix not enabled');
+            // console.log('[JUKEPIX] Track check skipped - Jukepix not enabled');
             trackCheckInterval._lastSkipLog = Date.now();
         }
         return;
     }
 
-    console.log('[JUKEPIX] Checking for new track');
+    // console.log('[JUKEPIX] Checking for new track');
     try {
         const accessToken = spotifyApi.getAccessToken();
         if (!accessToken) {
@@ -138,23 +138,23 @@ const trackCheckInterval = setInterval(async () => {
             }
         });
 
-        console.log('[JUKEPIX] Spotify API response status:', response.status);
+        // console.log('[JUKEPIX] Spotify API response status:', response.status);
 
         if (response.status === 204) {
-            console.log('[JUKEPIX] No track currently playing (204 No Content)');
+            // console.log('[JUKEPIX] No track currently playing (204 No Content)');
             return;
         }
 
         const data = await response.json();
-        console.log('[JUKEPIX] Current track data:', {
-            hasData: !!data,
-            hasItem: !!data?.item,
-            trackName: data?.item?.name,
-            trackId: data?.item?.id
-        });
+        // console.log('[JUKEPIX] Current track data:', {
+        //     hasData: !!data,
+        //     hasItem: !!data?.item,
+        //     trackName: data?.item?.name,
+        //     trackId: data?.item?.id
+        // });
 
         if (!data || !data.item) {
-            console.log('[JUKEPIX] No track data available');
+            // console.log('[JUKEPIX] No track data available');
             return;
         }
 
@@ -168,7 +168,7 @@ const trackCheckInterval = setInterval(async () => {
 
         // Check if this is a new track
         if (!lastTrack || currentTrack.id !== lastTrack.id) {
-            console.log('[JUKEPIX] New track detected:', currentTrack.name);
+            // console.log('[JUKEPIX] New track detected:', currentTrack.name);
 
             // Resolve settings from DB (song > artist > defaults)
             const settings = await resolveTrackSettings(currentTrack.name, currentTrack.artist);
