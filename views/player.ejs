@@ -1202,30 +1202,6 @@
                         } catch (_) { }
                     })();
 
-                    // Skip activity box minimize/expand toggle
-                    (function initSkipActivityToggle() {
-                        const box = document.getElementById('skipActivityBox');
-                        const btn = document.getElementById('skipActivityToggle');
-                        if (!box || !btn) return;
-
-                        const STORAGE_KEY = 'skipActivityMinimized';
-
-                        function applyState(minimized) {
-                            box.classList.toggle('minimized', minimized);
-                            btn.innerHTML = minimized ? '&#43;' : '&minus;';
-                            btn.title = minimized ? 'Expand' : 'Minimize';
-                            btn.setAttribute('aria-label', minimized ? 'Expand skip activity' : 'Minimize skip activity');
-                        }
-
-                        applyState(localStorage.getItem(STORAGE_KEY) === 'true');
-
-                        btn.addEventListener('click', () => {
-                            const nowMinimized = !box.classList.contains('minimized');
-                            localStorage.setItem(STORAGE_KEY, nowMinimized);
-                            applyState(nowMinimized);
-                        });
-                    })();
-
                     // When search input is cleared, restore recently queued
                     document.getElementById('searchInput')?.addEventListener('input', (e) => {
                         if (e.target.value.trim() === '') {
@@ -1436,11 +1412,6 @@
 
                         socket.on('skip', (data) => {
                             showNotification('Track skipped', 'info');
-                            updateSkipActivity(data);
-                        });
-
-                        socket.on('skipHistory', (history) => {
-                            renderSkipActivityHistory(history);
                         });
 
                         // Handle shield purchase confirmation
@@ -1824,81 +1795,6 @@
                     setTimeout(() => {
                         notification.remove();
                     }, 3000);
-                }
-
-                function formatSkipActivityTime(timestamp) {
-                    const date = timestamp ? new Date(timestamp) : new Date();
-                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                }
-
-                function createSkipActivityItem(data) {
-                    const skipTime = formatSkipActivityTime(data?.skippedAt);
-                    const skipUser = data?.skippedBy || 'Someone';
-                    const skippedSong = data?.skippedTrack?.name || 'Unknown song';
-                    const skippedType = data?.skippedType === 'shield' ? 'shield' : 'song';
-
-                    const listItem = document.createElement('li');
-                    listItem.className = 'skip-activity-item';
-
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'skip-time';
-                    timeSpan.textContent = `(${skipTime}) : `;
-
-                    const userSpan = document.createElement('span');
-                    userSpan.className = 'skip-user';
-                    userSpan.textContent = skipUser;
-
-                    const actionSpan = document.createElement('span');
-                    actionSpan.className = 'skip-action';
-                    actionSpan.textContent = skippedType === 'shield' ? ' just skipped a shield on ' : ' just skipped ';
-
-                    const songSpan = document.createElement('span');
-                    songSpan.className = 'skip-song';
-                    songSpan.textContent = skippedSong;
-
-                    listItem.appendChild(timeSpan);
-                    listItem.appendChild(userSpan);
-                    listItem.appendChild(actionSpan);
-                    listItem.appendChild(songSpan);
-
-                    return listItem;
-                }
-
-                function renderSkipActivityHistory(history) {
-                    const skipList = document.getElementById('skipActivityList');
-                    if (!skipList) return;
-
-                    skipList.innerHTML = '';
-
-                    const items = Array.isArray(history) ? history : [];
-                    if (items.length === 0) {
-                        const emptyItem = document.createElement('li');
-                        emptyItem.className = 'skip-activity-item skip-activity-empty';
-                        emptyItem.textContent = 'No skips yet.';
-                        skipList.appendChild(emptyItem);
-                        return;
-                    }
-
-                    for (const item of items) {
-                        skipList.appendChild(createSkipActivityItem(item));
-                    }
-                }
-
-                function updateSkipActivity(data) {
-                    const skipList = document.getElementById('skipActivityList');
-                    if (!skipList) return;
-
-                    const emptyItem = skipList.querySelector('.skip-activity-empty');
-                    if (emptyItem) emptyItem.remove();
-
-                    const listItem = createSkipActivityItem(data);
-                    skipList.prepend(listItem);
-                    skipList.scrollTop = 0;
-
-                    const maxItems = 5;
-                    while (skipList.children.length > maxItems) {
-                        skipList.removeChild(skipList.lastElementChild);
-                    }
                 }
 
                 function openSongMenu(uri, name, artist, imageUrl, addedAt, event) {

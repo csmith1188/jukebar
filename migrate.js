@@ -18,7 +18,7 @@ db.serialize(() => {
         UNIQUE(match_type, match_value, match_artist)
     )`, (err) => {
         if (err) console.error('jukepix_settings:', err.message);
-        else console.log('jukepix_settings OK');
+        else //console.log('jukepix_settings OK');
     });
 
     db.run(`CREATE TABLE IF NOT EXISTS jukepix_defaults (
@@ -36,12 +36,12 @@ db.serialize(() => {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, (err) => {
         if (err) console.error('jukepix_defaults:', err.message);
-        else console.log('jukepix_defaults OK');
+        else //console.log('jukepix_defaults OK');
     });
 
     db.run(`INSERT OR IGNORE INTO jukepix_defaults (id) VALUES (1)`, (err) => {
         if (err) console.error('insert defaults:', err.message);
-        else console.log('default row OK');
-        db.close(() => console.log('Migration complete.'));
+        else //console.log('default row OK');
+        db.close(() => //console.log('Migration complete.'));
     });
 });
