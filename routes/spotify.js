@@ -99,7 +99,8 @@ let currentTrack = null;
 
 // Helper function to handle Spotify API errors consistently
 function handleSpotifyError(error, res, action = 'operation') {
-    console.error(`Spotify ${action} error:`, error);
+    const errMsg = error?.message || error?.body?.error?.message || String(error);
+    console.error(`Spotify ${action} error [${error?.statusCode ?? 'unknown'}]: ${errMsg}`);
 
     // Handle network connectivity errors
     if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
@@ -369,7 +370,7 @@ async function getQueueablePlaylistTracks(playlistId) {
     const skipped = { unplayable: 0, banned: 0, duplicate: 0 };
 
     for (const item of rawItems) {
-        const track = item?.track;
+        const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             skipped.unplayable += 1;
             continue;
@@ -406,7 +407,7 @@ async function getPlaylistPlayableStats(playlistId) {
     let unplayableCount = 0;
 
     for (const item of rawItems) {
-        const track = item?.track;
+        const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             unplayableCount += 1;
             continue;
@@ -435,7 +436,7 @@ async function isPlaylistCurrentlyPlaying(playlistId) {
     if (!currentTrackUri) return false;
 
     const playlistItems = await fetchPlaylistTracks(playlistId);
-    return playlistItems.some((item) => item?.track?.uri === currentTrackUri);
+    return playlistItems.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
 
@@ -486,7 +487,16 @@ router.post('/search', async (req, res) => {
         const aggregatedItems = [];
 
         while (aggregatedItems.length < DESIRED_TOTAL && pagesFetched < MAX_SEARCH_PAGES) {
-            const searchData = await spotifyApi.searchTracks(query.trim(), { limit: SEARCH_LIMIT, offset: currentOffset });
+            let searchData;
+            try {
+                searchData = await spotifyApi.searchTracks(query.trim(), { limit: SEARCH_LIMIT, offset: currentOffset });
+            } catch (pageErr) {
+                if (pageErr.statusCode === 429) {
+                    // Rate limited — return whatever we've collected so far
+                    break;
+                }
+                throw pageErr;
+            }
             const tracks = searchData.body?.tracks;
             const items = tracks?.items || [];
             total = tracks?.total || total;
@@ -589,41 +599,11 @@ router.get('/recentlyQueued', async (req, res) => {
             return res.json({ ok: true, tracks: [] });
         }
 
-        // Extract track IDs from URIs and batch-fetch from Spotify for album art
-        const trackIds = uniqueRows
-            .map(r => r.track_uri?.match(/^spotify:track:([a-zA-Z0-9]{22})$/)?.[1])
-            .filter(Boolean);
-
-        let imageMap = {};
-        if (trackIds.length > 0) {
-            try {
-                await ensureSpotifyAccessToken();
-                const uniqueIds = [...new Set(trackIds)];
-                // Batch GET /tracks was removed for Dev Mode apps in Feb 2026; fetch individually in parallel
-                const trackResults = await Promise.all(
-                    uniqueIds.map(id => spotifyApi.getTrack(id).catch(() => null))
-                );
-                for (const result of trackResults) {
-                    const t = result?.body;
-                    if (t) imageMap[t.uri] = t.album?.images?.[0]?.url || null;
-                }
-            } catch (e) {
-                if (e?.statusCode === 403) {
-                    console.warn('Spotify denied recent-track album-art lookup (403). Returning results without album art.');
-                } else {
-                    console.warn('Could not fetch album art for recent tracks:', e.message);
-                }
-            }
-        }
-
         const tracks = uniqueRows.map(r => ({
             name: r.track_name || 'Unknown',
             artist: r.artist_name || 'Unknown',
             uri: r.track_uri,
-            album: {
-                name: '',
-                image: imageMap[r.track_uri] || null
-            }
+            album: { name: '', image: null }
         }));
 
         return res.json({ ok: true, tracks });
@@ -1188,8 +1168,7 @@ router.post('/addToQueue', async (req, res) => {
             res.json({ success: true, message: "Track queued!", trackInfo });
             return;
         } catch (err) {
-            console.error('Error in /addToQueue (admin):', err);
-            return res.status(500).json({ error: err.message });
+            return handleSpotifyError(err, res, 'addToQueue');
         }
     }
 
@@ -1327,8 +1306,7 @@ router.post('/addToQueue', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('Error in /addToQueue:', err);
-        res.status(500).json({ error: err.message });
+        return handleSpotifyError(err, res, 'addToQueue');
     }
 });
 
