@@ -1,6 +1,4 @@
 const { isJukepixEnabled } = require('./jukepix');
-const { logSkipActivity } = require('./skipActivity');
-
 class QueueManager {
     constructor() {
         this.currentTrack = null;
@@ -134,12 +132,6 @@ class QueueManager {
                 skippedAt: Date.now(),
                 skippedType: 'song'
             };
-
-            try {
-                await logSkipActivity(skipEvent);
-            } catch (error) {
-                console.error('Failed to persist skip activity:', error.message);
-            }
 
             this.broadcastUpdate('skip', skipEvent);
             return nextTrack;

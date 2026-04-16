@@ -41,6 +41,7 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
     console.log('Queue history endpoint hit - User:', req.session.user, 'Permission:', req.session.permission);
     try {
         const db = require('../utils/database');
+        const SPOTIFY_TRACK_ID_REGEX = /^[A-Za-z0-9]{22}$/;
         const limit = parseInt(req.query.limit) || 20;
         const offset = parseInt(req.query.offset) || 0;
         
@@ -73,9 +74,11 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
         const imageMap = {};
         try {
             await ensureSpotifyAccessToken();
-            const trackIds = plays
-                .filter(p => p.track_uri)
-                .map(p => p.track_uri.replace('spotify:track:', ''));
+            const trackIds = [...new Set(
+                plays
+                    .map((p) => p.track_uri?.match(/^spotify:track:([A-Za-z0-9]{22})$/)?.[1])
+                    .filter((id) => SPOTIFY_TRACK_ID_REGEX.test(id))
+            )].slice(0, 50);
             if (trackIds.length > 0) {
                 const batchData = await spotifyApi.getTracks(trackIds);
                 batchData.body.tracks.forEach(track => {
@@ -83,7 +86,11 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
                 });
             }
         } catch (err) {
-            console.warn('Could not fetch album art batch:', err.message);
+            if (err?.statusCode === 403) {
+                console.warn('Spotify denied queue-history album-art lookup (403). Using placeholders.');
+            } else {
+                console.warn('Could not fetch album art batch:', err.message);
+            }
         }
 
         const enrichedPlays = plays.map(play => ({
@@ -103,6 +110,7 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
     try {
         const db = require('../utils/database');
         const normalizedKey = (trackName, artistName) => `${String(trackName || '').trim().toLowerCase()}||${String(artistName || '').trim().toLowerCase()}`;
+        const SPOTIFY_TRACK_ID_REGEX = /^[A-Za-z0-9]{22}$/;
         const songs = await new Promise((resolve, reject) => {
             db.all(`
                 SELECT
@@ -125,6 +133,7 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
 
         const albumImageMap = {};
         try {
+            let spotifyForbidden = false;
             await ensureSpotifyAccessToken();
             const uriToKeys = {};
             songs.forEach((song) => {
@@ -137,19 +146,28 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
 
             const trackIds = Object.keys(uriToKeys)
                 .map((uri) => uri.replace('spotify:track:', '').trim())
-                .filter(Boolean)
+                .filter((id) => SPOTIFY_TRACK_ID_REGEX.test(id))
                 .slice(0, 50);
 
             if (trackIds.length > 0) {
-                const batchData = await spotifyApi.getTracks(trackIds);
-                (batchData?.body?.tracks || []).forEach((track) => {
-                    if (!track?.uri) return;
-                    const keys = uriToKeys[track.uri] || [];
-                    const image = track.album?.images?.[0]?.url || '/img/placeholder.png';
-                    keys.forEach((key) => {
-                        albumImageMap[key] = image;
+                try {
+                    const batchData = await spotifyApi.getTracks(trackIds);
+                    (batchData?.body?.tracks || []).forEach((track) => {
+                        if (!track?.uri) return;
+                        const keys = uriToKeys[track.uri] || [];
+                        const image = track.album?.images?.[0]?.url || '/img/placeholder.png';
+                        keys.forEach((key) => {
+                            albumImageMap[key] = image;
+                        });
                     });
-                });
+                } catch (error) {
+                    if (error?.statusCode === 403) {
+                        spotifyForbidden = true;
+                        console.warn('Spotify denied album-art track lookup (403). Using placeholders for missing items.');
+                    } else {
+                        throw error;
+                    }
+                }
             }
 
             const missingSongs = songs.filter((song) => {
@@ -164,6 +182,7 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
             // Apply a small concurrency limit when calling spotifyApi.searchTracks
             const CONCURRENCY = 5;
             for (let i = 0; i < songsToBackfill.length; i += CONCURRENCY) {
+                if (spotifyForbidden) break;
                 const batch = songsToBackfill.slice(i, i + CONCURRENCY);
                 // Process this batch in parallel
                 await Promise.all(
@@ -182,7 +201,10 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
                             const result = await spotifyApi.searchTracks(query, { limit: 1 });
                             const image = result?.body?.tracks?.items?.[0]?.album?.images?.[0]?.url;
                             albumImageMap[key] = image || '/img/placeholder.png';
-                        } catch {
+                        } catch (error) {
+                            if (error?.statusCode === 403) {
+                                spotifyForbidden = true;
+                            }
                             albumImageMap[key] = '/img/placeholder.png';
                         }
                     })
