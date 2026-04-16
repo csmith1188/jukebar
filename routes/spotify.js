@@ -99,7 +99,23 @@ let currentTrack = null;
 
 // Helper function to handle Spotify API errors consistently
 function handleSpotifyError(error, res, action = 'operation') {
-    const errMsg = error?.message || error?.body?.error?.message || String(error);
+    // spotify-web-api-node WebapiError sets error.message = String(body) when the body object
+    // is passed directly to Error(), producing the sentinel "[object Object]".
+    // Fall through it and extract from error.body instead.
+    const rawMsg = error?.message;
+    let errMsg;
+    if (typeof rawMsg === 'string' && rawMsg && rawMsg !== '[object Object]') {
+        errMsg = rawMsg;
+    } else {
+        const bodyMsg = error?.body?.error?.message;
+        if (typeof bodyMsg === 'string' && bodyMsg) {
+            errMsg = bodyMsg;
+        } else if (error?.body && typeof error.body === 'object') {
+            try { errMsg = JSON.stringify(error.body); } catch { errMsg = String(error); }
+        } else {
+            errMsg = String(error);
+        }
+    }
     console.error(`Spotify ${action} error [${error?.statusCode ?? 'unknown'}]: ${errMsg}`);
 
     // Handle network connectivity errors
@@ -327,20 +343,37 @@ async function fetchPlaylistTracks(playlistId) {
     const tracks = [];
     let offset = 0;
     const limit = 100;
+    let fetchError = null;
 
-    // /tracks was renamed to /items in the Feb 2026 Spotify API changes
     while (true) {
         const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}`, {
             headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
         });
+
+        if (!res.ok) {
+            const body = await res.text();
+            console.error(`[fetchPlaylistTracks] Spotify returned ${res.status} at offset=${offset}: ${body}`);
+            if (res.status === 403) {
+                fetchError = { status: 403, message: 'Spotify denied access to this playlist. The connected Spotify account must own or collaborate on the playlist (Feb 2026 API change).' };
+            } else if (res.status === 429) {
+                const retryAfter = res.headers.get('retry-after');
+                console.warn(`[fetchPlaylistTracks] Rate limited. Retry-After: ${retryAfter}s`);
+                fetchError = { status: 429, message: `Rate limited by Spotify. Try again in ${retryAfter || 'a few'} seconds.` };
+            } else {
+                fetchError = { status: res.status, message: `Spotify returned HTTP ${res.status} when fetching playlist tracks.` };
+            }
+            break;
+        }
+
         const data = await res.json();
         const items = data?.items || [];
+        console.log(`[fetchPlaylistTracks] offset=${offset} fetched=${items.length} total=${data?.total ?? '?'}`);
         tracks.push(...items);
-        if (items.length < limit) break;
+        if (items.length < limit || (data?.total && tracks.length >= data.total)) break;
         offset += limit;
     }
 
-    return tracks;
+    return { tracks, error: fetchError };
 }
 
 function computePlaylistCost(trackCount) {
@@ -356,11 +389,12 @@ async function getQueueUriSet() {
 }
 
 async function getQueueablePlaylistTracks(playlistId) {
-    const [rawItems, bannedSongs, queueUris] = await Promise.all([
+    const [fetchResult, bannedSongs, queueUris] = await Promise.all([
         fetchPlaylistTracks(playlistId),
         getBannedSongs(),
         getQueueUriSet()
     ]);
+    const rawItems = fetchResult.tracks;
 
     const bannedPairs = new Set(
         (bannedSongs || []).map((row) => `${(row.track_name || '').trim().toLowerCase()}::${(row.artist_name || '').trim().toLowerCase()}`)
@@ -402,18 +436,26 @@ async function getQueueablePlaylistTracks(playlistId) {
 }
 
 async function getPlaylistPlayableStats(playlistId) {
-    const rawItems = await fetchPlaylistTracks(playlistId);
+    const { tracks: rawItems, error: fetchError } = await fetchPlaylistTracks(playlistId);
+
+    if (fetchError) {
+        console.error(`[getPlaylistPlayableStats] fetch failed for ${playlistId}: ${fetchError.message}`);
+        return { playableCount: 0, fetchError, skipped: { unplayable: 0, banned: 0, duplicate: 0 } };
+    }
+
     let playableCount = 0;
     let unplayableCount = 0;
 
     for (const item of rawItems) {
-        const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
+        const track = item?.item ?? item?.track;
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             unplayableCount += 1;
             continue;
         }
         playableCount += 1;
     }
+
+    console.log(`[getPlaylistPlayableStats] playlistId=${playlistId} rawItems=${rawItems.length} playable=${playableCount} unplayable=${unplayableCount}`);
 
     return {
         playableCount,
@@ -435,7 +477,7 @@ async function isPlaylistCurrentlyPlaying(playlistId) {
     const currentTrackUri = await getCurrentTrackUri();
     if (!currentTrackUri) return false;
 
-    const playlistItems = await fetchPlaylistTracks(playlistId);
+    const { tracks: playlistItems } = await fetchPlaylistTracks(playlistId);
     return playlistItems.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
@@ -579,9 +621,11 @@ router.get('/recentlyQueued', async (req, res) => {
     try {
         const rows = await new Promise((resolve, reject) => {
             db.all(
-                `SELECT track_uri, track_name, artist_name FROM transactions 
-                 WHERE user_id = ? AND action = 'play' 
-                 ORDER BY timestamp DESC LIMIT 200`,
+                `SELECT t.track_uri, t.track_name, t.artist_name, t.image_url FROM transactions t
+                 LEFT JOIN users u ON u.id = t.user_id
+                 WHERE t.user_id = ? AND t.action = 'play'
+                   AND (u.recently_queued_cleared_at IS NULL OR t.timestamp > u.recently_queued_cleared_at)
+                 ORDER BY t.timestamp DESC LIMIT 200`,
                 [req.session.token.id],
                 (err, rows) => err ? reject(err) : resolve(rows || [])
             );
@@ -603,7 +647,7 @@ router.get('/recentlyQueued', async (req, res) => {
             name: r.track_name || 'Unknown',
             artist: r.artist_name || 'Unknown',
             uri: r.track_uri,
-            album: { name: '', image: null }
+            album: { name: '', image: r.image_url || '' }
         }));
 
         return res.json({ ok: true, tracks });
@@ -621,7 +665,7 @@ router.post('/clearQueueHistory', async (req, res) => {
     try {
         await new Promise((resolve, reject) => {
             db.run(
-                `DELETE FROM transactions WHERE user_id = ? AND action = 'play'`,
+                `UPDATE users SET recently_queued_cleared_at = datetime('now') WHERE id = ?`,
                 [req.session.token.id],
                 (err) => err ? reject(err) : resolve()
             );
@@ -640,11 +684,36 @@ router.post('/clearQueueHistory', async (req, res) => {
     }
 });
 
+// Teacher-only: clear recently queued for ALL users (transactions stay intact)
+router.post('/clearAllRecentlyQueued', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(
+                `UPDATE users SET recently_queued_cleared_at = datetime('now')`,
+                (err) => err ? reject(err) : resolve()
+            );
+        });
+
+        const io = req.app.get('io');
+        if (io) io.emit('recentlyQueuedCleared');
+
+        return res.json({ ok: true, message: 'Recently queued cleared for all users' });
+    } catch (err) {
+        console.error('Error clearing all recently queued:', err);
+        return res.status(500).json({ ok: false, error: 'Failed to clear recently queued' });
+    }
+});
+
 router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
         const classId = await getClassId();
-        const items = await fetchAllUserPlaylists();
+
+        const [items, meData] = await Promise.all([
+            fetchAllUserPlaylists(),
+            spotifyApi.getMe().catch(() => null)
+        ]);
+        const myId = meData?.body?.id;
 
         const removedCount = await pruneAllowedPlaylistsNotInLibrary(
             classId,
@@ -657,15 +726,18 @@ router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, asyn
         const allowedMap = await getAllowedPlaylistMap(classId);
 
         const playlists = items.map((playlist) => {
+            const ownerId = playlist.owner?.id;
+            const collaborative = !!playlist.collaborative;
             const formatted = {
             id: playlist.id,
             name: playlist.name || 'Untitled Playlist',
             totalTracks: playlist.items?.total ?? playlist.tracks?.total ?? 0,
             image: playlist.images?.[0]?.url || null,
-            owner: playlist.owner?.display_name || playlist.owner?.id || 'Unknown',
+            owner: playlist.owner?.display_name || ownerId || 'Unknown',
             url: playlist.external_urls?.spotify || null,
             uri: playlist.uri,
-            isAllowed: allowedMap.get(playlist.id) || false
+            isAllowed: allowedMap.get(playlist.id) || false,
+            canAccessTracks: (myId && ownerId === myId) || collaborative
             };
             return formatted;
         });
@@ -775,6 +847,11 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
             getPlaylistPlayableStats(playlistId)
         ]);
 
+        if (playlistStats.fetchError) {
+            const fe = playlistStats.fetchError;
+            return res.status(fe.status === 403 ? 403 : fe.status === 429 ? 429 : 502).json({ ok: false, error: fe.message });
+        }
+
         const queueableCount = playlistStats.playableCount;
         const cost = computePlaylistCost(queueableCount);
 
@@ -857,6 +934,11 @@ router.post('/api/playlists/queue', isAuthenticated, async (req, res) => {
             }
         }
 
+        if (playlistStats.fetchError) {
+            const fe = playlistStats.fetchError;
+            return res.status(fe.status === 403 ? 403 : fe.status === 429 ? 429 : 502).json({ ok: false, error: fe.message });
+        }
+
         if (!queueableCount) {
             return res.status(400).json({ ok: false, error: 'No queueable tracks found in this playlist', skipped: playlistStats.skipped });
         }
@@ -932,7 +1014,7 @@ router.post('/unbanTrack', isAuthenticated, requireTeacherAccess, async (req, re
 // Teacher-only: Ban a track by name/artist (optionally record URI)
 router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
-        const { name, artist, reason, uri } = req.body || {};
+        const { name, artist, reason, uri, image } = req.body || {};
         if (!name || !artist) return res.status(400).json({ ok: false, error: 'Missing track name or artist' });
 
         const banReason = typeof reason === 'string' ? reason.trim() : '';
@@ -950,10 +1032,12 @@ router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res)
             return res.json({ ok: true, message: 'Track already banned' });
         }
 
+        const imageUrl = typeof image === 'string' ? image : null;
+
         await new Promise((resolve, reject) => {
             db.run(
-                'INSERT INTO banned_songs (track_name, artist_name, track_uri, banned_by, reason) VALUES (?, ?, ?, ?, ?)',
-                [name, artist, uri || null, bannedBy, banReason],
+                'INSERT INTO banned_songs (track_name, artist_name, track_uri, banned_by, reason, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                [name, artist, uri || null, bannedBy, banReason, imageUrl],
                 function (err) {
                     if (err) return reject(err);
                     resolve();
@@ -1070,7 +1154,7 @@ router.post('/addToQueue', async (req, res) => {
         try {
             await ensureSpotifyAccessToken();
 
-            const { uri, anonMode } = req.body;
+            const { uri, anonMode, trackName: clientName, trackArtist: clientArtist, trackImage: clientImage } = req.body;
             if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
             const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -1079,8 +1163,22 @@ router.post('/addToQueue', async (req, res) => {
 
             const trackId = match[1];
 
-            const trackData = await spotifyApi.getTrack(trackId);
-            const track = trackData.body;
+            // Use client-supplied metadata when available to avoid an extra Spotify API call.
+            // Fall back to getTrack() only when metadata is missing (e.g. direct API calls).
+            const trimName = typeof clientName === 'string' ? clientName.trim() : '';
+            const trimArtist = typeof clientArtist === 'string' ? clientArtist.trim() : '';
+            let track;
+            if (trimName && trimArtist) {
+                track = {
+                    name: trimName.slice(0, 200),
+                    artists: [{ name: trimArtist.slice(0, 200) }],
+                    uri,
+                    album: { images: [{ url: typeof clientImage === 'string' ? clientImage : '' }] }
+                };
+            } else {
+                const trackData = await spotifyApi.getTrack(trackId);
+                track = trackData.body;
+            }
             const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
             const isAnon = anonMode ? 1 : 0;
 
@@ -1088,7 +1186,7 @@ router.post('/addToQueue', async (req, res) => {
                 name: track.name,
                 artist: track.artists.map(a => a.name).join(', '),
                 uri: track.uri,
-                cover: track.album.images[0].url,
+                cover: track.album.images[0]?.url || '',
                 addedBy: username
             };
 
@@ -1150,6 +1248,7 @@ router.post('/addToQueue', async (req, res) => {
                 trackURI: trackInfo.uri,
                 trackName: trackInfo.name,
                 artistName: trackInfo.artist,
+                imageURL: trackInfo.cover || null,
                 cost: 0
             });
 
@@ -1204,7 +1303,7 @@ router.post('/addToQueue', async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
 
-        const { uri, anonMode } = req.body;
+        const { uri, anonMode, trackName: clientName, trackArtist: clientArtist, trackImage: clientImage } = req.body;
         if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
         const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -1213,14 +1312,28 @@ router.post('/addToQueue', async (req, res) => {
 
         const trackId = match[1];
 
-        const trackData = await spotifyApi.getTrack(trackId);
-        const track = trackData.body;
+        // Use client-supplied metadata when available to avoid an extra Spotify API call.
+        // Fall back to getTrack() only when metadata is missing (e.g. direct API calls).
+        const trimName = typeof clientName === 'string' ? clientName.trim() : '';
+        const trimArtist = typeof clientArtist === 'string' ? clientArtist.trim() : '';
+        let track;
+        if (trimName && trimArtist) {
+            track = {
+                name: trimName.slice(0, 200),
+                artists: [{ name: trimArtist.slice(0, 200) }],
+                uri,
+                album: { images: [{ url: typeof clientImage === 'string' ? clientImage : '' }] }
+            };
+        } else {
+            const trackData = await spotifyApi.getTrack(trackId);
+            track = trackData.body;
+        }
         const isAnon = anonMode ? 1 : 0;
         const trackInfo = {
             name: track.name,
             artist: track.artists.map(a => a.name).join(', '),
             uri: track.uri,
-            cover: track.album.images[0].url,
+            cover: track.album.images[0]?.url || '',
         };
 
         // Check banned songs
@@ -1286,6 +1399,7 @@ router.post('/addToQueue', async (req, res) => {
             trackURI: trackInfo.uri,
             trackName: trackInfo.name,
             artistName: trackInfo.artist,
+            imageURL: trackInfo.cover || null,
             cost: Number(process.env.SONG_AMOUNT) || 50
         });
 
@@ -1956,6 +2070,21 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
         tests: {}
     };
 
+    // spotify-web-api-node WebapiError sets error.message = String(body) when the body
+    // object is passed directly to the Error constructor, producing "[object Object]".
+    // Fall through that sentinel and extract from error.body instead.
+    function extractErrMsg(error, fallback) {
+        const raw = error?.message;
+        if (typeof raw === 'string' && raw && raw !== '[object Object]') return raw;
+        // WebapiError stores the original response body in .body
+        const bodyMsg = error?.body?.error?.message;
+        if (typeof bodyMsg === 'string' && bodyMsg) return bodyMsg;
+        if (error?.body && typeof error.body === 'object') {
+            try { return JSON.stringify(error.body); } catch { /* circular ref — ignore */ }
+        }
+        return fallback;
+    }
+
     try {
         await ensureSpotifyAccessToken();
 
@@ -1973,7 +2102,7 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
         } catch (error) {
             results.tests.userAccess = {
                 status: 'fail',
-                message: error.message || 'Failed to get user info',
+                message: extractErrMsg(error, 'Failed to get user info'),
                 statusCode: error.statusCode,
                 errorBody: error.body?.error || null
             };
@@ -1989,28 +2118,28 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
             };
         } catch (error) {
             results.tests.searchScope = {
-                status: 'fail',
-                message: error.message || 'Search failed',
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Search failed'),
                 statusCode: error.statusCode,
                 errorBody: error.body?.error || null
             };
         }
 
-        // Test 3: getTracks - verify album art / playlist-read scope
+        // Test 3: getTrack - verify track metadata access
         try {
-            // Use a well-known Spotify track ID
             const trackResult = await spotifyApi.getTrack('3n3Ppam7vgaVa1iaRUc9Lp');
-            results.tests.albumArtLookup = {
+            results.tests.trackLookup = {
                 status: 'pass',
                 message: 'Track lookup working',
                 track: trackResult.body?.name || 'Unknown',
                 hasImage: !!(trackResult.body?.album?.images?.length > 0)
             };
         } catch (error) {
-            results.tests.albumArtLookup = {
-                status: 'fail',
-                message: error.message || 'Track lookup failed',
+            results.tests.trackLookup = {
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Track lookup failed'),
                 statusCode: error.statusCode,
+                note: error.statusCode === 429 ? 'Rate limited — app is making too many requests. Wait and retry.' : undefined,
                 errorBody: error.body?.error || null
             };
         }
@@ -2027,8 +2156,8 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
             };
         } catch (error) {
             results.tests.playbackRead = {
-                status: 'fail',
-                message: error.message || 'Failed to read playback state',
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Failed to read playback state'),
                 statusCode: error.statusCode,
                 errorBody: error.body?.error || null
             };
@@ -2037,7 +2166,7 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
         // Test 5: addToQueue - verify playback-modify scope (dry-run check)
         try {
             // We won't actually add to queue, just check if the scope is available
-            // by attempting a getMyCurrentPlaybackState call which requires user-modify-playback-state
+            // by attempting a getMyDevices call which requires user-read-playback-state
             const deviceResult = await spotifyApi.getMyDevices();
             const hasDevice = (deviceResult.body?.devices?.length || 0) > 0;
             results.tests.playbackModify = {
@@ -2048,8 +2177,8 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
             };
         } catch (error) {
             results.tests.playbackModify = {
-                status: 'fail',
-                message: error.message || 'Failed to check playback modify scope',
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Failed to check playback modify scope'),
                 statusCode: error.statusCode,
                 errorBody: error.body?.error || null
             };
