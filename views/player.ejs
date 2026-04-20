@@ -69,6 +69,12 @@
                                 </label>
                             </div>
                             <% } %>
+                                <div id="searchFilterTabs" class="search-filter-tabs" style="display:none;">
+                                    <button class="search-filter-tab active" data-filter="all">All</button>
+                                    <button class="search-filter-tab" data-filter="songs">Songs</button>
+                                    <button class="search-filter-tab" data-filter="artists">Artists</button>
+                                    <button class="search-filter-tab" data-filter="albums">Albums</button>
+                                </div>
                                 <div id="searchResults"></div>
                     </div>
                 </main>
@@ -199,7 +205,7 @@
             </div>
         </div>
 
-        <!-- Custom Playlist Tracks Modal -->
+        <!-- Custom Playlist Modal -->
         <div id="customPlaylistTracksModal" class="payment-modal" style="display:none;">
             <div class="payment-content playlist-modal-content">
                 <button class="close-modal-btn" onclick="closeCustomPlaylistTracksModal()">
@@ -211,7 +217,8 @@
                 </div>
                 <div class="playlist-modal-actions">
                     <button class="primary small-btn" onclick="playCurrentCustomPlaylist()">▶ Play Playlist</button>
-                    <button id="customPlaylistAddSongBtn" class="primary small-btn" onclick="openAddSongToCustomPlaylist()">+ Add Song</button>
+                    <button id="customPlaylistAddSongBtn" class="primary small-btn"
+                        onclick="openAddSongToCustomPlaylist()">+ Add Song</button>
                 </div>
             </div>
         </div>
@@ -238,6 +245,33 @@
             <button id="customPlaylistMenuPlay" type="button" role="menuitem">Play Playlist</button>
             <button id="customPlaylistMenuAdd" type="button" role="menuitem">Add More Songs</button>
         </div>
+
+        <!-- Artist Modal -->
+        <div id="artistModal" class="payment-modal" style="display:none;">
+            <div class="payment-content playlist-modal-content artist-modal-content">
+                <button class="close-modal-btn" id="artistModalClose">
+                    <img src="img/close.svg" alt="Close" style="width:16px;height:16px;filter:invert(1)">
+                </button>
+                <div id="artistModalHeader" class="artist-modal-header"></div>
+                <div id="artistOverviewView">
+                    <div id="artistTopTracksSection">
+                        <h4 class="artist-modal-section-title">Popular Tracks</h4>
+                        <div id="artistTopTracksList" class="artist-tracks-list"></div>
+                    </div>
+                    <div id="artistAlbumsSection">
+                        <h4 class="artist-modal-section-title">Albums & Singles</h4>
+                        <div id="artistAlbumGrid" class="artist-album-grid"></div>
+                    </div>
+                </div>
+                <div id="albumDetailView" style="display:none;">
+                    <div id="albumDetailHeader" class="album-detail-header"></div>
+                    <div class="album-detail-tracks-wrap">
+                        <div id="albumDetailTracksList" class="artist-tracks-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
 
         <button id="changelog-button" class="changelog-button" title="View Changelog">
             <img src="/img/changelog.png" alt="Changelog">
@@ -523,7 +557,7 @@
                         const banner = document.createElement('div');
                         banner.id = 'ban-banner';
                         banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:10000;background:#ff4444;color:#fff;text-align:center;padding:12px 16px;font-weight:600;font-size:1rem;box-shadow:0 -2px 8px rgba(0,0,0,0.3);';
-                        banner.textContent = '🚫 You have been banned from Jukebar. LOL COULD NOT BE ME AHAHAHAHAHAH';
+                        banner.textContent = 'You have been banned from Jukebar. LOL COULD NOT BE ME AHAHAHAHAHAH';
                         document.body.appendChild(banner);
                     }
 
@@ -767,6 +801,76 @@
 
                     let searchNextOffset = 0;
                     let searchCurrentQuery = '';
+                    let currentSearchResults = { tracks: [], artists: [], albums: [] };
+                    let activeSearchFilter = 'all';
+                    let searchHasMore = false;
+
+                    function renderArtistResults(artists, resultsDiv) {
+                        if (!artists || artists.length === 0) return;
+                        artists.forEach(artist => {
+                            const div = document.createElement('div');
+                            div.className = 'search-result-item artist-result-item';
+                            div.innerHTML = `
+                                ${artist.image
+                                    ? `<img src="${artist.image}" alt="${escapeHtml(artist.name)}" class="album-cover artist-cover" />`
+                                    : `<div class="album-cover artist-cover" style="background:#282828;display:flex;align-items:center;justify-content:center;font-size:2em;">🎤</div>`
+                                }
+                                <div class="search-result-content-outer">
+                                    <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                                    <div class="search-result-content-pushies">
+                                        <span class="artist-badge">ARTIST</span>
+                                        <div class="search-result-title" title="${escapeHtml(artist.name)}">${escapeHtml(artist.name)}</div>
+                                        ${artist.genres.length ? `<div class="search-result-artist">${artist.genres.slice(0, 2).map(g => escapeHtml(g)).join(', ')}</div>` : ''}
+                                        <div class="search-result-actions">
+                                            <button class="play-button-icon artist-open-btn" title="View artist" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}">
+                                                <img src="/img/play.png" alt="View" class="play-icon">
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            div.querySelector('.artist-open-btn').addEventListener('click', () => {
+                                openArtistModal(artist.id, artist.name, artist.image);
+                            });
+                            resultsDiv.appendChild(div);
+                        });
+                    }
+
+                    function renderAlbumSearchResults(albums, resultsDiv) {
+                        if (!albums || albums.length === 0) return;
+                        albums.forEach(album => {
+                            const div = document.createElement('div');
+                            div.className = 'search-result-item album-result-item';
+                            const year = album.release_date ? album.release_date.substring(0, 4) : '';
+                            div.innerHTML = `
+                                ${album.image
+                                    ? `<img src="${album.image}" alt="${escapeHtml(album.name)}" class="album-cover" />`
+                                    : `<div class="album-cover" style="background:#282828;"></div>`
+                                }
+                                <div class="search-result-content-outer">
+                                    <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                                    <div class="search-result-content-pushies">
+                                        <span class="album-badge">ALBUM</span>
+                                        <div class="search-result-title" title="${escapeHtml(album.name)}">${escapeHtml(album.name)}</div>
+                                        <div class="search-result-artist">${escapeHtml(album.artists)}${year ? ' · ' + year : ''}</div>
+                                        <div class="search-result-actions">
+                                            <button class="play-button-icon album-open-btn" title="View album"
+                                                data-album-id="${album.id}"
+                                                data-album-name="${escapeHtml(album.name)}"
+                                                data-album-image="${album.image || ''}"
+                                                data-album-year="${year}">
+                                                <img src="/img/play.png" alt="View" class="play-icon">
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            div.querySelector('.album-open-btn').addEventListener('click', function () {
+                                openAlbumDirect(this.dataset.albumId, this.dataset.albumName, this.dataset.albumImage, this.dataset.albumYear);
+                            });
+                            resultsDiv.appendChild(div);
+                        });
+                    }
 
                     function renderSearchResults(tracks, resultsDiv) {
                         tracks.forEach(track => {
@@ -820,15 +924,28 @@
                                 body: JSON.stringify({ query: searchCurrentQuery, offset: searchNextOffset })
                             });
                             const data = await response.json();
+                            if (!response.ok || data.ok === false) {
+                                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+                                return;
+                            }
+
                             const resultsDiv = document.getElementById('searchResults');
                             removeLoadMoreButton();
 
-                            if (data.tracks && data.tracks.items.length > 0) {
-                                renderSearchResults(data.tracks.items, resultsDiv);
-                                searchNextOffset = data.nextOffset || 0;
-                                if (data.hasMore) {
-                                    addLoadMoreButton(resultsDiv);
-                                }
+                            // Always advance pagination from the server. A page can return 0 tracks after
+                            // explicit/long/banned filtering while Spotify still has more raw results —
+                            // otherwise the button vanished and offset never advanced.
+                            searchNextOffset = typeof data.nextOffset === 'number' ? data.nextOffset : searchNextOffset;
+                            searchHasMore = !!data.hasMore;
+
+                            const newItems = (data.tracks && data.tracks.items) ? data.tracks.items : [];
+                            if (newItems.length > 0) {
+                                currentSearchResults.tracks = currentSearchResults.tracks.concat(newItems);
+                                renderSearchResults(newItems, resultsDiv);
+                            }
+
+                            if (searchHasMore) {
+                                addLoadMoreButton(resultsDiv);
                             }
                         } catch (error) {
                             console.error('Error loading more results:', error);
@@ -836,34 +953,352 @@
                         }
                     }
 
+                    function applySearchFilter(filter) {
+                        activeSearchFilter = filter;
+                        document.querySelectorAll('.search-filter-tab').forEach(btn => {
+                            btn.classList.toggle('active', btn.dataset.filter === filter);
+                        });
+
+                        const resultsDiv = document.getElementById('searchResults');
+                        resultsDiv.innerHTML = '';
+
+                        const showAll = filter === 'all';
+
+                        if ((showAll || filter === 'artists') && currentSearchResults.artists.length > 0) {
+                            renderArtistResults(currentSearchResults.artists, resultsDiv);
+                        }
+
+                        if ((showAll || filter === 'albums') && currentSearchResults.albums.length > 0) {
+                            renderAlbumSearchResults(currentSearchResults.albums, resultsDiv);
+                        }
+
+                        if ((showAll || filter === 'songs') && currentSearchResults.tracks.length > 0) {
+                            renderSearchResults(currentSearchResults.tracks, resultsDiv);
+                            if (searchHasMore) addLoadMoreButton(resultsDiv);
+                        }
+
+                        if (resultsDiv.children.length === 0) {
+                            resultsDiv.innerHTML = '<p style="color:#b3b3b3;padding:8px 0;">No results for this filter.</p>';
+                        }
+                    }
+
                     async function searchSpotify() {
                         const query = document.getElementById('searchInput').value;
                         if (!query) return;
                         searchCurrentQuery = query;
+                        activeSearchFilter = 'all';
 
                         try {
                             const response = await fetch('/search', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ query, offset: 0 })
+                                body: JSON.stringify({ query, offset: 0, includeArtists: true, includeAlbums: true })
                             });
                             const data = await response.json();
-                            const resultsDiv = document.getElementById('searchResults');
-                            resultsDiv.innerHTML = '';
+                            if (!response.ok || data.ok === false) {
+                                const tabsEl = document.getElementById('searchFilterTabs');
+                                tabsEl.style.display = 'none';
+                                document.getElementById('searchResults').innerHTML =
+                                    `<p style="color:#ff8a8a;padding:8px 0;">${escapeHtml(data.error || 'Search failed. Please try again.')}</p>`;
+                                return;
+                            }
 
-                            if (data.tracks && data.tracks.items.length > 0) {
-                                renderSearchResults(data.tracks.items, resultsDiv);
-                                searchNextOffset = data.nextOffset || 0;
-                                if (data.hasMore) {
-                                    addLoadMoreButton(resultsDiv);
-                                }
+                            currentSearchResults = {
+                                tracks: data.tracks?.items || [],
+                                artists: data.artists || [],
+                                albums: data.albums || []
+                            };
+                            searchNextOffset = data.nextOffset || 0;
+                            searchHasMore = !!data.hasMore;
+
+                            const hasAny = currentSearchResults.tracks.length > 0 ||
+                                           currentSearchResults.artists.length > 0 ||
+                                           currentSearchResults.albums.length > 0;
+
+                            const tabsEl = document.getElementById('searchFilterTabs');
+                            if (hasAny) {
+                                tabsEl.style.display = '';
+                                // Reset to "All" tab on new search
+                                document.querySelectorAll('.search-filter-tab').forEach(btn => {
+                                    btn.classList.toggle('active', btn.dataset.filter === 'all');
+                                });
+                                applySearchFilter('all');
                             } else {
-                                resultsDiv.innerHTML = '<p>No results found.</p>';
+                                tabsEl.style.display = 'none';
+                                document.getElementById('searchResults').innerHTML = '<p>No clean tracks found.</p>';
                             }
                         } catch (error) {
                             console.error('Error searching Spotify:', error);
                         }
                     }
+
+                    // =============================================
+                    // Artist Modal
+                    // =============================================
+                    let currentArtistId = null;
+                    let currentArtistName = null;
+                    let directAlbumMode = false;
+                    let albumsNextOffset = 0;
+                    let albumsHasMore = false;
+
+                    function openArtistModal(artistId, artistName, artistImage) {
+                        currentArtistId = artistId;
+                        currentArtistName = artistName;
+                        albumsNextOffset = 0;
+                        albumsHasMore = false;
+
+                        // Render header
+                        const header = document.getElementById('artistModalHeader');
+                        header.innerHTML = `
+                            <div class="artist-modal-hero">
+                                ${artistImage
+                                    ? `<img src="${artistImage}" alt="${escapeHtml(artistName)}" class="artist-modal-avatar" />`
+                                    : `<div class="artist-modal-avatar artist-modal-avatar--placeholder">🎤</div>`
+                                }
+                                <div class="artist-modal-hero-info">
+                                    <div class="artist-modal-name">${escapeHtml(artistName)}</div>
+                                </div>
+                            </div>
+                        `;
+
+                        // Show header + overview, hide album detail
+                        document.getElementById('artistModalHeader').style.display = '';
+                        document.getElementById('artistOverviewView').style.display = '';
+                        document.getElementById('albumDetailView').style.display = 'none';
+
+                        // Show loading states
+                        document.getElementById('artistTopTracksList').innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Loading...</p>';
+                        document.getElementById('artistAlbumGrid').innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Loading...</p>';
+
+                        document.getElementById('artistModal').style.display = 'flex';
+                        window.refreshModalBlurState();
+
+                        // Fetch top tracks and albums in parallel
+                        Promise.all([
+                            fetch(`/api/artist/${artistId}/top-tracks?name=${encodeURIComponent(artistName)}`).then(r => r.json()),
+                            fetch(`/api/artist/${artistId}/albums`).then(r => r.json())
+                        ]).then(([topTracksData, albumsData]) => {
+                            renderArtistTopTracks(topTracksData);
+                            renderArtistAlbums(albumsData);
+                        }).catch(err => {
+                            console.error('Error loading artist data:', err);
+                            document.getElementById('artistTopTracksList').innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Failed to load tracks.</p>';
+                            document.getElementById('artistAlbumGrid').innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Failed to load albums.</p>';
+                        });
+                    }
+
+                    function closeArtistModal() {
+                        document.getElementById('artistModal').style.display = 'none';
+                        window.refreshModalBlurState();
+                        currentArtistId = null;
+                        currentArtistName = null;
+                        directAlbumMode = false;
+                    }
+
+                    function renderArtistTopTracks(data) {
+                        const container = document.getElementById('artistTopTracksList');
+                        if (!data.ok || !data.tracks || data.tracks.length === 0) {
+                            container.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No clean tracks found.</p>';
+                            return;
+                        }
+                        container.innerHTML = '';
+                        data.tracks.forEach((track, idx) => {
+                            const div = document.createElement('div');
+                            div.className = 'artist-track-row';
+                            div.innerHTML = `
+                                <span class="artist-track-num">${idx + 1}</span>
+                                ${track.album.image
+                                    ? `<img src="${track.album.image}" alt="" class="artist-track-img" />`
+                                    : `<div class="artist-track-img artist-track-img--placeholder"></div>`
+                                }
+                                <div class="artist-track-info">
+                                    <div class="artist-track-name" title="${escapeHtml(track.name)}">${escapeHtml(track.name)}</div>
+                                    <div class="artist-track-album" title="${escapeHtml(track.album.name)}">${escapeHtml(track.album.name)}</div>
+                                </div>
+                                <div class="artist-track-duration">${formatDuration(track.duration_ms)}</div>
+                                <button class="play-button-icon artist-track-queue-btn"
+                                    data-uri="${track.uri}"
+                                    data-name="${escapeHtml(track.name)}"
+                                    data-artist="${escapeHtml(track.artist)}"
+                                    data-image="${track.album.image || ''}"
+                                    title="Add to queue">
+                                    <img src="/img/play.png" alt="Queue" class="play-icon">
+                                </button>
+                            `;
+                            div.querySelector('.artist-track-queue-btn').addEventListener('click', function () {
+                                checkPaymentAndPlay(this.dataset.uri, { name: this.dataset.name, artist: this.dataset.artist, image: this.dataset.image });
+                            });
+                            container.appendChild(div);
+                        });
+                    }
+
+                    function renderArtistAlbums(data, append = false) {
+                        const container = document.getElementById('artistAlbumGrid');
+
+                        if (!append) container.innerHTML = '';
+
+                        if (!data.ok || !data.albums || data.albums.length === 0) {
+                            if (!append) container.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No albums available.</p>';
+                            return;
+                        }
+
+                        // Remove existing Load More button before appending new cards
+                        container.querySelector('.artist-albums-load-more')?.remove();
+
+                        data.albums.forEach(album => {
+                            const card = document.createElement('div');
+                            card.className = 'artist-album-card';
+                            const year = album.release_date ? album.release_date.substring(0, 4) : '';
+                            card.innerHTML = `
+                                ${album.image
+                                    ? `<img src="${album.image}" alt="${escapeHtml(album.name)}" class="artist-album-cover" />`
+                                    : `<div class="artist-album-cover artist-album-cover--placeholder"></div>`
+                                }
+                                <div class="artist-album-name" title="${escapeHtml(album.name)}">${escapeHtml(album.name)}</div>
+                                <div class="artist-album-meta">${escapeHtml(album.album_type)} ${year ? '· ' + year : ''}</div>
+                            `;
+                            card.addEventListener('click', () => openAlbumDetail(album.id, album.name, album.image, year));
+                            container.appendChild(card);
+                        });
+
+                        albumsNextOffset = data.nextOffset || 0;
+                        albumsHasMore = !!data.hasMore;
+
+                        if (albumsHasMore) {
+                            const btn = document.createElement('button');
+                            btn.className = 'load-more-btn artist-albums-load-more';
+                            btn.textContent = 'Load More';
+                            btn.addEventListener('click', loadMoreAlbums);
+                            container.appendChild(btn);
+                        }
+                    }
+
+                    async function loadMoreAlbums() {
+                        if (!currentArtistId || !albumsHasMore) return;
+                        const btn = document.querySelector('.artist-albums-load-more');
+                        if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
+                        try {
+                            const data = await fetch(`/api/artist/${currentArtistId}/albums?offset=${albumsNextOffset}`).then(r => r.json());
+                            renderArtistAlbums(data, true);
+                        } catch (err) {
+                            console.error('Error loading more albums:', err);
+                            if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+                        }
+                    }
+
+                    function formatDuration(ms) {
+                        if (!ms) return '';
+                        const totalSec = Math.floor(ms / 1000);
+                        const min = Math.floor(totalSec / 60);
+                        const sec = totalSec % 60;
+                        return `${min}:${sec.toString().padStart(2, '0')}`;
+                    }
+
+                    async function openAlbumDetail(albumId, albumName, albumImage, albumYear) {
+                        document.getElementById('artistModalHeader').style.display = 'none';
+                        document.getElementById('artistOverviewView').style.display = 'none';
+                        document.getElementById('albumDetailView').style.display = '';
+
+                        const header = document.getElementById('albumDetailHeader');
+                        header.innerHTML = `
+                            <div class="album-detail-hero">
+                                ${albumImage
+                                    ? `<img src="${albumImage}" alt="${escapeHtml(albumName)}" class="album-detail-cover" />`
+                                    : `<div class="album-detail-cover album-detail-cover--placeholder"></div>`
+                                }
+                                <div class="album-detail-info">
+                                    <div class="album-detail-name">${escapeHtml(albumName)}</div>
+                                    ${albumYear ? `<div class="album-detail-year">${albumYear}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+
+                        const tracksList = document.getElementById('albumDetailTracksList');
+                        tracksList.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Loading tracks...</p>';
+
+                        try {
+                            const tracksData = await fetch(`/api/album/${albumId}/tracks`).then(r => r.json());
+
+                            if (!tracksData.ok || !tracksData.tracks || tracksData.tracks.length === 0) {
+                                tracksList.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No clean tracks found in this album.</p>';
+                                return;
+                            }
+
+                            tracksList.innerHTML = '';
+                            tracksData.tracks.forEach((track, idx) => {
+                                const div = document.createElement('div');
+                                div.className = 'artist-track-row';
+                                div.innerHTML = `
+                                    <span class="artist-track-num">${idx + 1}</span>
+                                    <div class="artist-track-info" style="flex:1;">
+                                        <div class="artist-track-name" title="${escapeHtml(track.name)}">${escapeHtml(track.name)}</div>
+                                        <div class="artist-track-album">${escapeHtml(track.artist)}</div>
+                                    </div>
+                                    <div class="artist-track-duration">${formatDuration(track.duration_ms)}</div>
+                                    <button class="play-button-icon artist-track-queue-btn"
+                                        data-uri="${track.uri}"
+                                        data-name="${escapeHtml(track.name)}"
+                                        data-artist="${escapeHtml(track.artist)}"
+                                        data-image="${track.album.image || ''}"
+                                        title="Add to queue">
+                                        <img src="/img/play.png" alt="Queue" class="play-icon">
+                                    </button>
+                                `;
+                                div.querySelector('.artist-track-queue-btn').addEventListener('click', function () {
+                                    checkPaymentAndPlay(this.dataset.uri, { name: this.dataset.name, artist: this.dataset.artist, image: this.dataset.image });
+                                });
+                                tracksList.appendChild(div);
+                            });
+                        } catch (err) {
+                            console.error('Error loading album details:', err);
+                            tracksList.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Failed to load album tracks.</p>';
+                        }
+                    }
+
+                    function showArtistOverview() {
+                        if (directAlbumMode) {
+                            directAlbumMode = false;
+                            closeArtistModal();
+                            return;
+                        }
+                        document.getElementById('albumDetailView').style.display = 'none';
+                        document.getElementById('artistModalHeader').style.display = '';
+                        document.getElementById('artistOverviewView').style.display = '';
+                    }
+
+                    function openAlbumDirect(albumId, albumName, albumImage, albumYear) {
+                        directAlbumMode = true;
+                        currentArtistId = null;
+                        currentArtistName = null;
+
+                        // Hide artist header and overview; show album detail
+                        const directModalHeader = document.getElementById('artistModalHeader');
+                        if (directModalHeader) directModalHeader.innerHTML = '';
+
+                        document.getElementById('artistModal').style.display = 'flex';
+                        window.refreshModalBlurState();
+
+                        openAlbumDetail(albumId, albumName, albumImage, albumYear);
+                    }
+
+                    // Wire up search filter tabs
+                    document.querySelectorAll('.search-filter-tab').forEach(btn => {
+                        btn.addEventListener('click', () => applySearchFilter(btn.dataset.filter));
+                    });
+
+                    // Wire up artist modal close button — context-aware:
+                    // if inside an album detail (from artist overview), go back; otherwise close.
+                    document.getElementById('artistModalClose')?.addEventListener('click', () => {
+                        const albumView = document.getElementById('albumDetailView');
+                        if (!directAlbumMode && albumView && albumView.style.display !== 'none') {
+                            showArtistOverview();
+                        } else {
+                            closeArtistModal();
+                        }
+                    });
+                    document.getElementById('artistModal')?.addEventListener('click', function (e) {
+                        if (e.target === this) closeArtistModal();
+                    });
 
                     async function loadRecentlyQueued() {
                         try {
@@ -1017,13 +1452,15 @@
                             window.isModalVisible('createPlaylistModal') ||
                             window.isModalVisible('customPlaylistTracksModal') ||
                             window.isModalVisible('addSongToPlaylistModal') ||
-                            window.isModalVisible('ownerShieldModal');
+                            window.isModalVisible('ownerShieldModal') ||
+                            window.isModalVisible('artistModal');
 
                         const shouldBlurBottomBar =
                             window.isModalVisible('createPlaylistModal') ||
                             window.isModalVisible('customPlaylistTracksModal') ||
                             window.isModalVisible('addSongToPlaylistModal') ||
-                            window.isModalVisible('ownerShieldModal');
+                            window.isModalVisible('ownerShieldModal') ||
+                            window.isModalVisible('artistModal');
 
                         document.querySelector('.main-content')?.classList.toggle('blurred', shouldBlurMain);
                         document.querySelector('.player-bottom-bar')?.classList.toggle('blurred', shouldBlurBottomBar);
@@ -1488,10 +1925,10 @@
                                             <div class="search-result-title" title="${track.name}">${track.name}</div>
                                             <div class="search-result-artist" title="${track.artist}">${track.artist}</div>
                                             <div class="search-result-actions">
-                                                <button class="play-button-icon" data-uri="${track.uri}" data-name="${(track.name||'').replace(/"/g, '&quot;')}" data-artist="${(track.artist||'').replace(/"/g, '&quot;')}" data-image="${track.album?.image || ''}" title="Add to queue">
+                                                <button class="play-button-icon" data-uri="${track.uri}" data-name="${(track.name || '').replace(/"/g, '&quot;')}" data-artist="${(track.artist || '').replace(/"/g, '&quot;')}" data-image="${track.album?.image || ''}" title="Add to queue">
                                                     <img src="/img/play.png" alt="Play" class="play-icon">
                                                 </button>
-                                                <button class="ban-button-icon" data-uri="${track.uri}" data-name="${(track.name||'').replace(/"/g, '&quot;')}" data-artist="${(track.artist||'').replace(/"/g, '&quot;')}" data-image="${track.album?.image || ''}" title="Vote to ban">
+                                                <button class="ban-button-icon" data-uri="${track.uri}" data-name="${(track.name || '').replace(/"/g, '&quot;')}" data-artist="${(track.artist || '').replace(/"/g, '&quot;')}" data-image="${track.album?.image || ''}" title="Vote to ban">
                                                     <img src="/img/ban.png" alt="Ban" class="ban-icon">
                                                 </button>
                                             </div>
@@ -2500,8 +2937,8 @@
                     }
                 }
 
-            const chance2 = Math.floor(Math.random() * 100);
-            if (chance2 === 69) document.querySelector('.changelog-header h1').innerText = "Jubekar Changelog";
+                const chance2 = Math.floor(Math.random() * 100);
+                if (chance2 === 69) document.querySelector('.changelog-header h1').innerText = "Jubekar Changelog";
 
 
             </script>
