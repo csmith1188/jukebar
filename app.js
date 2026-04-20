@@ -12,6 +12,61 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
+function isBrokeyEnabled() {
+    const raw = process.env.brokey ?? process.env.BROKEY ?? '';
+    return String(raw).trim().toLowerCase() === 'true';
+}
+
+app.use((req, res, next) => {
+    if (!isBrokeyEnabled()) return next();
+    // Allow static image assets so the brokey page can load favicon/art.
+    if (req.path.startsWith('/img/')) return next();
+    res.status(503).send(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jukebar Brokey</title>
+  <link rel="icon" type="image/png" href="/img/brokey.png" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .msg {
+      font-size: 2rem;
+      line-height: 1.35;
+      max-width: 900px;
+    }
+    .whoopsie {
+      width: min(320px, 80vw);
+      height: auto;
+      margin: 0 auto 18px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <img class="whoopsie" src="/img/whoopsie.png" alt="whoopsie" />
+    <div class="msg">jukebar brokey... i sorry i fix it tomorrow!</div>
+  </div>
+</body>
+</html>`);
+});
+
 const server = http.createServer(app);
 const io = new Server(server);
 

@@ -3,21 +3,20 @@ require('dotenv').config();
 
 /**
  * REQUIRED SPOTIFY SCOPES
- * 
+ *
  * The refresh token in SPOTIFY_REFRESH_TOKEN must be generated with these scopes:
- *   - user-read-private          (required for getMe().product field)
- *   - user-read-email            (user info)
- *   - user-modify-playback-state (play, pause, skip, addToQueue)
- *   - user-read-playback-state   (read playback/device state)
+ *   - user-read-private           (identify the connected account — required for /me)
+ *   - user-modify-playback-state  (play, pause, skip, addToQueue, shuffle)
+ *   - user-read-playback-state    (read playback/device state, queue)
  *   - user-read-currently-playing (read current track)
- *   - playlist-read-private      (read private playlists)
+ *   - playlist-read-private       (read private playlists)
  *   - playlist-read-collaborative (read collaborative playlists)
- *   - playlist-modify-private    (create/modify playlists)
- *   - playlist-modify-public     (create/modify public playlists)
- * 
- * If diagnostics show "productType": "unknown" or album-art endpoints return 403,
- * regenerate your refresh token with all scopes above.
- * 
+ *   - playlist-modify-private     (create/modify private playlists)
+ *   - playlist-modify-public      (create/modify public playlists)
+ *
+ * Note: As of the Feb 2026 Web API changes, the `product` field on /me was
+ * removed for Development Mode apps, so Premium status cannot be verified via API.
+ *
  * See spotify_developer_setup.md or .env-template SPOTIFY_SCOPES for full list.
  */
 

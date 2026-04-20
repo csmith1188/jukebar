@@ -531,7 +531,7 @@ router.post('/api/custom-playlists/remove-song', isAuthenticated, async (req, re
         const removeRes = await fetch(`https://api.spotify.com/v1/playlists/${playlist.spotify_playlist_id}/items`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${removeToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tracks: [{ uri: trackUri }] })
+            body: JSON.stringify({ items: [{ uri: trackUri }] })
         });
         if (!removeRes.ok) throw new Error(`removeTracks failed: ${removeRes.status}`);
 
