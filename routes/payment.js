@@ -17,6 +17,7 @@ function computePlaylistCost(trackCount) {
     return Math.min(trackCount * songAmount, 500);
 }
 
+
 // Returns the top non-owner user IDs ranked by plays in the last 7 days (same source as the leaderboard)
 function getRollingTopUsers() {
     return new Promise((resolve, reject) => {
@@ -233,14 +234,14 @@ router.post('/transfer', async (req, res) => {
 
             // Transfer succeeded
             req.session.hasPaid = true;
-            req.session.payment = {
-                from: Number(userRow.id),
-                to: Number(to),
-                amount: Number(amount),
-                pendingAction: pendingAction || null,
-                playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') ? String(playlistId || '') : null,
-                at: Date.now()
-            };
+                req.session.payment = {
+                    from: Number(userRow.id),
+                    to: Number(to),
+                    amount: Number(amount),
+                    pendingAction: pendingAction || null,
+                    playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') ? String(playlistId || '') : null,
+                    at: Date.now()
+                };
             return req.session.save((err) => {
                 if (err) {
                     console.error('Session save error:', err);
