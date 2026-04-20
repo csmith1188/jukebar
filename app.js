@@ -246,7 +246,7 @@ io.on('connection', (socket) => {
             // Do the vote ban with formbar
             if (FORMBAR_POLL_BAN_VOTE) {
 
-                const fbBanVoteResults = (poll) => {
+                async function fbBanVoteResults(poll) {
                     let votesFor = poll.find(r => r.answer == 'Yes').responses
                     let votesAgainst = poll.find(r => r.answer == 'No').responses
 
@@ -268,6 +268,8 @@ io.on('connection', (socket) => {
                     }
                 }
 
+                console.log(`Starting ban poll on formbar for ${trackName} by ${trackArtist}`)
+
                 formbarSocket.emit('startPoll', {
                     prompt: `Ban ${trackName} by ${trackArtist}?`,
                     answers: [
@@ -281,8 +283,10 @@ io.on('connection', (socket) => {
                 })
 
                 formbarSocket.once('startPoll', () => {
+                    console.log('Poll started')
                     formbarSocket.on('classUpdate', (data) => {
                         if (!data.poll.status) {
+                            console.log('Tallying results')
                             fbBanVoteResults(data.poll.responses)
                         } else {
                             // '\_(0.0)_/`
