@@ -1070,6 +1070,14 @@ h1 {
     padding: 4px 2px 2px;
 }
 
+.recently-queued-divider {
+    grid-column: 1 / -1;
+    width: 100%;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin: 2px 0 10px;
+}
+
 .player-right-rail {
     background: #111;
     border-radius: 10px;
@@ -4864,19 +4872,19 @@ p {
 }
 
 .album-detail-header {
-    padding: 16px 54px 12px 18px;
+    padding: 22px 54px 18px 22px;
 }
 
 .album-detail-hero {
     display: flex;
-    align-items: flex-start;
-    gap: 14px;
+    align-items: center;
+    gap: 20px;
 }
 
 .album-detail-cover {
-    width: 80px;
-    height: 80px;
-    border-radius: 4px;
+    width: 128px;
+    height: 128px;
+    border-radius: 8px;
     object-fit: cover;
     flex-shrink: 0;
     background: #282828;
@@ -4889,33 +4897,46 @@ p {
 .album-detail-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
 }
 
 .album-detail-name {
-    font-size: 1.1em;
+    font-size: 1.65em;
     font-weight: 700;
     color: #fff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.15;
 }
 
 .album-detail-year {
-    font-size: 0.82em;
-    color: #b3b3b3;
-    margin-top: 3px;
+    font-size: 1.1em;
+    color: #d0d0d0;
+    margin-top: 0;
+    font-weight: 500;
 }
 
-/* Centers short track lists vertically; long lists scroll inside */
+.album-detail-divider {
+    width: 100%;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    margin: 14px 0 0;
+}
+
+/* Keep tracks closer to the header divider */
 .album-detail-tracks-wrap {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    justify-content: safe center;
+    justify-content: flex-start;
     align-items: stretch;
     overflow: hidden;
-    padding: 0 18px;
+    padding: 6px 18px 0;
 }
 
 #albumDetailTracksList {
@@ -5013,6 +5034,14 @@ p {
 .player-page #searchResults .album-badge {
     display: inline-block;
     margin-bottom: 3px;
+}
+
+.player-page #searchResults .artist-result-item {
+    cursor: pointer;
+}
+
+.player-page #searchResults .artist-result-item:hover .search-result-title {
+    text-decoration: underline;
 }
 
 /* Artist modal: remove .payment-content's padding and max-width constraints */
