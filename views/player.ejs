@@ -805,11 +805,33 @@
                     let activeSearchFilter = 'all';
                     let searchHasMore = false;
 
+                    async function logRecentlyQueuedInteraction(type, payload) {
+                        try {
+                            await fetch('/recentlyQueued/interactions', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    type,
+                                    id: payload?.id || '',
+                                    name: payload?.name || '',
+                                    subtitle: payload?.subtitle || '',
+                                    image: payload?.image || ''
+                                })
+                            });
+                        } catch (error) {
+                            console.warn('Failed to log recently queued interaction:', error);
+                        }
+                    }
+
                     function renderArtistResults(artists, resultsDiv) {
                         if (!artists || artists.length === 0) return;
                         artists.forEach(artist => {
                             const div = document.createElement('div');
                             div.className = 'search-result-item artist-result-item';
+                            div.dataset.itemType = 'artist';
+                            div.dataset.artistId = artist.id;
+                            div.dataset.artistName = artist.name;
+                            div.dataset.artistImage = artist.image || '';
                             div.innerHTML = `
                                 ${artist.image
                                     ? `<img src="${artist.image}" alt="${escapeHtml(artist.name)}" class="album-cover artist-cover" />`
@@ -820,18 +842,9 @@
                                     <div class="search-result-content-pushies">
                                         <span class="artist-badge">ARTIST</span>
                                         <div class="search-result-title" title="${escapeHtml(artist.name)}">${escapeHtml(artist.name)}</div>
-                                        ${artist.genres.length ? `<div class="search-result-artist">${artist.genres.slice(0, 2).map(g => escapeHtml(g)).join(', ')}</div>` : ''}
-                                        <div class="search-result-actions">
-                                            <button class="play-button-icon artist-open-btn" title="View artist" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}">
-                                                <img src="/img/play.png" alt="View" class="play-icon">
-                                            </button>
-                                        </div>
                                     </div>
                                 </div>
                             `;
-                            div.querySelector('.artist-open-btn').addEventListener('click', () => {
-                                openArtistModal(artist.id, artist.name, artist.image);
-                            });
                             resultsDiv.appendChild(div);
                         });
                     }
@@ -853,6 +866,7 @@
                                         <span class="album-badge">ALBUM</span>
                                         <div class="search-result-title" title="${escapeHtml(album.name)}">${escapeHtml(album.name)}</div>
                                         <div class="search-result-artist">${escapeHtml(album.artists)}${year ? ' · ' + year : ''}</div>
+                                        <hr>
                                         <div class="search-result-actions">
                                             <button class="play-button-icon album-open-btn" title="View album"
                                                 data-album-id="${album.id}"
@@ -866,6 +880,12 @@
                                 </div>
                             `;
                             div.querySelector('.album-open-btn').addEventListener('click', function () {
+                                logRecentlyQueuedInteraction('album', {
+                                    id: this.dataset.albumId,
+                                    name: this.dataset.albumName,
+                                    subtitle: `${album.artists || ''}${year ? ' · ' + year : ''}`,
+                                    image: this.dataset.albumImage || ''
+                                });
                                 openAlbumDirect(this.dataset.albumId, this.dataset.albumName, this.dataset.albumImage, this.dataset.albumYear);
                             });
                             resultsDiv.appendChild(div);
@@ -895,6 +915,76 @@
                         </div>
                     `;
                             resultsDiv.appendChild(trackDiv);
+                        });
+                    }
+
+                    function renderRecentlyQueuedItems(items, resultsDiv) {
+                        items.forEach(item => {
+                            const itemType = item.itemType || 'track';
+
+                            if (itemType === 'artist') {
+                                const artistDiv = document.createElement('div');
+                                artistDiv.className = 'search-result-item artist-result-item';
+                                artistDiv.dataset.uri = item.uri;
+                                artistDiv.dataset.itemType = 'artist';
+                                const artistId = (item.uri || '').split(':')[2] || '';
+                                artistDiv.dataset.artistId = artistId;
+                                artistDiv.dataset.artistName = item.name || '';
+                                artistDiv.dataset.artistImage = item.album?.image || '';
+                                const subtitle = (item.artist && item.artist !== 'Unknown') ? item.artist : '';
+                                artistDiv.innerHTML = `
+                                    ${item.album?.image
+                                        ? `<img src="${item.album.image}" alt="${escapeHtml(item.name)}" class="album-cover artist-cover" />`
+                                        : `<div class="album-cover artist-cover" style="background:#282828;display:flex;align-items:center;justify-content:center;font-size:2em;">🎤</div>`
+                                    }
+                                    <div class="search-result-content-outer">
+                                        <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                                        <div class="search-result-content-pushies">
+                                            <span class="artist-badge">ARTIST</span>
+                                            <div class="search-result-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                                            <div class="search-result-artist">${escapeHtml(subtitle)}</div>
+                                        </div>
+                                    </div>
+                                `;
+                                resultsDiv.appendChild(artistDiv);
+                                return;
+                            }
+
+                            if (itemType === 'album') {
+                                const albumDiv = document.createElement('div');
+                                albumDiv.className = 'search-result-item album-result-item';
+                                albumDiv.dataset.uri = item.uri;
+                                albumDiv.dataset.itemType = 'album';
+                                const albumId = (item.uri || '').split(':')[2] || '';
+                                const subtitle = (item.artist && item.artist !== 'Unknown') ? item.artist : '';
+                                albumDiv.innerHTML = `
+                                    ${item.album?.image
+                                        ? `<img src="${item.album.image}" alt="${escapeHtml(item.name)}" class="album-cover" />`
+                                        : `<div class="album-cover" style="background:#282828;"></div>`
+                                    }
+                                    <div class="search-result-content-outer">
+                                        <div class="thebackgroundoftheitemsthatareinthesearchresults"></div>
+                                        <div class="search-result-content-pushies">
+                                            <span class="album-badge">ALBUM</span>
+                                            <div class="search-result-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                                            <div class="search-result-artist">${escapeHtml(subtitle)}</div>
+                                            <div class="search-result-actions">
+                                                <button class="play-button-icon album-open-btn" title="View album"
+                                                    data-album-id="${escapeHtml(albumId)}"
+                                                    data-album-name="${escapeHtml(item.name)}"
+                                                    data-album-image="${item.album?.image || ''}"
+                                                    data-album-year="${escapeHtml(item.releaseYear || '')}">
+                                                    <img src="/img/play.png" alt="View" class="play-icon">
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                resultsDiv.appendChild(albumDiv);
+                                return;
+                            }
+
+                            renderSearchResults([item], resultsDiv);
                         });
                     }
 
@@ -1157,7 +1247,15 @@
                                 <div class="artist-album-name" title="${escapeHtml(album.name)}">${escapeHtml(album.name)}</div>
                                 <div class="artist-album-meta">${escapeHtml(album.album_type)} ${year ? '· ' + year : ''}</div>
                             `;
-                            card.addEventListener('click', () => openAlbumDetail(album.id, album.name, album.image, year));
+                            card.addEventListener('click', () => {
+                                logRecentlyQueuedInteraction('album', {
+                                    id: album.id,
+                                    name: album.name,
+                                    subtitle: `${album.album_type || 'album'}${year ? ' · ' + year : ''}`,
+                                    image: album.image || ''
+                                });
+                                openAlbumDetail(album.id, album.name, album.image, year);
+                            });
                             container.appendChild(card);
                         });
 
@@ -1199,25 +1297,34 @@
                         document.getElementById('artistOverviewView').style.display = 'none';
                         document.getElementById('albumDetailView').style.display = '';
 
+                        let resolvedAlbumYear = (albumYear || '').trim();
                         const header = document.getElementById('albumDetailHeader');
-                        header.innerHTML = `
-                            <div class="album-detail-hero">
-                                ${albumImage
-                                    ? `<img src="${albumImage}" alt="${escapeHtml(albumName)}" class="album-detail-cover" />`
-                                    : `<div class="album-detail-cover album-detail-cover--placeholder"></div>`
-                                }
-                                <div class="album-detail-info">
-                                    <div class="album-detail-name">${escapeHtml(albumName)}</div>
-                                    ${albumYear ? `<div class="album-detail-year">${albumYear}</div>` : ''}
+                        const renderAlbumHeader = () => {
+                            header.innerHTML = `
+                                <div class="album-detail-hero">
+                                    ${albumImage
+                                        ? `<img src="${albumImage}" alt="${escapeHtml(albumName)}" class="album-detail-cover" />`
+                                        : `<div class="album-detail-cover album-detail-cover--placeholder"></div>`
+                                    }
+                                    <div class="album-detail-info">
+                                        <div class="album-detail-name">${escapeHtml(albumName)}</div>
+                                        ${resolvedAlbumYear ? `<div class="album-detail-year">${escapeHtml(resolvedAlbumYear)}</div>` : ''}
+                                    </div>
                                 </div>
-                            </div>
-                        `;
+                                <hr class="album-detail-divider">
+                            `;
+                        };
+                        renderAlbumHeader();
 
                         const tracksList = document.getElementById('albumDetailTracksList');
                         tracksList.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Loading tracks...</p>';
 
                         try {
                             const tracksData = await fetch(`/api/album/${albumId}/tracks`).then(r => r.json());
+                            if (!resolvedAlbumYear && tracksData?.releaseYear) {
+                                resolvedAlbumYear = String(tracksData.releaseYear).trim();
+                                renderAlbumHeader();
+                            }
 
                             if (!tracksData.ok || !tracksData.tracks || tracksData.tracks.length === 0) {
                                 tracksList.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No clean tracks found in this album.</p>';
@@ -1316,23 +1423,23 @@
                                 header.style.alignItems = 'center';
 
                                 const titleSpan = document.createElement('span');
-                                titleSpan.textContent = 'Recently Queued';
+                                titleSpan.textContent = 'Recently Viewed';
                                 header.appendChild(titleSpan);
 
                                 const clearLink = document.createElement('a');
-                                clearLink.textContent = 'Clear Queue History';
+                                clearLink.textContent = 'Clear History';
                                 clearLink.href = '#';
                                 clearLink.style.cssText = 'font-size: 0.85em; color: rgba(255, 255, 255, 0.6); text-decoration: none; cursor: pointer; transition: color 0.2s;';
                                 clearLink.onmouseover = () => clearLink.style.color = 'rgba(255, 255, 255, 0.9)';
                                 clearLink.onmouseout = () => clearLink.style.color = 'rgba(255, 255, 255, 0.6)';
                                 clearLink.onclick = (e) => {
                                     e.preventDefault();
-                                    if (confirm('Are you sure you want to clear your queue history?')) {
+                                    if (confirm('Are you sure you want to clear your history?')) {
                                         fetch('/clearQueueHistory', { method: 'POST' })
                                             .then(res => res.json())
                                             .then(data => {
                                                 if (data.ok) {
-                                                    Notify('Queue history cleared', 'info');
+                                                    Notify('History cleared', 'info');
                                                     loadRecentlyQueued(); // Reload
                                                 } else {
                                                     Notify('Failed to clear history', 'error');
@@ -1347,7 +1454,10 @@
                                 header.appendChild(clearLink);
 
                                 resultsDiv.appendChild(header);
-                                renderSearchResults(data.tracks, resultsDiv);
+                                const recentDivider = document.createElement('hr');
+                                recentDivider.className = 'recently-queued-divider';
+                                resultsDiv.appendChild(recentDivider);
+                                renderRecentlyQueuedItems(data.tracks, resultsDiv);
                             }
 
                         } catch (error) {
@@ -1707,6 +1817,37 @@
 
                     // Event delegation for dynamically created play and ban buttons
                     document.getElementById('searchResults')?.addEventListener('click', (e) => {
+                        // Handle artist row click (search + recently queued artist items)
+                        const artistItem = e.target.closest('.artist-result-item');
+                        if (artistItem && artistItem.dataset.itemType === 'artist') {
+                            const artistId = artistItem.dataset.artistId;
+                            const artistName = artistItem.dataset.artistName || '';
+                            const artistImage = artistItem.dataset.artistImage || '';
+                            if (artistId) {
+                                logRecentlyQueuedInteraction('artist', { id: artistId, name: artistName, image: artistImage });
+                                openArtistModal(artistId, artistName, artistImage);
+                            }
+                            return;
+                        }
+
+                        // Handle album open buttons (used by recently queued album items)
+                        if (e.target.matches('.album-open-btn') || e.target.closest('.album-open-btn')) {
+                            const button = e.target.matches('.album-open-btn') ? e.target : e.target.closest('.album-open-btn');
+                            const parentItem = button.closest('.search-result-item');
+                            if (!parentItem || parentItem.dataset.itemType !== 'album') return;
+                            const albumId = button.dataset.albumId;
+                            if (albumId) {
+                                logRecentlyQueuedInteraction('album', {
+                                    id: albumId,
+                                    name: button.dataset.albumName || '',
+                                    subtitle: button.dataset.albumYear || '',
+                                    image: button.dataset.albumImage || ''
+                                });
+                                openAlbumDirect(button.dataset.albumId, button.dataset.albumName, button.dataset.albumImage, button.dataset.albumYear);
+                            }
+                            return;
+                        }
+
                         // Handle play button
                         if (e.target.matches('.play-button, .play-button-icon') || e.target.closest('.play-button, .play-button-icon')) {
                             const button = e.target.matches('.play-button, .play-button-icon') ? e.target : e.target.closest('.play-button, .play-button-icon');
