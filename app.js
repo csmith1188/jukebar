@@ -11,10 +11,16 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
+let brokeyEnabled = false;
+
+function enableBrokey(reason = 'unknown') {
+    if (brokeyEnabled) return;
+    brokeyEnabled = true;
+    console.error(`[brokey] Enabled due to: ${reason}`);
+}
 
 function isBrokeyEnabled() {
-    const raw = process.env.brokey ?? process.env.BROKEY ?? '';
-    return String(raw).trim().toLowerCase() === 'true';
+    return brokeyEnabled;
 }
 
 app.use((req, res, next) => {
@@ -106,6 +112,20 @@ const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
 const path = require('path');
 const fs = require('fs');
+
+async function runSpotifyDiagnostics() {
+    if (!process.env.SPOTIFY_CLIENT_ID) return;
+    try {
+        await ensureSpotifyAccessToken();
+        // Lightweight playback-health probe.
+        await spotifyApi.getMyDevices();
+    } catch (err) {
+        const status = err?.statusCode ?? err?.response?.statusCode ?? err?.body?.error?.status;
+        if (Number(status) === 429) {
+            enableBrokey('Spotify diagnostics returned 429');
+        }
+    }
+}
 
 let changelog = [];
 try {
@@ -433,14 +453,17 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Call initialization
     initializeQueue();
 
-    // Periodic Spotify sync (every 5 seconds)
+    const spotifySyncIntervalMs = Math.max(8000, Number(process.env.SPOTIFY_SYNC_INTERVAL_MS) || 10000);
+    console.log(`Spotify sync interval set to ${spotifySyncIntervalMs}ms`);
+
+    // Periodic Spotify sync with safer default interval
     setInterval(async () => {
         try {
             await queueManager.syncWithSpotify(spotifyApi);
         } catch (error) {
             console.error('Sync interval error (non-fatal):', error.message);
         }
-    }, 5000);
+    }, spotifySyncIntervalMs);
 }
 
 // Main routes
@@ -564,6 +587,15 @@ app.use('/', require('./routes/customPlaylists'));
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
+    runSpotifyDiagnostics().catch((err) => {
+        console.warn('[diagnostics] Initial Spotify diagnostics failed:', err?.message || err);
+    });
+    // Runtime diagnostics: if Spotify starts rate limiting, fail closed to brokey mode.
+    setInterval(() => {
+        runSpotifyDiagnostics().catch((err) => {
+            console.warn('[diagnostics] Spotify diagnostics failed:', err?.message || err);
+        });
+    }, 10000);
 });
 
 module.exports = { app, io, formbarSocket };
