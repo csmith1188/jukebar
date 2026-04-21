@@ -434,14 +434,17 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Call initialization
     initializeQueue();
 
-    // Periodic Spotify sync (every 5 seconds)
+    const spotifySyncIntervalMs = Math.max(8000, Number(process.env.SPOTIFY_SYNC_INTERVAL_MS) || 10000);
+    console.log(`Spotify sync interval set to ${spotifySyncIntervalMs}ms`);
+
+    // Periodic Spotify sync with safer default interval
     setInterval(async () => {
         try {
             await queueManager.syncWithSpotify(spotifyApi);
         } catch (error) {
             console.error('Sync interval error (non-fatal):', error.message);
         }
-    }, 5000);
+    }, spotifySyncIntervalMs);
 }
 
 // Main routes

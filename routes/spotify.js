@@ -17,6 +17,12 @@ let isPlayingSound = false;
 
 const APRIL_FOOLS_URI = 'spotify:track:0rQvvjAkX1B0gcJwjEGQZW';
 const APRIL_FOOLS_CHANCE = 0.3; // 30% chance
+const SEARCH_CACHE_TTL_MS = 8000;
+const SEARCH_MIN_INTERVAL_MS = 600;
+const SEARCH_CACHE_MAX_ITEMS = 500;
+const searchResponseCache = new Map();
+const searchRequesterLastAt = new Map();
+let spotifySearchRateLimitedUntil = 0;
 
 function isAprilFools() {
     const now = new Date();
@@ -25,6 +31,26 @@ function isAprilFools() {
 
 function shouldAprilFool() {
     return isAprilFools() && Math.random() < APRIL_FOOLS_CHANCE;
+}
+
+function getSearchRequesterKey(req) {
+    return String(req.session?.token?.id || req.ip || 'anonymous');
+}
+
+function pruneSearchCache(now) {
+    if (searchResponseCache.size > SEARCH_CACHE_MAX_ITEMS) {
+        const entries = [...searchResponseCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+        const removeCount = Math.ceil(entries.length * 0.2);
+        for (let i = 0; i < removeCount; i++) {
+            searchResponseCache.delete(entries[i][0]);
+        }
+    }
+
+    for (const [key, value] of searchResponseCache.entries()) {
+        if ((now - value.timestamp) > SEARCH_CACHE_TTL_MS) {
+            searchResponseCache.delete(key);
+        }
+    }
 }
 
 function playRandomBlockedSound() {
@@ -534,12 +560,27 @@ router.post('/search', async (req, res) => {
         if (!query || !query.trim()) {
             return res.status(400).json({ ok: false, error: 'Missing query' });
         }
+        query = query.trim();
+        if (query.length < 2) {
+            return res.status(400).json({ ok: false, error: 'Search query must be at least 2 characters' });
+        }
+
+        const now = Date.now();
+        pruneSearchCache(now);
+        if (now < spotifySearchRateLimitedUntil) {
+            const retryAfterSeconds = Math.max(1, Math.ceil((spotifySearchRateLimitedUntil - now) / 1000));
+            res.set('Retry-After', String(retryAfterSeconds));
+            return res.status(429).json({
+                ok: false,
+                error: 'Spotify search is temporarily cooling down due to rate limits. Try again in a moment.'
+            });
+        }
 
         const DEFAULT_SEARCH_LIMIT = 5;
         const MAX_SEARCH_LIMIT = SPOTIFY_SEARCH_LIMIT_MAX;
-        const DEFAULT_DESIRED_TOTAL = 20;
-        const MAX_DESIRED_TOTAL = 50;
-        const MAX_SEARCH_PAGES = 5;
+        const DEFAULT_DESIRED_TOTAL = 10;
+        const MAX_DESIRED_TOTAL = 20;
+        const MAX_SEARCH_PAGES = 2;
         const MAX_SEARCH_OFFSET = 1000;
 
         const parsedLimit = Number.parseInt(limit, 10);
@@ -556,6 +597,30 @@ router.post('/search', async (req, res) => {
         offset = Number.isFinite(parsedOffset)
             ? Math.min(MAX_SEARCH_OFFSET, Math.max(0, parsedOffset))
             : 0;
+
+        const requesterKey = getSearchRequesterKey(req);
+        const lastRequestAt = searchRequesterLastAt.get(requesterKey) || 0;
+        if ((now - lastRequestAt) < SEARCH_MIN_INTERVAL_MS) {
+            return res.status(429).json({
+                ok: false,
+                error: 'You are searching too quickly. Please wait a moment before searching again.'
+            });
+        }
+        searchRequesterLastAt.set(requesterKey, now);
+
+        const cacheKey = JSON.stringify({
+            query: query.toLowerCase(),
+            source: source || '',
+            offset,
+            SEARCH_LIMIT,
+            DESIRED_TOTAL,
+            includeArtists: !!includeArtists,
+            includeAlbums: !!includeAlbums
+        });
+        const cached = searchResponseCache.get(cacheKey);
+        if (cached && (now - cached.timestamp) <= SEARCH_CACHE_TTL_MS) {
+            return res.json(cached.payload);
+        }
         
         // Debug logging for pagination and limit issues
         // console.log('[/search] Request params:', {
@@ -570,12 +635,12 @@ router.post('/search', async (req, res) => {
         await ensureSpotifyAccessToken();
 
         // Start artist and album searches in parallel for first-page requests
-        const artistSearchPromise = (includeArtists && offset === 0)
-            ? spotifyApi.search(query.trim(), ['artist'], { limit: 5 }).catch(() => null)
+        const artistSearchPromise = (includeArtists && offset === 0 && query.length >= 3)
+            ? spotifyApi.search(query, ['artist'], { limit: 5 }).catch(() => null)
             : Promise.resolve(null);
 
-        const albumSearchPromise = (includeAlbums && offset === 0)
-            ? spotifyApi.search(query.trim(), ['album'], { limit: 8 }).catch(() => null)
+        const albumSearchPromise = (includeAlbums && offset === 0 && query.length >= 3)
+            ? spotifyApi.search(query, ['album'], { limit: 8 }).catch(() => null)
             : Promise.resolve(null);
 
         let total = 0;
@@ -587,11 +652,18 @@ router.post('/search', async (req, res) => {
         while (aggregatedItems.length < DESIRED_TOTAL && pagesFetched < MAX_SEARCH_PAGES) {
             let searchData;
             try {
-                searchData = await spotifyApi.searchTracks(query.trim(), { limit: SEARCH_LIMIT, offset: currentOffset });
+                searchData = await spotifyApi.searchTracks(query, { limit: SEARCH_LIMIT, offset: currentOffset });
             } catch (pageErr) {
                 if (pageErr.statusCode === 429) {
                     // Rate limited — return whatever we've collected so far
                     rateLimited = true;
+                    const retryAfterHeader =
+                        pageErr?.headers?.['retry-after'] ||
+                        pageErr?.response?.headers?.['retry-after'] ||
+                        pageErr?.response?.headers?.get?.('retry-after');
+                    const retryAfterSeconds = Number.parseInt(String(retryAfterHeader || ''), 10);
+                    const cooldownMs = (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 10000);
+                    spotifySearchRateLimitedUntil = Date.now() + cooldownMs;
                     break;
                 }
                 throw pageErr;
@@ -614,6 +686,8 @@ router.post('/search', async (req, res) => {
         // console.log('[/search] Search aggregation:', { pagesFetched, fetchedItems: aggregatedItems.length, total });
 
         if (rateLimited && aggregatedItems.length === 0) {
+            const retryAfterSeconds = Math.max(1, Math.ceil((spotifySearchRateLimitedUntil - Date.now()) / 1000));
+            res.set('Retry-After', String(retryAfterSeconds));
             return res.status(429).json({
                 ok: false,
                 error: 'Spotify is rate limiting search requests right now. Please wait a few seconds and try again.'
@@ -696,15 +770,26 @@ router.post('/search', async (req, res) => {
         }
 
         const nextOffset = Math.min(offset + (pagesFetched * SEARCH_LIMIT), MAX_SEARCH_OFFSET);
-        return res.json({
+        const payload = {
             ok: true,
             tracks: { items: simplified },
             artists,
             albums,
             nextOffset,
             hasMore: nextOffset < total
-        });
+        };
+        searchResponseCache.set(cacheKey, { timestamp: Date.now(), payload });
+        return res.json(payload);
     } catch (err) {
+        if (err?.statusCode === 429) {
+            const retryAfterHeader =
+                err?.headers?.['retry-after'] ||
+                err?.response?.headers?.['retry-after'] ||
+                err?.response?.headers?.get?.('retry-after');
+            const retryAfterSeconds = Number.parseInt(String(retryAfterHeader || ''), 10);
+            const cooldownMs = (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 10000);
+            spotifySearchRateLimitedUntil = Date.now() + cooldownMs;
+        }
         return handleSpotifyError(err, res, 'search');
     }
 });

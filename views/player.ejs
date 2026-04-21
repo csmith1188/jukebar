@@ -804,6 +804,13 @@
                     let currentSearchResults = { tracks: [], artists: [], albums: [] };
                     let activeSearchFilter = 'all';
                     let searchHasMore = false;
+                    const SEARCH_SUBMIT_COOLDOWN_MS = 700;
+                    let mainSearchInFlight = false;
+                    let mainSearchLastAt = 0;
+                    let createPlaylistSearchInFlight = false;
+                    let createPlaylistSearchLastAt = 0;
+                    let addSongSearchInFlight = false;
+                    let addSongSearchLastAt = 0;
 
                     function renderArtistResults(artists, resultsDiv) {
                         if (!artists || artists.length === 0) return;
@@ -983,8 +990,12 @@
                     }
 
                     async function searchSpotify() {
+                        const now = Date.now();
+                        if (mainSearchInFlight || (now - mainSearchLastAt) < SEARCH_SUBMIT_COOLDOWN_MS) return;
                         const query = document.getElementById('searchInput').value;
                         if (!query) return;
+                        mainSearchInFlight = true;
+                        mainSearchLastAt = now;
                         searchCurrentQuery = query;
                         activeSearchFilter = 'all';
 
@@ -1029,6 +1040,8 @@
                             }
                         } catch (error) {
                             console.error('Error searching Spotify:', error);
+                        } finally {
+                            mainSearchInFlight = false;
                         }
                     }
 
@@ -2645,8 +2658,12 @@
 
                 document.getElementById('createPlaylistSearchForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
+                    const now = Date.now();
+                    if (createPlaylistSearchInFlight || (now - createPlaylistSearchLastAt) < SEARCH_SUBMIT_COOLDOWN_MS) return;
                     const q = document.getElementById('createPlaylistSearchInput').value.trim();
                     if (!q) return;
+                    createPlaylistSearchInFlight = true;
+                    createPlaylistSearchLastAt = now;
                     const resultsEl = document.getElementById('createPlaylistSearchResults');
                     resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Searching...</p>';
                     try {
@@ -2678,6 +2695,8 @@
                         syncCreatePlaylistSearchButtons();
                     } catch {
                         resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
+                    } finally {
+                        createPlaylistSearchInFlight = false;
                     }
                 });
 
@@ -2869,8 +2888,12 @@
 
                 document.getElementById('addSongSearchForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
+                    const now = Date.now();
+                    if (addSongSearchInFlight || (now - addSongSearchLastAt) < SEARCH_SUBMIT_COOLDOWN_MS) return;
                     const q = document.getElementById('addSongSearchInput').value.trim();
                     if (!q) return;
+                    addSongSearchInFlight = true;
+                    addSongSearchLastAt = now;
                     const resultsEl = document.getElementById('addSongSearchResults');
                     resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Searching...</p>';
                     try {
@@ -2900,6 +2923,8 @@
                         });
                     } catch {
                         resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
+                    } finally {
+                        addSongSearchInFlight = false;
                     }
                 });
 
