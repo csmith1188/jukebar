@@ -717,9 +717,9 @@ router.get('/recentlyQueued', async (req, res) => {
     try {
         const rows = await new Promise((resolve, reject) => {
             db.all(
-                `SELECT t.track_uri, t.track_name, t.artist_name, t.image_url FROM transactions t
+                `SELECT t.track_uri, t.track_name, t.artist_name, t.image_url, t.action FROM transactions t
                  LEFT JOIN users u ON u.id = t.user_id
-                 WHERE t.user_id = ? AND t.action = 'play'
+                 WHERE t.user_id = ? AND t.action IN ('play', 'artist_click', 'album_click')
                    AND (u.recently_queued_cleared_at IS NULL OR t.timestamp > u.recently_queued_cleared_at)
                  ORDER BY t.timestamp DESC LIMIT 200`,
                 [req.session.token.id],
@@ -727,7 +727,7 @@ router.get('/recentlyQueued', async (req, res) => {
             );
         });
 
-        // Deduplicate: keep only the most recent play of each track, cap at 50
+        // Deduplicate: keep only the most recent item of each URI, cap at 50
         const seen = new Set();
         const uniqueRows = rows.filter(r => {
             if (seen.has(r.track_uri)) return false;
@@ -739,17 +739,67 @@ router.get('/recentlyQueued', async (req, res) => {
             return res.json({ ok: true, tracks: [] });
         }
 
-        const tracks = uniqueRows.map(r => ({
-            name: r.track_name || 'Unknown',
-            artist: r.artist_name || 'Unknown',
-            uri: r.track_uri,
-            album: { name: '', image: r.image_url || '' }
-        }));
+        const tracks = uniqueRows.map((r) => {
+            const itemType = r.action === 'artist_click' ? 'artist' : (r.action === 'album_click' ? 'album' : 'track');
+            const fallbackSubtitle = itemType === 'track' ? 'Unknown' : '';
+            const subtitleText = (r.artist_name || fallbackSubtitle);
+            const yearMatch = itemType === 'album' ? String(subtitleText).match(/\b(19|20)\d{2}\b/) : null;
+            return {
+                name: r.track_name || 'Unknown',
+                artist: subtitleText,
+                uri: r.track_uri,
+                album: { name: '', image: r.image_url || '' },
+                itemType,
+                releaseYear: yearMatch ? yearMatch[0] : ''
+            };
+        });
 
         return res.json({ ok: true, tracks });
     } catch (err) {
         console.error('Error fetching recently queued:', err);
         return res.status(500).json({ ok: false, error: 'Failed to fetch recently queued songs' });
+    }
+});
+
+router.post('/recentlyQueued/interactions', isAuthenticated, async (req, res) => {
+    const userId = req.session?.token?.id;
+    if (!userId) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    const { type, id, name, subtitle, image } = req.body || {};
+    const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : '';
+    const safeId = typeof id === 'string' ? id.trim() : '';
+    const safeName = typeof name === 'string' ? name.trim() : '';
+
+    if (!['artist', 'album'].includes(normalizedType)) {
+        return res.status(400).json({ ok: false, error: 'Invalid interaction type' });
+    }
+    if (!safeId || !safeName) {
+        return res.status(400).json({ ok: false, error: 'Missing interaction metadata' });
+    }
+
+    const action = normalizedType === 'artist' ? 'artist_click' : 'album_click';
+    const uri = `spotify:${normalizedType}:${safeId}`;
+    const safeSubtitle = typeof subtitle === 'string' ? subtitle.trim() : '';
+    const safeImage = typeof image === 'string' ? image.trim() : '';
+
+    try {
+        await logTransaction({
+            userID: userId,
+            displayName: req.session.user,
+            action,
+            trackURI: uri,
+            trackName: safeName.slice(0, 200),
+            artistName: safeSubtitle.slice(0, 200),
+            imageURL: safeImage || null,
+            cost: 0
+        });
+
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Failed to log recently queued interaction:', error);
+        res.status(500).json({ ok: false, error: 'Failed to save interaction' });
     }
 });
 
@@ -2448,6 +2498,9 @@ router.get('/api/album/:id/tracks', async (req, res) => {
         const result = await spotifyApi.getAlbum(id, { market: 'US' });
         const albumData = result.body;
         const albumImage = albumData.images?.[0]?.url || null;
+        const releaseYear = typeof albumData.release_date === 'string'
+            ? albumData.release_date.substring(0, 4)
+            : '';
 
         const banned = await getBannedSongs();
         const bannedPairs = new Set(banned.map(b =>
@@ -2470,7 +2523,12 @@ router.get('/api/album/:id/tracks', async (req, res) => {
             });
         }
 
-        return res.json({ ok: true, tracks: filtered, queueableCount: filtered.length });
+        return res.json({
+            ok: true,
+            tracks: filtered,
+            queueableCount: filtered.length,
+            releaseYear
+        });
     } catch (err) {
         return handleSpotifyError(err, res, 'fetch album tracks');
     }

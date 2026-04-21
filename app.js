@@ -19,7 +19,6 @@ function isBrokeyEnabled() {
 
 app.use((req, res, next) => {
     if (!isBrokeyEnabled()) return next();
-    // Allow static image assets so the brokey page can load favicon/art.
     if (req.path.startsWith('/img/')) return next();
     res.status(503).send(`<!doctype html>
 <html>
