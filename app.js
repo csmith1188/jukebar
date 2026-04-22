@@ -37,12 +37,12 @@ function getLimiterRetryAfterSeconds(req) {
 }
 
 const limiter = rateLimit({
-	windowMs: 30 * 1000, // Spotify-like rolling cadence (30s), slightly stricter.
-	limit: 45, // Slightly more aggressive than typical Spotify app-wide throughput.
-	standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
-	legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
-	ipv6Subnet: 60, // Slightly less aggressive, better CIDR for most v6 deployments
-	// store: ... , // Redis, Memcached, etc. See below.
+    windowMs: 30 * 1000, // Spotify-like rolling cadence (30s), slightly stricter.
+    limit: 45, // Slightly more aggressive than typical Spotify app-wide throughput.
+    standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
+    ipv6Subnet: 60, // Slightly less aggressive, better CIDR for most v6 deployments
+    // store: ... , // Redis, Memcached, etc. See below.
     handler: (req, res) => {
         const retryAfterSeconds = getLimiterRetryAfterSeconds(req);
         res.set('Retry-After', String(retryAfterSeconds));
@@ -449,8 +449,9 @@ io.on('connection', (socket) => {
 
                 async function fbBanVoteResults(poll) {
                     formbarSocket.off('classUpdate')
-                    let votesFor = poll.find(r => r.answer == 'Yes').responses
-                    let votesAgainst = poll.find(r => r.answer == 'No').responses
+                    if (!poll || poll.length == 0) return console.error('No current poll, check if class is started.')
+                    let votesFor = poll.find(r => r.answer == 'Yes').responses || 0
+                    let votesAgainst = poll.find(r => r.answer == 'No').responses || 0
 
                     if (votesFor > votesAgainst) {
                         db.run(
