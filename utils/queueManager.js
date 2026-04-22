@@ -23,6 +23,12 @@ class QueueManager {
         const delayMs = this.getRetryDelayMs(retryAfterHeaderValue);
         this.spotifyRateLimitedUntil = Date.now() + delayMs;
         console.warn(`[queue-sync] ${source} rate limited (429). Cooling down for ${Math.ceil(delayMs / 1000)}s`);
+        try {
+            const { setSpotifyPlaybackCooldown, READ } = require('../middleware/spotifyPlaybackRateLimit');
+            setSpotifyPlaybackCooldown(READ, retryAfterHeaderValue, `queueManager:${source}`);
+        } catch (err) {
+            // Avoid hard dependency cycle failures in queue sync path.
+        }
     }
 
     // Update currently playing track
