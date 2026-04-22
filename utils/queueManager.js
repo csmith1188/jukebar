@@ -119,6 +119,12 @@ class QueueManager {
         return currentName === normalizedTrackName && currentArtist === normalizedArtistName;
     }
 
+    // Check if currently playing track matches a specific URI
+    isCurrentTrackUri(trackUri) {
+        if (!this.currentTrack || !trackUri) return false;
+        return String(this.currentTrack.uri || '').trim() === String(trackUri).trim();
+    }
+
     // Skip to next track
     async skipTrack(actor = null) {
         if (this.queue.length > 0) {

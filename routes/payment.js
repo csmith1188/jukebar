@@ -279,7 +279,7 @@ router.post('/refund', async (req, res) => {
         // Get owner's PIN from environment variable
         const pin = process.env.OWNER_PIN;
         if (!pin) {
-            return res.status(500).json({ ok: false, error: 'Server misconfigured: OWNER_PIN not set' });
+            return res.status(500).json({ ok: false, error: 'Server misconfigured: OWNER_PIN/PIN not set' });
         }
         
         const userRow = await new Promise((resolve, reject) => {
