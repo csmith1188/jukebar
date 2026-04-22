@@ -1,5 +1,23 @@
 [
     {
+        "version": "2.3.0",
+        "releaseDate": "04/22/26",
+        "changes": [
+            {
+                "type": "feature",
+                "text": "Added artist and album lookup functionality to the player"
+            },
+            {
+                "type": "improvement",
+                "text": "Artist and album lookup functionality now shows popular tracks and albums"
+            },
+            {
+                "type": "improvement",
+                "text": "Added rate limiting to the player to prevent abuse... like people duplicating the tab to create multiple instances (looking at you freshmen...))"
+            }
+        ]
+    },
+    {
         "version": "2.2.1",
         "releaseDate": "04/16/26",
         "changes": [
