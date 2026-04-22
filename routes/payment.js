@@ -4,6 +4,7 @@ const db = require('../utils/database');
 const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
 const { isOwner, getFirstOwnerId } = require('../utils/owners');
 const { transfer, refund: poolRefund } = require('../utils/transferManager');
+const { READ, playbackRateLimit, executePlaybackRead } = require('../middleware/spotifyPlaybackRateLimit');
 
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
 const POOL_ID = Number(process.env.POOL_ID);
@@ -79,7 +80,7 @@ async function fetchPlaylistTrackItems(playlistId) {
 
 async function getCurrentTrackUri() {
     await ensureSpotifyAccessToken();
-    const playback = await spotifyApi.getMyCurrentPlayingTrack();
+    const playback = await executePlaybackRead({ session: null, ip: 'payment-helper' }, 'payment-currentTrackUri', () => spotifyApi.getMyCurrentPlayingTrack());
     return playback?.body?.item?.uri || null;
 }
 
@@ -119,7 +120,7 @@ function isPlaylistAllowed(playlistId) {
     });
 }
 
-router.post('/transfer', async (req, res) => {
+router.post('/transfer', playbackRateLimit(READ), async (req, res) => {
     try {
         const to = POOL_ID;
         if (!to || isNaN(to)) {
@@ -425,7 +426,7 @@ router.get('/paymentStatus', (req, res) => {
     res.json({ ok: true, hasPaid: !!req.session.hasPaid });
 });
 
-router.post('/getAmount', async (req, res) => {
+router.post('/getAmount', playbackRateLimit(READ), async (req, res) => {
     try {
         const db = require('../utils/database');
         const userId = req.session.token?.id;

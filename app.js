@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const { io: ioClient } = require('socket.io-client');
 const db = require('./utils/database');
 const { isOwner, getOwnerIds } = require('./utils/owners');
+const rateLimit = require('express-rate-limit');
 
 dotenv.config();
 
@@ -23,53 +24,49 @@ function isBrokeyEnabled() {
     return brokeyEnabled;
 }
 
+function toRetryAfterSeconds(valueMs) {
+    const seconds = Math.ceil(Math.max(0, Number(valueMs) || 0) / 1000);
+    return Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+}
+
+function getLimiterRetryAfterSeconds(req) {
+    const resetTime = req.rateLimit?.resetTime;
+    if (!resetTime) return 30;
+    const resetMs = resetTime instanceof Date ? resetTime.getTime() : Number(resetTime);
+    return Math.max(1, toRetryAfterSeconds(resetMs - Date.now()));
+}
+
+const limiter = rateLimit({
+	windowMs: 30 * 1000, // Spotify-like rolling cadence (30s), slightly stricter.
+	limit: 45, // Slightly more aggressive than typical Spotify app-wide throughput.
+	standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
+	legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
+	ipv6Subnet: 60, // Slightly less aggressive, better CIDR for most v6 deployments
+	// store: ... , // Redis, Memcached, etc. See below.
+    handler: (req, res) => {
+        const retryAfterSeconds = getLimiterRetryAfterSeconds(req);
+        res.set('Retry-After', String(retryAfterSeconds));
+        return res.status(429).render('rateLimit.ejs', {
+            title: 'Jukebar Rate Limited',
+            message: 'Hey bud, you\'re making too many requests. Stop it.',
+            retryAfterSeconds
+        });
+    }
+})
+
+app.use(limiter);
+
 app.use((req, res, next) => {
     if (!isBrokeyEnabled()) return next();
     if (req.path.startsWith('/img/')) return next();
-    res.status(503).send(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jukebar Brokey</title>
-  <link rel="icon" type="image/png" href="/img/brokey.png" />
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      color: #fff;
-      font-family: Arial, sans-serif;
-    }
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 24px;
-      box-sizing: border-box;
-    }
-    .msg {
-      font-size: 2rem;
-      line-height: 1.35;
-      max-width: 900px;
-    }
-    .whoopsie {
-      width: min(320px, 80vw);
-      height: auto;
-      margin: 0 auto 18px;
-      display: block;
-    }
-  </style>
-</head>
-<body>
-  <div>
-    <img class="whoopsie" src="/img/whoopsie.png" alt="whoopsie" />
-    <div class="msg">jukebar brokey... i sorry i fix it tomorrow!</div>
-  </div>
-</body>
-</html>`);
+    if (req.path === '/diagnostics') return next();
+    if (req.path === '/login') return next();
+    return res.status(503).render('rateLimit.ejs', {
+        title: 'Jukebar Brokey',
+        image: '/img/brokey.png',
+        message: 'jukebar brokey... i sorry i fix it tomorrow!',
+        retryAfterSeconds: 30
+    });
 });
 
 const server = http.createServer(app);
@@ -110,6 +107,7 @@ const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
+const { READ, playbackRateLimit, executePlaybackRead, setSpotifyPlaybackCooldown, getRetryAfterFromError, isSpotify429 } = require('./middleware/spotifyPlaybackRateLimit');
 const path = require('path');
 const fs = require('fs');
 
@@ -118,14 +116,152 @@ async function runSpotifyDiagnostics() {
     try {
         await ensureSpotifyAccessToken();
         // Lightweight playback-health probe.
-        await spotifyApi.getMyDevices();
+        await executePlaybackRead({ session: null, ip: 'diagnostics-loop' }, 'diagnostics-loop-devices', () => spotifyApi.getMyDevices());
     } catch (err) {
         const status = err?.statusCode ?? err?.response?.statusCode ?? err?.body?.error?.status;
         if (Number(status) === 429) {
+            setSpotifyPlaybackCooldown(READ, getRetryAfterFromError(err), 'runSpotifyDiagnostics');
+            queueManager.setSpotifyCooldown(getRetryAfterFromError(err), 'runSpotifyDiagnostics');
             enableBrokey('Spotify diagnostics returned 429');
         }
     }
 }
+
+app.get('/diagnostics', isAuthenticated, playbackRateLimit(READ), async (req, res) => {
+    const userId = req.session?.token?.id;
+    const isTeacherUser = req.session?.permission >= 4 || isOwner(userId);
+    if (!isTeacherUser) {
+        return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
+    }
+
+    const report = {
+        timestamp: new Date().toISOString(),
+        brokey: isBrokeyEnabled(),
+        tests: {}
+    };
+
+    try {
+        await ensureSpotifyAccessToken();
+
+        try {
+            const me = await spotifyApi.getMe();
+            report.tests.userAccess = {
+                status: 'pass',
+                message: 'Successfully retrieved user info',
+                user: me.body?.display_name || 'Unknown',
+                note: 'Premium status cannot be verified via API for Development Mode apps (product field removed Feb 2026)'
+            };
+        } catch (error) {
+            report.tests.userAccess = {
+                status: 'fail',
+                message: error.message || 'Failed to get user info',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        try {
+            const searchResult = await spotifyApi.searchTracks('test', { limit: 1 });
+            report.tests.searchScope = {
+                status: 'pass',
+                message: 'Search endpoint working',
+                totalResults: searchResult.body?.tracks?.total || 0
+            };
+        } catch (error) {
+            if (Number(error?.statusCode) === 429) enableBrokey('Diagnostics /searchScope returned 429');
+            report.tests.searchScope = {
+                status: 'fail',
+                message: error.message || 'Search failed',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        try {
+            const trackResult = await spotifyApi.getTrack('3n3Ppam7vgaVa1iaRUc9Lp');
+            report.tests.albumArtLookup = {
+                status: 'pass',
+                message: 'Track lookup working',
+                track: trackResult.body?.name || 'Unknown',
+                hasImage: !!(trackResult.body?.album?.images?.length > 0)
+            };
+        } catch (error) {
+            if (Number(error?.statusCode) === 429) enableBrokey('Diagnostics /albumArtLookup returned 429');
+            report.tests.albumArtLookup = {
+                status: 'fail',
+                message: error.message || 'Track lookup failed',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        try {
+            const playback = await executePlaybackRead(req, 'diagnostics-playbackRead', () => spotifyApi.getMyCurrentPlayingTrack());
+            const isPlaying = !!playback.body?.item;
+            report.tests.playbackRead = {
+                status: 'pass',
+                message: 'Playback state readable',
+                isCurrentlyPlaying: isPlaying,
+                currentTrack: isPlaying ? playback.body.item.name : null
+            };
+        } catch (error) {
+            if (Number(error?.statusCode) === 429) enableBrokey('Diagnostics /playbackRead returned 429');
+            report.tests.playbackRead = {
+                status: 'fail',
+                message: error.message || 'Failed to read playback state',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        try {
+            const deviceResult = await executePlaybackRead(req, 'diagnostics-playbackModifyCheck', () => spotifyApi.getMyDevices());
+            const hasDevice = (deviceResult.body?.devices?.length || 0) > 0;
+            report.tests.playbackModify = {
+                status: hasDevice ? 'pass' : 'warning',
+                message: hasDevice ? 'Playback modify scope available' : 'No active devices found',
+                activeDevices: deviceResult.body?.devices?.length || 0,
+                deviceNames: deviceResult.body?.devices?.map(d => d.name) || []
+            };
+        } catch (error) {
+            if (Number(error?.statusCode) === 429) enableBrokey('Diagnostics /playbackModify returned 429');
+            report.tests.playbackModify = {
+                status: 'fail',
+                message: error.message || 'Failed to check playback modify scope',
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        const passCount = Object.values(report.tests).filter(t => t.status === 'pass').length;
+        const failCount = Object.values(report.tests).filter(t => t.status === 'fail').length;
+        const warnCount = Object.values(report.tests).filter(t => t.status === 'warning').length;
+        report.summary = {
+            passed: passCount,
+            failed: failCount,
+            warnings: warnCount,
+            allPassed: failCount === 0,
+            recommendation: failCount > 0
+                ? 'One or more tests failed. Check details above and verify Spotify token scopes.'
+                : warnCount > 0
+                    ? 'All tests passed but warnings were detected.'
+                    : 'All tests passed. Spotify credentials appear to be working correctly.'
+        };
+
+        report.brokey = isBrokeyEnabled();
+    } catch (err) {
+        if (isSpotify429(err)) {
+            const retryAfter = getRetryAfterFromError(err);
+            setSpotifyPlaybackCooldown(READ, retryAfter, 'GET /diagnostics');
+            queueManager.setSpotifyCooldown(retryAfter, 'GET /diagnostics');
+            enableBrokey('Diagnostics endpoint returned 429');
+        }
+        report.error = err?.message || 'Diagnostics endpoint failed';
+        return res.status(500).json(report);
+    }
+
+    return res.json(report);
+});
 
 let changelog = [];
 try {

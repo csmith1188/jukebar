@@ -11,6 +11,14 @@ const { getCurrentClassId, requestAndWaitForClassId } = require('./socket');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const {
+    READ,
+    MODIFY,
+    playbackRateLimit,
+    executePlaybackRead,
+    executePlaybackModify,
+    setSpotifyPlaybackCooldown
+} = require('../middleware/spotifyPlaybackRateLimit');
 
 // Play random sound from /sfx folder
 let isPlayingSound = false;
@@ -541,7 +549,7 @@ async function getPlaylistPlayableStats(playlistId) {
 
 async function getCurrentTrackUri() {
     await ensureSpotifyAccessToken();
-    const playback = await spotifyApi.getMyCurrentPlayingTrack();
+    const playback = await executePlaybackRead({ session: null, ip: 'server-helper' }, 'helper-currentTrackUri', () => spotifyApi.getMyCurrentPlayingTrack());
     return playback?.body?.item?.uri || null;
 }
 
@@ -1101,7 +1109,7 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
     }
 });
 
-router.post('/api/playlists/queue', isAuthenticated, async (req, res) => {
+router.post('/api/playlists/queue', isAuthenticated, playbackRateLimit(MODIFY), async (req, res) => {
     try {
         const userId = req.session?.token?.id;
         if (!userId) {
@@ -1283,12 +1291,16 @@ router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res)
     }
 });
 
-router.get('/getQueue', async (req, res) => {
+router.get('/getQueue', playbackRateLimit(READ), async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
-        const response = await fetch('https://api.spotify.com/v1/me/player/queue', {
+        const response = await executePlaybackRead(req, 'getQueue', async () => fetch('https://api.spotify.com/v1/me/player/queue', {
             headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
-        });
+        }));
+        if (response.status === 429) {
+            setSpotifyPlaybackCooldown(READ, response.headers.get('retry-after'), 'GET /getQueue');
+            return res.status(429).json({ ok: false, error: 'Spotify queue is rate limited. Please retry shortly.' });
+        }
         if (response.status === 200) {
             const queueData = await response.json();
             const items = queueData.queue || [];
@@ -1375,7 +1387,7 @@ router.get('/getQueue', async (req, res) => {
     }
 });
 
-router.post('/addToQueue', async (req, res) => {
+router.post('/addToQueue', playbackRateLimit(MODIFY), async (req, res) => {
     //console.log('addToQueue - Session:', req.session?.token?.id, 'hasPaid:', req.session?.hasPaid);
     if (!req.session || !req.session.token || !req.session.token.id) {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -1421,7 +1433,7 @@ router.post('/addToQueue', async (req, res) => {
                 addedBy: username
             };
 
-            await spotifyApi.addToQueue(shouldAprilFool() ? APRIL_FOOLS_URI : uri);
+            await executePlaybackModify(req, 'addToQueue', () => spotifyApi.addToQueue(shouldAprilFool() ? APRIL_FOOLS_URI : uri));
 
             const queueTrack = {
                 uri: track.uri,
@@ -1572,7 +1584,7 @@ router.post('/addToQueue', async (req, res) => {
             return res.status(403).json({ ok: false, error: 'This track has been banned by the teacher' });
         }
 
-        await spotifyApi.addToQueue(shouldAprilFool() ? APRIL_FOOLS_URI : uri);
+        await executePlaybackModify(req, 'addToQueue', () => spotifyApi.addToQueue(shouldAprilFool() ? APRIL_FOOLS_URI : uri));
         const username2 = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
 
         const queueTrack = {
@@ -1656,12 +1668,16 @@ router.post('/addToQueue', async (req, res) => {
 });
 
 
-router.get('/currentlyPlaying', async (req, res) => {
+router.get('/currentlyPlaying', playbackRateLimit(READ), async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
-        const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+        const response = await executePlaybackRead(req, 'currentlyPlaying', async () => fetch('https://api.spotify.com/v1/me/player/currently-playing', {
             headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
-        });
+        }));
+        if (response.status === 429) {
+            setSpotifyPlaybackCooldown(READ, response.headers.get('retry-after'), 'GET /currentlyPlaying');
+            return res.status(429).json({ ok: false, error: 'Spotify playback is rate limited. Please retry shortly.' });
+        }
         if (response.status === 200) {
             const data = await response.json();
 
@@ -1703,7 +1719,7 @@ router.get('/currentlyPlaying', async (req, res) => {
     }
 });
 
-router.post('/skip', async (req, res) => {
+router.post('/skip', playbackRateLimit(MODIFY), async (req, res) => {
     //console.log('skip - Session:', req.session?.token?.id, 'hasPaid:', req.session?.hasPaid);
     if (!req.session || !req.session.token || !req.session.token.id) {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -1761,7 +1777,7 @@ router.post('/skip', async (req, res) => {
                 }
             }
 
-            await spotifyApi.skipToNext();
+            await executePlaybackModify(req, 'skip', () => spotifyApi.skipToNext());
 
             // Update queueManager and broadcast to clients
             const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher');
@@ -1840,7 +1856,7 @@ router.post('/skip', async (req, res) => {
                 const soundFile = playRandomBlockedSound();
 
                 // Get track details for logging
-                const currentPlayback = await spotifyApi.getMyCurrentPlayingTrack();
+                const currentPlayback = await executePlaybackRead(req, 'skip-currentTrack', () => spotifyApi.getMyCurrentPlayingTrack());
                 const trackName = currentPlayback.body?.item?.name || 'Unknown';
                 const artistName = currentPlayback.body?.item?.artists?.map(a => a.name).join(', ') || 'Unknown';
 
@@ -1888,7 +1904,7 @@ router.post('/skip', async (req, res) => {
         }
 
         // No shields, proceed with skip
-        await spotifyApi.skipToNext();
+        await executePlaybackModify(req, 'skip', () => spotifyApi.skipToNext());
 
         // Update queueManager and broadcast to clients
         const nextTrack = await queueManager.skipTrack(req.session.user || 'Someone');
@@ -1966,7 +1982,7 @@ router.post('/queue/add', async (req, res) => {
 });
 
 // Skip current track (for teachers/admins)
-router.post('/queue/skip', async (req, res) => {
+router.post('/queue/skip', playbackRateLimit(MODIFY), async (req, res) => {
     try {
         // Check permissions
         if (req.session.permission < 4 && !isOwner(req.session.token?.id)) {
@@ -1978,7 +1994,7 @@ router.post('/queue/skip', async (req, res) => {
         if (nextTrack) {
             // Actually skip on Spotify
             await ensureSpotifyAccessToken();
-            await spotifyApi.skipToNext();
+            await executePlaybackModify(req, 'queue-skip', () => spotifyApi.skipToNext());
 
             res.json({ ok: true, message: 'Track skipped', currentTrack: nextTrack });
         } else {
@@ -2280,12 +2296,16 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
 });
 
 
-router.get('/api/currentTrack', async (req, res) => {
+router.get('/api/currentTrack', playbackRateLimit(READ), async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
-        const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+        const response = await executePlaybackRead(req, 'api-currentTrack', async () => fetch('https://api.spotify.com/v1/me/player/currently-playing', {
             headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
-        });
+        }));
+        if (response.status === 429) {
+            setSpotifyPlaybackCooldown(READ, response.headers.get('retry-after'), 'GET /api/currentTrack');
+            return res.status(429).json({ ok: false, error: 'Spotify playback is rate limited. Please retry shortly.' });
+        }
         const data = await response.json();
         res.json({ track: data.item });
     } catch (err) {
@@ -2389,7 +2409,7 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
 
         // Test 4: getMyCurrentPlayingTrack - verify playback-state read scope
         try {
-            const playback = await spotifyApi.getMyCurrentPlayingTrack();
+            const playback = await executePlaybackRead(req, 'diagnostics-playbackRead', () => spotifyApi.getMyCurrentPlayingTrack());
             const isPlaying = !!playback.body?.item;
             results.tests.playbackRead = {
                 status: 'pass',
@@ -2410,7 +2430,7 @@ router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, re
         try {
             // We won't actually add to queue, just check if the scope is available
             // by attempting a getMyDevices call which requires user-read-playback-state
-            const deviceResult = await spotifyApi.getMyDevices();
+            const deviceResult = await executePlaybackRead(req, 'diagnostics-playbackModifyCheck', () => spotifyApi.getMyDevices());
             const hasDevice = (deviceResult.body?.devices?.length || 0) > 0;
             results.tests.playbackModify = {
                 status: hasDevice ? 'pass' : 'warning',
