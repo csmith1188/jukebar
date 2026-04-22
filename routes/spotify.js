@@ -6,7 +6,6 @@ const { logTransaction } = require('./logging');
 const queueManager = require('../utils/queueManager');
 const { isAuthenticated } = require('../middleware/auth');
 const { isOwner, getFirstOwnerId } = require('../utils/owners');
-const { logSkipActivity } = require('../utils/skipActivity');
 const { refund: poolRefund } = require('../utils/transferManager');
 const { getCurrentClassId, requestAndWaitForClassId } = require('./socket');
 const { exec } = require('child_process');
@@ -95,31 +94,68 @@ async function isTrackBannedByNameArtist(name, artist) {
         return false;
     }
 }
+
+/** Spotify /v1/search — limit must be 1–10; higher values return 400 Invalid limit. */
+const SPOTIFY_SEARCH_LIMIT_MAX = 10;
+
 // Store currently playing track info (legacy - use queueManager instead)
 let currentTrack = null;
 
 // Helper function to handle Spotify API errors consistently
 function handleSpotifyError(error, res, action = 'operation') {
-    console.error(`Spotify ${action} error:`, error);
+    // spotify-web-api-node WebapiError sets error.message = String(body) when the body object
+    // is passed directly to Error(), producing the sentinel "[object Object]".
+    // Fall through it and extract from error.body instead.
+    const rawMsg = error?.message;
+    let errMsg;
+    if (typeof rawMsg === 'string' && rawMsg && rawMsg !== '[object Object]') {
+        errMsg = rawMsg;
+    } else {
+        const bodyMsg = error?.body?.error?.message;
+        if (typeof bodyMsg === 'string' && bodyMsg) {
+            errMsg = bodyMsg;
+        } else if (error?.body && typeof error.body === 'object') {
+            try { errMsg = JSON.stringify(error.body); } catch { errMsg = String(error); }
+        } else {
+            errMsg = String(error);
+        }
+    }
+    console.error(`Spotify ${action} error [${error?.statusCode ?? 'unknown'}]: ${errMsg}`);
+
+    const spotifyStatus = Number(error?.statusCode) || 500;
+    const spotifyBody = error?.body || null;
+    const spotifyMessage =
+        (typeof error?.body?.error?.message === 'string' && error.body.error.message) ||
+        (typeof rawMsg === 'string' && rawMsg && rawMsg !== '[object Object]' ? rawMsg : null) ||
+        errMsg;
 
     // Handle network connectivity errors
     if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
         return res.status(503).json({
             ok: false,
-            error: 'Unable to connect to Spotify. Please check your internet connection and try again.'
+            error: 'Unable to connect to Spotify. Please check your internet connection and try again.',
+            spotifyStatus,
+            spotifyError: spotifyMessage
         });
     }
 
     // Handle authentication errors
     if (error.statusCode === 401) {
-        return res.status(401).json({ ok: false, error: 'Spotify authentication failed' });
+        return res.status(401).json({
+            ok: false,
+            error: spotifyMessage || 'Spotify authentication failed',
+            spotifyStatus,
+            spotifyBody
+        });
     }
 
     // Handle rate limiting
     if (error.statusCode === 429) {
         return res.status(429).json({
             ok: false,
-            error: 'Too many requests to Spotify. Please wait a moment and try again.'
+            error: spotifyMessage || 'Too many requests to Spotify. Please wait a moment and try again.',
+            spotifyStatus,
+            spotifyBody
         });
     }
 
@@ -127,12 +163,32 @@ function handleSpotifyError(error, res, action = 'operation') {
     if (error.statusCode === 404) {
         return res.status(400).json({
             ok: false,
-            error: 'No active Spotify playback found. Please start playing music on a Spotify device first.'
+            error: spotifyMessage || 'No active Spotify playback found. Please start playing music on a Spotify device first.',
+            spotifyStatus,
+            spotifyBody
         });
     }
 
     // Generic error
-    return res.status(500).json({ ok: false, error: `Failed to ${action}` });
+    return res.status(spotifyStatus).json({
+        ok: false,
+        error: spotifyMessage || `Failed to ${action}`,
+        spotifyStatus,
+        spotifyBody
+    });
+}
+
+function formatSpotifyErrorForLog(error) {
+    const status = error?.statusCode ?? 'unknown';
+    const message =
+        error?.body?.error?.message ||
+        (typeof error?.message === 'string' && error.message !== '[object Object]' ? error.message : null) ||
+        'Unknown Spotify error';
+    let body = '';
+    if (error?.body && typeof error.body === 'object') {
+        try { body = ` body=${JSON.stringify(error.body)}`; } catch { body = ''; }
+    }
+    return `[${status}] ${message}${body}`;
 }
 
 /**
@@ -277,26 +333,98 @@ function setPlaylistAllowedState(playlistId, isAllowed, teacherId, classId) {
     });
 }
 
+async function fetchAllUserPlaylists() {
+    const allItems = [];
+    const limit = 50;
+    let offset = 0;
+
+    while (true) {
+        const playlistData = await spotifyApi.getUserPlaylists({ limit, offset });
+        const items = playlistData.body?.items || [];
+        allItems.push(...items);
+        if (items.length < limit) break;
+        offset += limit;
+    }
+
+    return allItems;
+}
+
+function pruneAllowedPlaylistsNotInLibrary(classId, playlistIds) {
+    return new Promise((resolve, reject) => {
+        const uniqueIds = [...new Set((playlistIds || []).filter(Boolean))];
+
+        if (uniqueIds.length === 0) {
+            return db.run(
+                `DELETE FROM allowed_playlists WHERE ${CLASS_ID_WHERE}`,
+                [classId],
+                function (err) {
+                    if (err) return reject(err);
+                    resolve(this.changes || 0);
+                }
+            );
+        }
+
+        const placeholders = uniqueIds.map(() => '?').join(',');
+        db.run(
+            `DELETE FROM allowed_playlists
+             WHERE ${CLASS_ID_WHERE}
+               AND spotify_playlist_id NOT IN (${placeholders})`,
+            [classId, ...uniqueIds],
+            function (err) {
+                if (err) return reject(err);
+                resolve(this.changes || 0);
+            }
+        );
+    });
+}
+
 async function fetchPlaylistTracks(playlistId) {
     await ensureSpotifyAccessToken();
     const tracks = [];
     let offset = 0;
     const limit = 100;
+    let fetchError = null;
 
     while (true) {
-        const response = await spotifyApi.getPlaylistTracks(playlistId, { limit, offset });
-        const items = response.body?.items || [];
+        const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}`, {
+            headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
+        });
+
+        if (!res.ok) {
+            const body = await res.text();
+            console.error(`[fetchPlaylistTracks] Spotify returned ${res.status} at offset=${offset}: ${body}`);
+            if (res.status === 403) {
+                fetchError = { status: 403, message: 'Spotify denied access to this playlist. The connected Spotify account must own or collaborate on the playlist (Feb 2026 API change).' };
+            } else if (res.status === 429) {
+                const retryAfter = res.headers.get('retry-after');
+                console.warn(`[fetchPlaylistTracks] Rate limited. Retry-After: ${retryAfter}s`);
+                fetchError = { status: 429, message: `Rate limited by Spotify. Try again in ${retryAfter || 'a few'} seconds.` };
+            } else {
+                fetchError = { status: res.status, message: `Spotify returned HTTP ${res.status} when fetching playlist tracks.` };
+            }
+            break;
+        }
+
+        const data = await res.json();
+        const items = data?.items || [];
+        console.log(`[fetchPlaylistTracks] offset=${offset} fetched=${items.length} total=${data?.total ?? '?'}`);
         tracks.push(...items);
-        if (items.length < limit) break;
+        if (items.length < limit || (data?.total && tracks.length >= data.total)) break;
         offset += limit;
     }
 
-    return tracks;
+    return { tracks, error: fetchError };
 }
 
 function computePlaylistCost(trackCount) {
     const songAmount = Number(process.env.SONG_AMOUNT) || 50;
     return Math.min(Math.round(songAmount * Math.sqrt(trackCount)), 500);
+}
+
+function isTrackBanned(t, bannedPairs) {
+    const name = (t.name || '').trim().toLowerCase();
+    const artist = (t.artists || []).map(a => a.name).join(', ').trim().toLowerCase();
+    return bannedPairs.has(`${name}::${artist}`);
 }
 
 async function getQueueUriSet() {
@@ -307,11 +435,12 @@ async function getQueueUriSet() {
 }
 
 async function getQueueablePlaylistTracks(playlistId) {
-    const [rawItems, bannedSongs, queueUris] = await Promise.all([
+    const [fetchResult, bannedSongs, queueUris] = await Promise.all([
         fetchPlaylistTracks(playlistId),
         getBannedSongs(),
         getQueueUriSet()
     ]);
+    const rawItems = fetchResult.tracks;
 
     const bannedPairs = new Set(
         (bannedSongs || []).map((row) => `${(row.track_name || '').trim().toLowerCase()}::${(row.artist_name || '').trim().toLowerCase()}`)
@@ -321,7 +450,7 @@ async function getQueueablePlaylistTracks(playlistId) {
     const skipped = { unplayable: 0, banned: 0, duplicate: 0 };
 
     for (const item of rawItems) {
-        const track = item?.track;
+        const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             skipped.unplayable += 1;
             continue;
@@ -353,18 +482,26 @@ async function getQueueablePlaylistTracks(playlistId) {
 }
 
 async function getPlaylistPlayableStats(playlistId) {
-    const rawItems = await fetchPlaylistTracks(playlistId);
+    const { tracks: rawItems, error: fetchError } = await fetchPlaylistTracks(playlistId);
+
+    if (fetchError) {
+        console.error(`[getPlaylistPlayableStats] fetch failed for ${playlistId}: ${fetchError.message}`);
+        return { playableCount: 0, fetchError, skipped: { unplayable: 0, banned: 0, duplicate: 0 } };
+    }
+
     let playableCount = 0;
     let unplayableCount = 0;
 
     for (const item of rawItems) {
-        const track = item?.track;
+        const track = item?.item ?? item?.track;
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             unplayableCount += 1;
             continue;
         }
         playableCount += 1;
     }
+
+    console.log(`[getPlaylistPlayableStats] playlistId=${playlistId} rawItems=${rawItems.length} playable=${playableCount} unplayable=${unplayableCount}`);
 
     return {
         playableCount,
@@ -386,24 +523,104 @@ async function isPlaylistCurrentlyPlaying(playlistId) {
     const currentTrackUri = await getCurrentTrackUri();
     if (!currentTrackUri) return false;
 
-    const playlistItems = await fetchPlaylistTracks(playlistId);
-    return playlistItems.some((item) => item?.track?.uri === currentTrackUri);
+    const { tracks: playlistItems } = await fetchPlaylistTracks(playlistId);
+    return playlistItems.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
 
 router.post('/search', async (req, res) => {
     try {
-        let { query, source, offset } = req.body || {};
+        let { query, source, offset, limit, desiredTotal, includeArtists, includeAlbums } = req.body || {};
         if (!query || !query.trim()) {
             return res.status(400).json({ ok: false, error: 'Missing query' });
         }
 
-        offset = Math.max(0, parseInt(offset) || 0);
+        const DEFAULT_SEARCH_LIMIT = 5;
+        const MAX_SEARCH_LIMIT = SPOTIFY_SEARCH_LIMIT_MAX;
+        const DEFAULT_DESIRED_TOTAL = 20;
+        const MAX_DESIRED_TOTAL = 50;
+        const MAX_SEARCH_PAGES = 5;
+        const MAX_SEARCH_OFFSET = 1000;
+
+        const parsedLimit = Number.parseInt(limit, 10);
+        const SEARCH_LIMIT = Number.isInteger(parsedLimit)
+            ? Math.min(MAX_SEARCH_LIMIT, Math.max(1, parsedLimit))
+            : DEFAULT_SEARCH_LIMIT;
+
+        const parsedDesiredTotal = Number.parseInt(desiredTotal, 10);
+        const DESIRED_TOTAL = Number.isInteger(parsedDesiredTotal)
+            ? Math.min(MAX_DESIRED_TOTAL, Math.max(1, parsedDesiredTotal))
+            : DEFAULT_DESIRED_TOTAL;
+
+        const parsedOffset = Number.parseInt(offset, 10);
+        offset = Number.isFinite(parsedOffset)
+            ? Math.min(MAX_SEARCH_OFFSET, Math.max(0, parsedOffset))
+            : 0;
+        
+        // Debug logging for pagination and limit issues
+        // console.log('[/search] Request params:', {
+        //     query: query.trim(),
+        //     limit: SEARCH_LIMIT,
+        //     offset,
+        //     desiredTotal: DESIRED_TOTAL,
+        //     limitType: typeof SEARCH_LIMIT,
+        //     offsetType: typeof offset
+        // });
+        
         await ensureSpotifyAccessToken();
 
-        const searchData = await spotifyApi.searchTracks(query, { limit: 50, offset });
-        const items = searchData.body.tracks.items || [];
-        const total = searchData.body.tracks.total || 0;
+        // Start artist and album searches in parallel for first-page requests
+        const artistSearchPromise = (includeArtists && offset === 0)
+            ? spotifyApi.search(query.trim(), ['artist'], { limit: 5 }).catch(() => null)
+            : Promise.resolve(null);
+
+        const albumSearchPromise = (includeAlbums && offset === 0)
+            ? spotifyApi.search(query.trim(), ['album'], { limit: 8 }).catch(() => null)
+            : Promise.resolve(null);
+
+        let total = 0;
+        let currentOffset = offset;
+        let pagesFetched = 0;
+        const aggregatedItems = [];
+        let rateLimited = false;
+
+        while (aggregatedItems.length < DESIRED_TOTAL && pagesFetched < MAX_SEARCH_PAGES) {
+            let searchData;
+            try {
+                searchData = await spotifyApi.searchTracks(query.trim(), { limit: SEARCH_LIMIT, offset: currentOffset });
+            } catch (pageErr) {
+                if (pageErr.statusCode === 429) {
+                    // Rate limited — return whatever we've collected so far
+                    rateLimited = true;
+                    break;
+                }
+                throw pageErr;
+            }
+            const tracks = searchData.body?.tracks;
+            const items = tracks?.items || [];
+            total = tracks?.total || total;
+
+            aggregatedItems.push(...items);
+            pagesFetched += 1;
+
+            if (items.length < SEARCH_LIMIT) break;
+
+            const next = currentOffset + SEARCH_LIMIT;
+            if (next > MAX_SEARCH_OFFSET) break;
+            if (total && next >= total) break;
+            currentOffset = next;
+        }
+
+        // console.log('[/search] Search aggregation:', { pagesFetched, fetchedItems: aggregatedItems.length, total });
+
+        if (rateLimited && aggregatedItems.length === 0) {
+            return res.status(429).json({
+                ok: false,
+                error: 'Spotify is rate limiting search requests right now. Please wait a few seconds and try again.'
+            });
+        }
+
+        const items = aggregatedItems.slice(0, DESIRED_TOTAL);
 
         let simplified = items.map(t => ({
             id: t.id,
@@ -448,10 +665,42 @@ router.post('/search', async (req, res) => {
                 simplified = simplified.map(t => ({ ...t, isBanned: false }));
             }
         }
-        const nextOffset = offset + 50;
+        // Resolve artist search for first-page results
+        let artists = [];
+        if (includeArtists && offset === 0) {
+            const artistData = await artistSearchPromise;
+            const artistItems = artistData?.body?.artists?.items || [];
+            artists = artistItems.map(a => ({
+                id: a.id,
+                name: a.name,
+                image: a.images?.[0]?.url || null,
+                genres: (a.genres || []).slice(0, 3),
+                popularity: a.popularity || 0
+            }));
+        }
+
+        // Resolve album search for first-page results
+        let albums = [];
+        if (includeAlbums && offset === 0) {
+            const albumData = await albumSearchPromise;
+            const albumItems = albumData?.body?.albums?.items || [];
+            albums = albumItems.map(a => ({
+                id: a.id,
+                name: a.name,
+                image: a.images?.[0]?.url || null,
+                artists: (a.artists || []).map(art => art.name).join(', '),
+                release_date: a.release_date || '',
+                total_tracks: a.total_tracks || 0,
+                album_type: a.album_type || 'album'
+            }));
+        }
+
+        const nextOffset = Math.min(offset + (pagesFetched * SEARCH_LIMIT), MAX_SEARCH_OFFSET);
         return res.json({
             ok: true,
             tracks: { items: simplified },
+            artists,
+            albums,
             nextOffset,
             hasMore: nextOffset < total
         });
@@ -468,15 +717,17 @@ router.get('/recentlyQueued', async (req, res) => {
     try {
         const rows = await new Promise((resolve, reject) => {
             db.all(
-                `SELECT track_uri, track_name, artist_name FROM transactions 
-                 WHERE user_id = ? AND action = 'play' 
-                 ORDER BY timestamp DESC LIMIT 200`,
+                `SELECT t.track_uri, t.track_name, t.artist_name, t.image_url, t.action FROM transactions t
+                 LEFT JOIN users u ON u.id = t.user_id
+                 WHERE t.user_id = ? AND t.action IN ('play', 'artist_click', 'album_click')
+                   AND (u.recently_queued_cleared_at IS NULL OR t.timestamp > u.recently_queued_cleared_at)
+                 ORDER BY t.timestamp DESC LIMIT 200`,
                 [req.session.token.id],
                 (err, rows) => err ? reject(err) : resolve(rows || [])
             );
         });
 
-        // Deduplicate: keep only the most recent play of each track, cap at 50
+        // Deduplicate: keep only the most recent item of each URI, cap at 50
         const seen = new Set();
         const uniqueRows = rows.filter(r => {
             if (seen.has(r.track_uri)) return false;
@@ -488,39 +739,67 @@ router.get('/recentlyQueued', async (req, res) => {
             return res.json({ ok: true, tracks: [] });
         }
 
-        // Extract track IDs from URIs and batch-fetch from Spotify for album art
-        const trackIds = uniqueRows
-            .map(r => r.track_uri?.match(/^spotify:track:([a-zA-Z0-9]{22})$/)?.[1])
-            .filter(Boolean);
-
-        let imageMap = {};
-        if (trackIds.length > 0) {
-            try {
-                await ensureSpotifyAccessToken();
-                const uniqueIds = [...new Set(trackIds)];
-                const trackData = await spotifyApi.getTracks(uniqueIds);
-                for (const t of trackData.body.tracks) {
-                    if (t) imageMap[t.uri] = t.album?.images?.[0]?.url || null;
-                }
-            } catch (e) {
-                console.warn('Could not fetch album art for recent tracks:', e.message);
-            }
-        }
-
-        const tracks = uniqueRows.map(r => ({
-            name: r.track_name || 'Unknown',
-            artist: r.artist_name || 'Unknown',
-            uri: r.track_uri,
-            album: {
-                name: '',
-                image: imageMap[r.track_uri] || null
-            }
-        }));
+        const tracks = uniqueRows.map((r) => {
+            const itemType = r.action === 'artist_click' ? 'artist' : (r.action === 'album_click' ? 'album' : 'track');
+            const fallbackSubtitle = itemType === 'track' ? 'Unknown' : '';
+            const subtitleText = (r.artist_name || fallbackSubtitle);
+            const yearMatch = itemType === 'album' ? String(subtitleText).match(/\b(19|20)\d{2}\b/) : null;
+            return {
+                name: r.track_name || 'Unknown',
+                artist: subtitleText,
+                uri: r.track_uri,
+                album: { name: '', image: r.image_url || '' },
+                itemType,
+                releaseYear: yearMatch ? yearMatch[0] : ''
+            };
+        });
 
         return res.json({ ok: true, tracks });
     } catch (err) {
         console.error('Error fetching recently queued:', err);
         return res.status(500).json({ ok: false, error: 'Failed to fetch recently queued songs' });
+    }
+});
+
+router.post('/recentlyQueued/interactions', isAuthenticated, async (req, res) => {
+    const userId = req.session?.token?.id;
+    if (!userId) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    const { type, id, name, subtitle, image } = req.body || {};
+    const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : '';
+    const safeId = typeof id === 'string' ? id.trim() : '';
+    const safeName = typeof name === 'string' ? name.trim() : '';
+
+    if (!['artist', 'album'].includes(normalizedType)) {
+        return res.status(400).json({ ok: false, error: 'Invalid interaction type' });
+    }
+    if (!safeId || !safeName) {
+        return res.status(400).json({ ok: false, error: 'Missing interaction metadata' });
+    }
+
+    const action = normalizedType === 'artist' ? 'artist_click' : 'album_click';
+    const uri = `spotify:${normalizedType}:${safeId}`;
+    const safeSubtitle = typeof subtitle === 'string' ? subtitle.trim() : '';
+    const safeImage = typeof image === 'string' ? image.trim() : '';
+
+    try {
+        await logTransaction({
+            userID: userId,
+            displayName: req.session.user,
+            action,
+            trackURI: uri,
+            trackName: safeName.slice(0, 200),
+            artistName: safeSubtitle.slice(0, 200),
+            imageURL: safeImage || null,
+            cost: 0
+        });
+
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Failed to log recently queued interaction:', error);
+        res.status(500).json({ ok: false, error: 'Failed to save interaction' });
     }
 });
 
@@ -532,7 +811,7 @@ router.post('/clearQueueHistory', async (req, res) => {
     try {
         await new Promise((resolve, reject) => {
             db.run(
-                `DELETE FROM transactions WHERE user_id = ? AND action = 'play'`,
+                `UPDATE users SET recently_queued_cleared_at = datetime('now') WHERE id = ?`,
                 [req.session.token.id],
                 (err) => err ? reject(err) : resolve()
             );
@@ -551,24 +830,60 @@ router.post('/clearQueueHistory', async (req, res) => {
     }
 });
 
+// Teacher-only: clear recently queued for ALL users (transactions stay intact)
+router.post('/clearAllRecentlyQueued', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(
+                `UPDATE users SET recently_queued_cleared_at = datetime('now')`,
+                (err) => err ? reject(err) : resolve()
+            );
+        });
+
+        const io = req.app.get('io');
+        if (io) io.emit('recentlyQueuedCleared');
+
+        return res.json({ ok: true, message: 'Recently queued cleared for all users' });
+    } catch (err) {
+        console.error('Error clearing all recently queued:', err);
+        return res.status(500).json({ ok: false, error: 'Failed to clear recently queued' });
+    }
+});
+
 router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
         const classId = await getClassId();
-        const playlistData = await spotifyApi.getUserPlaylists({ limit: 50 });
-        const items = playlistData.body?.items || [];
+
+        const [items, meData] = await Promise.all([
+            fetchAllUserPlaylists(),
+            spotifyApi.getMe().catch(() => null)
+        ]);
+        const myId = meData?.body?.id;
+
+        const removedCount = await pruneAllowedPlaylistsNotInLibrary(
+            classId,
+            items.map((playlist) => playlist?.id)
+        );
+        if (removedCount > 0) {
+            console.log(`[playlist:sync] Removed ${removedCount} stale allowed playlist row(s) for classId=${classId}`);
+        }
+
         const allowedMap = await getAllowedPlaylistMap(classId);
 
         const playlists = items.map((playlist) => {
+            const ownerId = playlist.owner?.id;
+            const collaborative = !!playlist.collaborative;
             const formatted = {
             id: playlist.id,
             name: playlist.name || 'Untitled Playlist',
-            totalTracks: playlist.tracks?.total ?? 0,
+            totalTracks: playlist.items?.total ?? playlist.tracks?.total ?? 0,
             image: playlist.images?.[0]?.url || null,
-            owner: playlist.owner?.display_name || playlist.owner?.id || 'Unknown',
+            owner: playlist.owner?.display_name || ownerId || 'Unknown',
             url: playlist.external_urls?.spotify || null,
             uri: playlist.uri,
-            isAllowed: allowedMap.get(playlist.id) || false
+            isAllowed: allowedMap.get(playlist.id) || false,
+            canAccessTracks: (myId && ownerId === myId) || collaborative
             };
             return formatted;
         });
@@ -678,6 +993,11 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
             getPlaylistPlayableStats(playlistId)
         ]);
 
+        if (playlistStats.fetchError) {
+            const fe = playlistStats.fetchError;
+            return res.status(fe.status === 403 ? 403 : fe.status === 429 ? 429 : 502).json({ ok: false, error: fe.message });
+        }
+
         const queueableCount = playlistStats.playableCount;
         const cost = computePlaylistCost(queueableCount);
 
@@ -760,8 +1080,13 @@ router.post('/api/playlists/queue', isAuthenticated, async (req, res) => {
             }
         }
 
+        if (playlistStats.fetchError) {
+            const fe = playlistStats.fetchError;
+            return res.status(fe.status === 403 ? 403 : fe.status === 429 ? 429 : 502).json({ ok: false, error: fe.message });
+        }
+
         if (!queueableCount) {
-            return res.status(400).json({ ok: false, error: 'No queueable tracks found in this playlist', skipped: queueData.skipped });
+            return res.status(400).json({ ok: false, error: 'No queueable tracks found in this playlist', skipped: playlistStats.skipped });
         }
 
         const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
@@ -835,7 +1160,7 @@ router.post('/unbanTrack', isAuthenticated, requireTeacherAccess, async (req, re
 // Teacher-only: Ban a track by name/artist (optionally record URI)
 router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
-        const { name, artist, reason, uri } = req.body || {};
+        const { name, artist, reason, uri, image } = req.body || {};
         if (!name || !artist) return res.status(400).json({ ok: false, error: 'Missing track name or artist' });
 
         const banReason = typeof reason === 'string' ? reason.trim() : '';
@@ -853,10 +1178,12 @@ router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res)
             return res.json({ ok: true, message: 'Track already banned' });
         }
 
+        const imageUrl = typeof image === 'string' ? image : null;
+
         await new Promise((resolve, reject) => {
             db.run(
-                'INSERT INTO banned_songs (track_name, artist_name, track_uri, banned_by, reason) VALUES (?, ?, ?, ?, ?)',
-                [name, artist, uri || null, bannedBy, banReason],
+                'INSERT INTO banned_songs (track_name, artist_name, track_uri, banned_by, reason, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                [name, artist, uri || null, bannedBy, banReason, imageUrl],
                 function (err) {
                     if (err) return reject(err);
                     resolve();
@@ -973,7 +1300,7 @@ router.post('/addToQueue', async (req, res) => {
         try {
             await ensureSpotifyAccessToken();
 
-            const { uri, anonMode } = req.body;
+            const { uri, anonMode, trackName: clientName, trackArtist: clientArtist, trackImage: clientImage } = req.body;
             if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
             const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -982,8 +1309,22 @@ router.post('/addToQueue', async (req, res) => {
 
             const trackId = match[1];
 
-            const trackData = await spotifyApi.getTrack(trackId);
-            const track = trackData.body;
+            // Use client-supplied metadata when available to avoid an extra Spotify API call.
+            // Fall back to getTrack() only when metadata is missing (e.g. direct API calls).
+            const trimName = typeof clientName === 'string' ? clientName.trim() : '';
+            const trimArtist = typeof clientArtist === 'string' ? clientArtist.trim() : '';
+            let track;
+            if (trimName && trimArtist) {
+                track = {
+                    name: trimName.slice(0, 200),
+                    artists: [{ name: trimArtist.slice(0, 200) }],
+                    uri,
+                    album: { images: [{ url: typeof clientImage === 'string' ? clientImage : '' }] }
+                };
+            } else {
+                const trackData = await spotifyApi.getTrack(trackId);
+                track = trackData.body;
+            }
             const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Spotify');
             const isAnon = anonMode ? 1 : 0;
 
@@ -991,7 +1332,7 @@ router.post('/addToQueue', async (req, res) => {
                 name: track.name,
                 artist: track.artists.map(a => a.name).join(', '),
                 uri: track.uri,
-                cover: track.album.images[0].url,
+                cover: track.album.images[0]?.url || '',
                 addedBy: username
             };
 
@@ -1009,7 +1350,7 @@ router.post('/addToQueue', async (req, res) => {
             //console.log('Adding track to queue with addedBy:', username, 'type:', typeof username); // Debug log
             queueManager.addToQueue(queueTrack);
 
-            // 📝 Save metadata to database (synchronously)
+            // Save metadata to database (synchronously)
             //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
             await new Promise((resolve, reject) => {
                 db.run(
@@ -1053,6 +1394,7 @@ router.post('/addToQueue', async (req, res) => {
                 trackURI: trackInfo.uri,
                 trackName: trackInfo.name,
                 artistName: trackInfo.artist,
+                imageURL: trackInfo.cover || null,
                 cost: 0
             });
 
@@ -1071,8 +1413,7 @@ router.post('/addToQueue', async (req, res) => {
             res.json({ success: true, message: "Track queued!", trackInfo });
             return;
         } catch (err) {
-            console.error('Error in /addToQueue (admin):', err);
-            return res.status(500).json({ error: err.message });
+            return handleSpotifyError(err, res, 'addToQueue');
         }
     }
 
@@ -1108,7 +1449,7 @@ router.post('/addToQueue', async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
 
-        const { uri, anonMode } = req.body;
+        const { uri, anonMode, trackName: clientName, trackArtist: clientArtist, trackImage: clientImage } = req.body;
         if (!uri) return res.status(400).json({ error: "Missing track URI" });
 
         const trackIdPattern = /^spotify:track:([a-zA-Z0-9]{22})$/;
@@ -1117,14 +1458,28 @@ router.post('/addToQueue', async (req, res) => {
 
         const trackId = match[1];
 
-        const trackData = await spotifyApi.getTrack(trackId);
-        const track = trackData.body;
+        // Use client-supplied metadata when available to avoid an extra Spotify API call.
+        // Fall back to getTrack() only when metadata is missing (e.g. direct API calls).
+        const trimName = typeof clientName === 'string' ? clientName.trim() : '';
+        const trimArtist = typeof clientArtist === 'string' ? clientArtist.trim() : '';
+        let track;
+        if (trimName && trimArtist) {
+            track = {
+                name: trimName.slice(0, 200),
+                artists: [{ name: trimArtist.slice(0, 200) }],
+                uri,
+                album: { images: [{ url: typeof clientImage === 'string' ? clientImage : '' }] }
+            };
+        } else {
+            const trackData = await spotifyApi.getTrack(trackId);
+            track = trackData.body;
+        }
         const isAnon = anonMode ? 1 : 0;
         const trackInfo = {
             name: track.name,
             artist: track.artists.map(a => a.name).join(', '),
             uri: track.uri,
-            cover: track.album.images[0].url,
+            cover: track.album.images[0]?.url || '',
         };
 
         // Check banned songs
@@ -1190,6 +1545,7 @@ router.post('/addToQueue', async (req, res) => {
             trackURI: trackInfo.uri,
             trackName: trackInfo.name,
             artistName: trackInfo.artist,
+            imageURL: trackInfo.cover || null,
             cost: Number(process.env.SONG_AMOUNT) || 50
         });
 
@@ -1210,8 +1566,7 @@ router.post('/addToQueue', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('Error in /addToQueue:', err);
-        res.status(500).json({ error: err.message });
+        return handleSpotifyError(err, res, 'addToQueue');
     }
 });
 
@@ -1426,12 +1781,6 @@ router.post('/skip', async (req, res) => {
                     skippedType: 'shield',
                     skippedTrack: { name: trackName }
                 };
-
-                try {
-                    await logSkipActivity(skipEvent);
-                } catch (activityError) {
-                    console.error('Failed to persist shield skip activity:', activityError.message);
-                }
 
                 queueManager.broadcastUpdate('skip', skipEvent);
 
@@ -1655,7 +2004,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
                     reason: 'Jukebar refund - shield purchase failed'
                 });
                 req.session.payment.refundedAt = Date.now();
-                console.log('[purchaseShield] Auto-refund issued for failed shield purchase');
+                // console.log('[purchaseShield] Auto-refund issued for failed shield purchase');
             } catch (refundErr) {
                 console.error('[purchaseShield] Auto-refund failed:', refundErr.message);
             }
@@ -1857,6 +2206,331 @@ router.get('/api/currentTrack', async (req, res) => {
     } catch (err) {
         console.error('Error fetching current track:', err);
         res.status(500).json({ error: 'Failed to fetch current track' });
+    }
+});
+
+// Spotify auth/permission diagnostic endpoint
+router.get('/diagnostics', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    const results = {
+        timestamp: new Date().toISOString(),
+        tests: {}
+    };
+
+    // spotify-web-api-node WebapiError sets error.message = String(body) when the body
+    // object is passed directly to the Error constructor, producing "[object Object]".
+    // Fall through that sentinel and extract from error.body instead.
+    function extractErrMsg(error, fallback) {
+        const raw = error?.message;
+        if (typeof raw === 'string' && raw && raw !== '[object Object]') return raw;
+        // WebapiError stores the original response body in .body
+        const bodyMsg = error?.body?.error?.message;
+        if (typeof bodyMsg === 'string' && bodyMsg) return bodyMsg;
+        if (error?.body && typeof error.body === 'object') {
+            try {
+                const serialized = JSON.stringify(error.body);
+                if (serialized && serialized !== '{}' && serialized !== '[]') return serialized;
+            } catch { /* circular ref — ignore */ }
+        }
+        if (error?.statusCode) {
+            const retryAfter = error?.headers?.['retry-after'];
+            if (error.statusCode === 429) {
+                return retryAfter
+                    ? `Spotify rate limit hit (429). Retry after ${retryAfter}s.`
+                    : 'Spotify rate limit hit (429). Please wait and retry.';
+            }
+            return `Spotify returned HTTP ${error.statusCode}`;
+        }
+        return fallback;
+    }
+
+    try {
+        await ensureSpotifyAccessToken();
+
+        // Test 1: getMe - verify user access
+        // Note: the `product` field (Premium status) was removed from the User object for
+        // Development Mode apps in the February 2026 Spotify API changes.
+        try {
+            const me = await spotifyApi.getMe();
+            results.tests.userAccess = {
+                status: 'pass',
+                message: 'Successfully retrieved user info',
+                user: me.body?.display_name || 'Unknown',
+                note: 'Premium status cannot be verified via API for Development Mode apps (product field removed Feb 2026)'
+            };
+        } catch (error) {
+            results.tests.userAccess = {
+                status: 'fail',
+                message: extractErrMsg(error, 'Failed to get user info'),
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 2: searchTracks - verify search scope
+        try {
+            const searchResult = await spotifyApi.searchTracks('test', { limit: 1 });
+            results.tests.searchScope = {
+                status: 'pass',
+                message: 'Search endpoint working',
+                totalResults: searchResult.body?.tracks?.total || 0
+            };
+        } catch (error) {
+            results.tests.searchScope = {
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Search failed'),
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 3: getTrack - verify track metadata access
+        try {
+            const trackResult = await spotifyApi.getTrack('3n3Ppam7vgaVa1iaRUc9Lp');
+            results.tests.trackLookup = {
+                status: 'pass',
+                message: 'Track lookup working',
+                track: trackResult.body?.name || 'Unknown',
+                hasImage: !!(trackResult.body?.album?.images?.length > 0)
+            };
+        } catch (error) {
+            results.tests.trackLookup = {
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Track lookup failed'),
+                statusCode: error.statusCode,
+                note: error.statusCode === 429 ? 'Rate limited — app is making too many requests. Wait and retry.' : undefined,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 4: getMyCurrentPlayingTrack - verify playback-state read scope
+        try {
+            const playback = await spotifyApi.getMyCurrentPlayingTrack();
+            const isPlaying = !!playback.body?.item;
+            results.tests.playbackRead = {
+                status: 'pass',
+                message: 'Playback state readable',
+                isCurrentlyPlaying: isPlaying,
+                currentTrack: isPlaying ? playback.body.item.name : null
+            };
+        } catch (error) {
+            results.tests.playbackRead = {
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Failed to read playback state'),
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 5: addToQueue - verify playback-modify scope (dry-run check)
+        try {
+            // We won't actually add to queue, just check if the scope is available
+            // by attempting a getMyDevices call which requires user-read-playback-state
+            const deviceResult = await spotifyApi.getMyDevices();
+            const hasDevice = (deviceResult.body?.devices?.length || 0) > 0;
+            results.tests.playbackModify = {
+                status: hasDevice ? 'pass' : 'warning',
+                message: hasDevice ? 'Playback modify scope available' : 'No active devices found',
+                activeDevices: deviceResult.body?.devices?.length || 0,
+                deviceNames: deviceResult.body?.devices?.map(d => d.name) || []
+            };
+        } catch (error) {
+            results.tests.playbackModify = {
+                status: error.statusCode === 429 ? 'warning' : 'fail',
+                message: extractErrMsg(error, 'Failed to check playback modify scope'),
+                statusCode: error.statusCode,
+                errorBody: error.body?.error || null
+            };
+        }
+
+        // Test 6: Summary
+        const passCount = Object.values(results.tests).filter(t => t.status === 'pass').length;
+        const failCount = Object.values(results.tests).filter(t => t.status === 'fail').length;
+        const warnCount = Object.values(results.tests).filter(t => t.status === 'warning').length;
+
+        results.summary = {
+            passed: passCount,
+            failed: failCount,
+            warnings: warnCount,
+            allPassed: failCount === 0,
+            recommendation: failCount > 0 
+                ? 'One or more tests failed. Check the details above. You may need to re-generate your refresh token with all required scopes.'
+                : warnCount > 0
+                ? 'All tests passed but some warnings detected. Check details above.'
+                : 'All tests passed. Spotify credentials appear to be working correctly.'
+        };
+
+        res.json(results);
+    } catch (error) {
+        console.error('Diagnostics endpoint error:', error);
+        results.error = error.message;
+        res.status(500).json(results);
+    }
+});
+
+// --- Artist / Album browsing routes ---
+
+router.get('/api/artist/:id/top-tracks', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const artistName = (req.query.name || '').trim();
+        if (!id) return res.status(400).json({ ok: false, error: 'Artist ID required' });
+        if (!artistName) return res.status(400).json({ ok: false, error: 'Artist name required (pass ?name=)' });
+
+        const lastfmKey = process.env.LASTFM_API_KEY;
+        if (!lastfmKey) return res.status(500).json({ ok: false, error: 'LASTFM_API_KEY not configured' });
+
+        // Step 1: Get ranked track names from Last.fm
+        const lfmUrl = new URL('https://ws.audioscrobbler.com/2.0/');
+        lfmUrl.searchParams.set('method', 'artist.getTopTracks');
+        lfmUrl.searchParams.set('artist', artistName);
+        lfmUrl.searchParams.set('limit', '15');
+        lfmUrl.searchParams.set('api_key', lastfmKey);
+        lfmUrl.searchParams.set('format', 'json');
+
+        const lfmRes = await fetch(lfmUrl.toString());
+        if (!lfmRes.ok) {
+            console.error(`[top-tracks] Last.fm ${lfmRes.status}`);
+            return res.status(502).json({ ok: false, error: 'Last.fm request failed' });
+        }
+        const lfmData = await lfmRes.json();
+        const lfmTracks = lfmData.toptracks?.track || [];
+        if (!lfmTracks.length) return res.json({ ok: true, tracks: [] });
+
+        // Step 2: Resolve each track name to a Spotify track via search, keeping Last.fm order
+        await ensureSpotifyAccessToken();
+
+        const banned = await getBannedSongs();
+        const bannedPairs = new Set(banned.map(b =>
+            `${(b.track_name || '').trim().toLowerCase()}::${(b.artist_name || '').trim().toLowerCase()}`
+        ));
+
+        const resolved = [];
+        for (const lfmTrack of lfmTracks) {
+            if (resolved.length >= 10) break;
+            const trackName = lfmTrack.name || '';
+            try {
+                const searchData = await spotifyApi.searchTracks(
+                    `track:"${trackName.replace(/"/g, '')}" artist:"${artistName.replace(/"/g, '')}"`,
+                    { limit: SPOTIFY_SEARCH_LIMIT_MAX, market: 'US' }
+                );
+                const candidates = (searchData.body.tracks?.items || [])
+                    .filter(t => (t.artists || []).some(a => a.id === id));
+
+                const match = candidates.find(
+                    t => !t.explicit && (t.duration_ms || 0) < 420000 && !isTrackBanned(t, bannedPairs)
+                );
+                if (!match) continue;
+
+                // Avoid duplicate Spotify tracks (same URI)
+                if (resolved.some(r => r.uri === match.uri)) continue;
+
+                resolved.push({
+                    id: match.id,
+                    name: match.name,
+                    artist: (match.artists || []).map(a => a.name).join(', '),
+                    uri: match.uri,
+                    album: {
+                        name: match.album?.name || '',
+                        image: match.album?.images?.[0]?.url || null
+                    },
+                    duration_ms: match.duration_ms
+                });
+            } catch (searchErr) {
+                console.warn(`[top-tracks] Spotify search failed for "${trackName}":`, formatSpotifyErrorForLog(searchErr));
+                if (searchErr?.statusCode === 429) break;
+            }
+        }
+
+        return res.json({ ok: true, tracks: resolved });
+    } catch (err) {
+        return handleSpotifyError(err, res, 'fetch artist top tracks');
+    }
+});
+
+router.get('/api/artist/:id/albums', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const offset = parseInt(req.query.offset, 10) || 0;
+        if (!id) return res.status(400).json({ ok: false, error: 'Artist ID required' });
+
+        await ensureSpotifyAccessToken();
+
+        const url = new URL(`https://api.spotify.com/v1/artists/${id}/albums`);
+        url.searchParams.set('include_groups', 'album,single');
+        url.searchParams.set('market', 'US');
+        url.searchParams.set('limit', '10'); // Spotify API maximum for this endpoint
+        url.searchParams.set('offset', String(offset));
+
+        const response = await fetch(url.toString(), {
+            headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
+        });
+
+        if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            return res.status(response.status).json({ ok: false, error: errBody?.error?.message || `Spotify error ${response.status}` });
+        }
+
+        const data = await response.json();
+        const albums = (data.items || []).map(a => ({
+            id: a.id,
+            name: a.name,
+            image: a.images?.[0]?.url || null,
+            release_date: a.release_date || '',
+            total_tracks: a.total_tracks || 0,
+            album_type: a.album_type || 'album'
+        }));
+
+        const nextOffset = offset + albums.length;
+        const hasMore = nextOffset < (data.total || 0);
+
+        return res.json({ ok: true, albums, hasMore, nextOffset });
+    } catch (err) {
+        return handleSpotifyError(err, res, 'fetch artist albums');
+    }
+});
+
+router.get('/api/album/:id/tracks', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) return res.status(400).json({ ok: false, error: 'Album ID required' });
+
+        await ensureSpotifyAccessToken();
+        const result = await spotifyApi.getAlbum(id, { market: 'US' });
+        const albumData = result.body;
+        const albumImage = albumData.images?.[0]?.url || null;
+        const releaseYear = typeof albumData.release_date === 'string'
+            ? albumData.release_date.substring(0, 4)
+            : '';
+
+        const banned = await getBannedSongs();
+        const bannedPairs = new Set(banned.map(b =>
+            `${(b.track_name || '').trim().toLowerCase()}::${(b.artist_name || '').trim().toLowerCase()}`
+        ));
+
+        const filtered = [];
+        for (const t of (albumData.tracks?.items || [])) {
+            if (!t.uri || t.is_local) continue;
+            if ((t.duration_ms || 0) >= 420000) continue;
+            if (t.explicit) continue;
+            if (isTrackBanned(t, bannedPairs)) continue;
+            filtered.push({
+                id: t.id,
+                name: t.name,
+                artist: (t.artists || []).map(a => a.name).join(', '),
+                uri: t.uri,
+                album: { name: albumData.name || '', image: albumImage },
+                duration_ms: t.duration_ms || 0
+            });
+        }
+
+        return res.json({
+            ok: true,
+            tracks: filtered,
+            queueableCount: filtered.length,
+            releaseYear
+        });
+    } catch (err) {
+        return handleSpotifyError(err, res, 'fetch album tracks');
     }
 });
 

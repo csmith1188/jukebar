@@ -17,6 +17,7 @@ function computePlaylistCost(trackCount) {
     return Math.min(trackCount * songAmount, 500);
 }
 
+
 // Returns the top non-owner user IDs ranked by plays in the last 7 days (same source as the leaderboard)
 function getRollingTopUsers() {
     return new Promise((resolve, reject) => {
@@ -50,10 +51,26 @@ async function fetchPlaylistTrackItems(playlistId) {
     const limit = 100;
 
     while (true) {
-        const response = await spotifyApi.getPlaylistTracks(playlistId, { limit, offset });
-        const batch = response.body?.items || [];
+        const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}`, {
+            headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
+        });
+
+        if (!res.ok) {
+            const body = await res.text();
+            console.error(`[payment:fetchPlaylistTrackItems] Spotify returned ${res.status} at offset=${offset}: ${body}`);
+            if (res.status === 403) {
+                throw new Error('Spotify denied access to this playlist. The connected Spotify account must own or collaborate on the playlist (Feb 2026 API change).');
+            } else if (res.status === 429) {
+                const retryAfter = res.headers.get('retry-after');
+                throw new Error(`Rate limited by Spotify. Try again in ${retryAfter || 'a few'} seconds.`);
+            }
+            throw new Error(`Spotify returned HTTP ${res.status} when fetching playlist tracks.`);
+        }
+
+        const data = await res.json();
+        const batch = data?.items || [];
         items.push(...batch);
-        if (batch.length < limit) break;
+        if (batch.length < limit || (data?.total && items.length >= data.total)) break;
         offset += limit;
     }
 
@@ -71,7 +88,7 @@ async function isPlaylistCurrentlyPlaying(playlistId, playlistItems = null) {
     if (!currentTrackUri) return false;
 
     const items = playlistItems || await fetchPlaylistTrackItems(playlistId);
-    return items.some((item) => item?.track?.uri === currentTrackUri);
+    return items.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
 async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
@@ -79,7 +96,7 @@ async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
     let playableCount = 0;
 
     for (const item of items) {
-        const track = item?.track;
+        const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
             continue;
         }
@@ -217,14 +234,14 @@ router.post('/transfer', async (req, res) => {
 
             // Transfer succeeded
             req.session.hasPaid = true;
-            req.session.payment = {
-                from: Number(userRow.id),
-                to: Number(to),
-                amount: Number(amount),
-                pendingAction: pendingAction || null,
-                playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') ? String(playlistId || '') : null,
-                at: Date.now()
-            };
+                req.session.payment = {
+                    from: Number(userRow.id),
+                    to: Number(to),
+                    amount: Number(amount),
+                    pendingAction: pendingAction || null,
+                    playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') ? String(playlistId || '') : null,
+                    at: Date.now()
+                };
             return req.session.save((err) => {
                 if (err) {
                     console.error('Session save error:', err);

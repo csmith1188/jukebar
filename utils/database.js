@@ -50,6 +50,16 @@ db.all("PRAGMA table_info(users)", (err, columns) => {
             }
         });
     }
+    const hasClearedAt = columns && columns.some(c => c.name === 'recently_queued_cleared_at');
+    if (!hasClearedAt) {
+        db.run("ALTER TABLE users ADD COLUMN recently_queued_cleared_at TEXT", (alterErr) => {
+            if (alterErr) {
+                console.error('Error adding recently_queued_cleared_at column:', alterErr);
+            } else {
+                console.log('Added recently_queued_cleared_at column to users table');
+            }
+        });
+    }
 });
 
 db.run(`CREATE TABLE IF NOT EXISTS transactions (
@@ -60,16 +70,29 @@ db.run(`CREATE TABLE IF NOT EXISTS transactions (
     track_uri TEXT,
     track_name TEXT,
     artist_name TEXT,
+    image_url TEXT,
     cost INTEGER NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )`);
+
+// Auto-migrate: add image_url column if it doesn't exist yet (added for recently-queued album art)
+db.all("PRAGMA table_info(transactions)", (err, cols) => {
+    if (err || !cols) return;
+    if (!cols.some(c => c.name === 'image_url')) {
+        db.run("ALTER TABLE transactions ADD COLUMN image_url TEXT", (alterErr) => {
+            if (alterErr) console.error('Error adding image_url to transactions:', alterErr);
+            else console.log('Added image_url column to transactions table');
+        });
+    }
+});
 
 db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     track_name TEXT NOT NULL,
     artist_name TEXT NOT NULL,
     track_uri TEXT,
+    image_url TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     banned_by TEXT NOT NULL DEFAULT 'unknown',
     reason TEXT DEFAULT 'No reason given'
@@ -102,6 +125,9 @@ db.all("PRAGMA table_info(banned_songs)", (err, columns) => {
     }
     if (!hasColumn('reason')) {
         migrations.push("ALTER TABLE banned_songs ADD COLUMN reason TEXT DEFAULT 'No reason given'");
+    }
+    if (!hasColumn('image_url')) {
+        migrations.push("ALTER TABLE banned_songs ADD COLUMN image_url TEXT");
     }
 
     if (migrations.length === 0) {
@@ -207,15 +233,6 @@ db.run(`CREATE TABLE IF NOT EXISTS currently_playing (
 db.run(`CREATE TABLE IF NOT EXISTS track_bans (
     track_uri TEXT PRIMARY KEY,
     banned_at INTEGER NOT NULL
-)`);
-
-db.run(`CREATE TABLE IF NOT EXISTS skip_activity (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    skipped_by TEXT NOT NULL,
-    skipped_at INTEGER NOT NULL,
-    skipped_type TEXT NOT NULL DEFAULT 'song',
-    skipped_track_name TEXT,
-    skipped_track_uri TEXT
 )`);
 
 db.run(`CREATE TABLE IF NOT EXISTS allowed_playlists (

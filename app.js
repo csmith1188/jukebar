@@ -12,6 +12,60 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
+function isBrokeyEnabled() {
+    const raw = process.env.brokey ?? process.env.BROKEY ?? '';
+    return String(raw).trim().toLowerCase() === 'true';
+}
+
+app.use((req, res, next) => {
+    if (!isBrokeyEnabled()) return next();
+    if (req.path.startsWith('/img/')) return next();
+    res.status(503).send(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jukebar Brokey</title>
+  <link rel="icon" type="image/png" href="/img/brokey.png" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .msg {
+      font-size: 2rem;
+      line-height: 1.35;
+      max-width: 900px;
+    }
+    .whoopsie {
+      width: min(320px, 80vw);
+      height: auto;
+      margin: 0 auto 18px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <img class="whoopsie" src="/img/whoopsie.png" alt="whoopsie" />
+    <div class="msg">jukebar brokey... i sorry i fix it tomorrow!</div>
+  </div>
+</body>
+</html>`);
+});
+
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -48,7 +102,6 @@ const paymentRoutes = require('./routes/payment');
 const { router: leaderboardRoutes } = require('./routes/leaderboard');
 const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
-const { getRecentSkipActivity } = require('./utils/skipActivity');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
 const path = require('path');
@@ -67,7 +120,6 @@ try {
     changelog = [];
 }
 
-const SKIP_ACTIVITY_SEND_LIMIT = Math.max(1, Math.min(50, Number(process.env.SKIP_ACTIVITY_SEND_LIMIT) || 5));
 
 // Helper function to handle ban - removes from queue and skips if currently playing
 async function handleBanPassed(trackName, trackArtist, trackUri) {
@@ -148,14 +200,6 @@ io.on('connection', (socket) => {
     // Add client to queue manager
     queueManager.addClient(socket);
 
-    getRecentSkipActivity(SKIP_ACTIVITY_SEND_LIMIT)
-        .then((history) => {
-            socket.emit('skipHistory', history);
-        })
-        .catch((error) => {
-            console.error('Failed to load skip history for socket client:', error.message);
-        });
-
     // Handle client disconnect
     socket.on('disconnect', () => {
         //console.log('Client disconnected from queue sync');
@@ -172,9 +216,10 @@ io.on('connection', (socket) => {
     // Handle ban vote initiation
     socket.on('initiateBanVote', async (data) => {
         try {
-            const { trackUri, trackName, trackArtist, initiator, reason } = data;
+            const { trackUri, trackName, trackArtist, initiator, reason, trackImage } = data;
             const userId = socket.request?.session?.token?.id || socket.id;
             const banReason = (typeof reason === 'string' && reason.trim()) ? reason.trim() : 'student ban';
+            const imageUrl = typeof trackImage === 'string' ? trackImage : null;
 
             if (banReason.length > 200) {
                 socket.emit('banVoteError', { error: 'Ban reason must be 200 characters or fewer' });
@@ -242,7 +287,6 @@ io.on('connection', (socket) => {
 
             // Start the vote with expiration callback
             const voteId = `${trackUri}-${Date.now()}`;
-
             // Do the vote ban with formbar
             if (FORMBAR_POLL_BAN_VOTE) {
 
@@ -252,8 +296,8 @@ io.on('connection', (socket) => {
 
                     if (votesFor > votesAgainst) {
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
-                            [trackName, trackArtist, userId, reason, trackUri],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                            [trackName, trackArtist, userId, reason, trackUri, imageUrl],
                             async (err) => {
                                 if (err) {
                                     console.error('Database insertion error (ban on expiration):', err);
@@ -288,8 +332,6 @@ io.on('connection', (socket) => {
                         if (!data.poll.status) {
                             console.log('Tallying results')
                             fbBanVoteResults(data.poll.responses)
-                        } else {
-                            // '\_(0.0)_/`
                         }
                     })
                 })
@@ -307,10 +349,9 @@ io.on('connection', (socket) => {
                     async (expiredData) => {
                         if (expiredData.passed) {
                             console.log('Vote expired with pass, broadcasting banVotePassed:', expiredData);
-                            // Insert into banned_songs table
                             db.run(
-                                'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri) VALUES (?, ?, ?, ?, ?)',
-                                [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri],
+                                'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                                [expiredData.trackName, expiredData.trackArtist, expiredData.userId, expiredData.reason, expiredData.trackUri, imageUrl],
                                 async (err) => {
                                     if (err) {
                                         console.error('Database insertion error (ban on expiration):', err);
@@ -326,8 +367,10 @@ io.on('connection', (socket) => {
                             console.log('Vote expired, broadcasting banVoteFailed:', expiredData);
                             io.emit('banVoteFailed', expiredData);
                         }
-                    }
+                    },
+                    { imageUrl }
                 );
+
                 // Broadcast to all clients
                 io.emit('banVoteStarted', {
                     voteId,
@@ -344,7 +387,6 @@ io.on('connection', (socket) => {
                     expiresIn: voteData.expiresIn
                 });
             }
-
 
         } catch (error) {
             console.error('Error initiating ban vote:', error);
@@ -371,8 +413,8 @@ io.on('connection', (socket) => {
                     await new Promise((resolve, reject) => {
                         console.log('Inserting into banned_songs:', result.trackName, result.trackArtist);
                         db.run(
-                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason) VALUES (?, ?, ?, ?)',
-                            [result.trackName, result.trackArtist, result.userId, result.reason],
+                            'INSERT INTO banned_songs (track_name, artist_name, banned_by, reason, track_uri, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+                            [result.trackName, result.trackArtist, result.userId, result.reason, result.trackUri || null, result.extra?.imageUrl || null],
                             (err) => {
                                 if (err) {
                                     console.error('Database insertion error:', err);

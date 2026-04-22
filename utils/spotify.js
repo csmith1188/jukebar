@@ -1,6 +1,25 @@
 const SpotifyWebApi = require('spotify-web-api-node');
 require('dotenv').config();
 
+/**
+ * REQUIRED SPOTIFY SCOPES
+ *
+ * The refresh token in SPOTIFY_REFRESH_TOKEN must be generated with these scopes:
+ *   - user-read-private           (identify the connected account — required for /me)
+ *   - user-modify-playback-state  (play, pause, skip, addToQueue, shuffle)
+ *   - user-read-playback-state    (read playback/device state, queue)
+ *   - user-read-currently-playing (read current track)
+ *   - playlist-read-private       (read private playlists)
+ *   - playlist-read-collaborative (read collaborative playlists)
+ *   - playlist-modify-private     (create/modify private playlists)
+ *   - playlist-modify-public      (create/modify public playlists)
+ *
+ * Note: As of the Feb 2026 Web API changes, the `product` field on /me was
+ * removed for Development Mode apps, so Premium status cannot be verified via API.
+ *
+ * See spotify_developer_setup.md or .env-template SPOTIFY_SCOPES for full list.
+ */
+
 const {
     SPOTIFY_CLIENT_ID,
     SPOTIFY_CLIENT_SECRET,

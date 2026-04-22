@@ -1,10 +1,10 @@
 const db = require("../utils/database");
 
-async function logTransaction({ userID, displayName, action, trackURI = null, trackName = null, artistName = null, cost }) {
+async function logTransaction({ userID, displayName, action, trackURI = null, trackName = null, artistName = null, imageURL = null, cost }) {
     return new Promise((resolve, reject) => {
-        const query = `INSERT INTO transactions (user_id, display_name, action, track_uri, track_name, artist_name, cost) 
-                       VALUES (?, ?, ?, ?, ?, ?, ?)`;
-        const params = [userID, displayName, action, trackURI, trackName, artistName, cost];
+        const query = `INSERT INTO transactions (user_id, display_name, action, track_uri, track_name, artist_name, image_url, cost) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+        const params = [userID, displayName, action, trackURI, trackName, artistName, imageURL, cost];
         db.run(query, params, function (err) {
             if (err) {
                 console.error('Error logging transaction:', err);

@@ -312,7 +312,7 @@
                 const reason = escapeHtml(song.reason || 'No reason given');
                 const trackName = escapeHtml(song.track_name || 'Unknown Track');
                 const artistName = escapeHtml(song.artist_name || 'Unknown Artist');
-                const albumImage = escapeHtml(song.album_image || '/img/placeholder.png');
+                const albumImage = song.album_image || '';
                 const when = song.timestamp ? new Date(song.timestamp).toLocaleString() : 'Unknown time';
                 const whenEscaped = escapeHtml(when);
                 const trackNameAttr = escapeHtml(song.track_name || '');
@@ -320,7 +320,7 @@
 
                 return `
                     <div class="search-result-item">
-                        <img src="${albumImage}" alt="${trackName}" class="album-cover" />
+                        ${albumImage ? `<img src="${escapeHtml(albumImage)}" alt="${trackName}" class="album-cover" />` : `<div class="album-cover" style="background:#282828;border-radius:4px;flex-shrink:0;"></div>`}
                         <div class="search-result-content">
                             <div class="search-result-title">${trackName}</div>
                             <div class="search-result-artist">${artistName}</div>
@@ -381,6 +381,13 @@
 
                 meta.appendChild(name);
                 meta.appendChild(details);
+
+                if (playlist.canAccessTracks === false) {
+                    const warn = document.createElement('div');
+                    warn.style.cssText = 'color:#ff9800;font-size:0.7em;margin-top:2px;';
+                    warn.textContent = 'Not owned — students cannot queue this playlist';
+                    meta.appendChild(warn);
+                }
 
                 const actionBtn = document.createElement('button');
                 let isAllowed = !!playlist.isAllowed;
@@ -651,7 +658,7 @@
 
                     // Constructs inner HTML
                     playDiv.innerHTML = `
-                        <img src="${play.albumImage || '/img/placeholder.png'}" alt="${play.track_name}" class="album-cover" style="width: 60px; height: 60px; border-radius: 8px; margin-right: 16px; object-fit: cover;" />
+                        ${play.albumImage ? `<img src="${play.albumImage}" alt="${play.track_name}" class="album-cover" style="width: 60px; height: 60px; border-radius: 8px; margin-right: 16px; object-fit: cover;" />` : `<div class="album-cover" style="width:60px;height:60px;background:#282828;border-radius:8px;margin-right:16px;flex-shrink:0;"></div>`}
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 600; font-size: 1rem; margin: 0 0 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${play.track_name}</div>
                             <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; margin: 0;">${play.artist_name}</div>
@@ -744,7 +751,7 @@
                                 <div class="search-result-title">${track.name}</div>
                                 <div class="search-result-artist">${track.artist}</div>
                             </div>
-                            <button class="${isBanned ? 'unban-button' : 'ban-button'}" data-uri="${track.uri}" data-name="${track.name}" data-artist="${track.artist}" title="${isBanned ? 'Unban this track' : 'Ban this track'}">${isBanned ? 'Unban' : 'Ban'}</button>
+                            <button class="${isBanned ? 'unban-button' : 'ban-button'}" data-uri="${track.uri}" data-name="${track.name}" data-artist="${track.artist}" data-image="${track.album.image || ''}" title="${isBanned ? 'Unban this track' : 'Ban this track'}">${isBanned ? 'Unban' : 'Ban'}</button>
                             `;
                     resultsDiv.appendChild(trackDiv);
                 });
@@ -856,6 +863,7 @@
         const name = btn.dataset.name;
         const artist = btn.dataset.artist;
         const uri = btn.dataset.uri;
+        const image = btn.dataset.image || '';
         if (!name || !artist) return;
 
         try {
@@ -865,7 +873,7 @@
                         const res = await fetch('/banTrack', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name, artist, reason, uri })
+                            body: JSON.stringify({ name, artist, reason, uri, image })
                         });
                         const data = await res.json();
                         if (res.ok && data.ok) {

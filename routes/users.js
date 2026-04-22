@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { isAuthenticated } = require('../middleware/auth');
-const { spotifyApi, ensureSpotifyAccessToken } = require('../utils/spotify');
 const { isOwner } = require('../utils/owners');
 
 // Middleware to check if user has teacher permissions
@@ -53,6 +52,7 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
                     t.track_name,
                     t.artist_name,
                     t.track_uri,
+                    t.image_url,
                     t.display_name as user,
                     t.timestamp,
                     datetime(t.timestamp) as formatted_time
@@ -69,26 +69,9 @@ router.get('/api/queueHistory', isAuthenticated, requireTeacherAccess, async (re
             });
         });
 
-        // Fetch album art from Spotify in a single batch call (up to 50 at once)
-        const imageMap = {};
-        try {
-            await ensureSpotifyAccessToken();
-            const trackIds = plays
-                .filter(p => p.track_uri)
-                .map(p => p.track_uri.replace('spotify:track:', ''));
-            if (trackIds.length > 0) {
-                const batchData = await spotifyApi.getTracks(trackIds);
-                batchData.body.tracks.forEach(track => {
-                    if (track) imageMap[track.uri] = track.album.images?.[0]?.url || null;
-                });
-            }
-        } catch (err) {
-            console.warn('Could not fetch album art batch:', err.message);
-        }
-
         const enrichedPlays = plays.map(play => ({
             ...play,
-            albumImage: imageMap[play.track_uri] || '/img/placeholder.png'
+            albumImage: play.image_url || ''
         }));
 
         res.json({ ok: true, plays: enrichedPlays });
@@ -113,7 +96,13 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
                     b.reason,
                     b.banned_by,
                     b.timestamp,
-                    u.displayName AS banned_by_name
+                    u.displayName AS banned_by_name,
+                    COALESCE(
+                        NULLIF(b.image_url, ''),
+                        (SELECT t.image_url FROM transactions t
+                         WHERE t.track_uri = b.track_uri AND t.image_url IS NOT NULL AND t.image_url != ''
+                         ORDER BY t.timestamp DESC LIMIT 1)
+                    ) AS image_url
                 FROM banned_songs b
                 LEFT JOIN users u ON u.id = CAST(b.banned_by AS INTEGER)
                 ORDER BY datetime(b.timestamp) DESC, b.id DESC
@@ -123,82 +112,12 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
             });
         });
 
-        const albumImageMap = {};
-        try {
-            await ensureSpotifyAccessToken();
-            const uriToKeys = {};
-            songs.forEach((song) => {
-                const key = normalizedKey(song.track_name, song.artist_name);
-                const uri = String(song.track_uri || '').trim();
-                if (!uri || !key) return;
-                if (!uriToKeys[uri]) uriToKeys[uri] = [];
-                uriToKeys[uri].push(key);
-            });
-
-            const trackIds = Object.keys(uriToKeys)
-                .map((uri) => uri.replace('spotify:track:', '').trim())
-                .filter(Boolean)
-                .slice(0, 50);
-
-            if (trackIds.length > 0) {
-                const batchData = await spotifyApi.getTracks(trackIds);
-                (batchData?.body?.tracks || []).forEach((track) => {
-                    if (!track?.uri) return;
-                    const keys = uriToKeys[track.uri] || [];
-                    const image = track.album?.images?.[0]?.url || '/img/placeholder.png';
-                    keys.forEach((key) => {
-                        albumImageMap[key] = image;
-                    });
-                });
-            }
-
-            const missingSongs = songs.filter((song) => {
-                const key = normalizedKey(song.track_name, song.artist_name);
-                return key && !albumImageMap[key];
-            });
-
-            // Limit how many missing songs we attempt to backfill per request
-            const MAX_BACKFILL = 10;
-            const songsToBackfill = missingSongs.slice(0, MAX_BACKFILL);
-
-            // Apply a small concurrency limit when calling spotifyApi.searchTracks
-            const CONCURRENCY = 5;
-            for (let i = 0; i < songsToBackfill.length; i += CONCURRENCY) {
-                const batch = songsToBackfill.slice(i, i + CONCURRENCY);
-                // Process this batch in parallel
-                await Promise.all(
-                    batch.map(async (song) => {
-                        const key = normalizedKey(song.track_name, song.artist_name);
-                        const trackName = String(song.track_name || '').trim();
-                        const artistName = String(song.artist_name || '').trim();
-
-                        if (!trackName || !artistName) {
-                            albumImageMap[key] = '/img/placeholder.png';
-                            return;
-                        }
-
-                        try {
-                            const query = `track:${trackName} artist:${artistName}`;
-                            const result = await spotifyApi.searchTracks(query, { limit: 1 });
-                            const image = result?.body?.tracks?.items?.[0]?.album?.images?.[0]?.url;
-                            albumImageMap[key] = image || '/img/placeholder.png';
-                        } catch {
-                            albumImageMap[key] = '/img/placeholder.png';
-                        }
-                    })
-                );
-            }
-        } catch (error) {
-            console.warn('Could not fetch banned song album art:', error.message);
-        }
-
         const normalized = songs.map((song) => {
             const rawBannedBy = song.banned_by == null ? '' : String(song.banned_by).trim();
             const hasName = song.banned_by_name && String(song.banned_by_name).trim();
             const bannedByDisplay = hasName
                 ? song.banned_by_name
                 : (rawBannedBy && rawBannedBy.toLowerCase() !== 'unknown' ? rawBannedBy : 'Unknown');
-            const key = normalizedKey(song.track_name, song.artist_name);
 
             return {
                 id: song.id,
@@ -208,7 +127,7 @@ router.get('/api/banned-songs', isAuthenticated, requireTeacherAccess, async (re
                 banned_by: song.banned_by,
                 banned_by_name: bannedByDisplay,
                 timestamp: song.timestamp,
-                album_image: albumImageMap[key] || '/img/placeholder.png'
+                album_image: song.image_url || ''
             };
         });
 
@@ -386,9 +305,9 @@ router.post('/api/users/transactions', isAuthenticated, requireTeacherAccess, as
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Get total count of transactions for this user
+        // Get total count of play transactions for this user
         const totalCount = await new Promise((resolve, reject) => {
-            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [user.id], (err, row) => {
+            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ? AND action = 'play'", [user.id], (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -397,7 +316,7 @@ router.post('/api/users/transactions', isAuthenticated, requireTeacherAccess, as
             });
         });
 
-        // Get paginated transactions for this user
+        // Get paginated play transactions for this user
         const transactions = await new Promise((resolve, reject) => {
             db.all(`
                 SELECT 
@@ -405,10 +324,11 @@ router.post('/api/users/transactions', isAuthenticated, requireTeacherAccess, as
                     artist_name,
                     action,
                     cost,
+                    image_url,
                     timestamp,
                     datetime(timestamp) as formatted_time
                 FROM transactions 
-                WHERE user_id = ? 
+                WHERE user_id = ? AND action = 'play'
                 ORDER BY timestamp DESC 
                 LIMIT ? OFFSET ?
             `, [user.id, limitNum, offset], (err, rows) => {
@@ -472,9 +392,9 @@ router.post('/api/users/transactions/modal', isAuthenticated, requireTeacherAcce
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Get total count of transactions for this user
+        // Get total count of play transactions for this user
         const totalCount = await new Promise((resolve, reject) => {
-            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [user.id], (err, row) => {
+            db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ? AND action = 'play'", [user.id], (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -483,7 +403,7 @@ router.post('/api/users/transactions/modal', isAuthenticated, requireTeacherAcce
             });
         });
 
-        // Get paginated transactions for this user
+        // Get paginated play transactions for this user
         const transactions = await new Promise((resolve, reject) => {
             db.all(`
                 SELECT 
@@ -491,10 +411,11 @@ router.post('/api/users/transactions/modal', isAuthenticated, requireTeacherAcce
                     artist_name,
                     action,
                     cost,
+                    image_url,
                     timestamp,
                     datetime(timestamp) as formatted_time
                 FROM transactions 
-                WHERE user_id = ? 
+                WHERE user_id = ? AND action = 'play'
                 ORDER BY timestamp DESC 
                 LIMIT ? OFFSET ?
             `, [user.id, limitNum, offset], (err, rows) => {
