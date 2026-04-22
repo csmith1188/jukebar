@@ -5044,6 +5044,14 @@ p {
     text-decoration: underline;
 }
 
+.player-page #searchResults .album-result-item {
+    cursor: pointer;
+}
+
+.player-page #searchResults .album-result-item:hover .search-result-title {
+    text-decoration: underline;
+}
+
 /* Artist modal: remove .payment-content's padding and max-width constraints */
 #artistModal .payment-content {
     padding: 0;
