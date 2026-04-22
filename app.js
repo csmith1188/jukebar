@@ -26,6 +26,7 @@ function isBrokeyEnabled() {
 app.use((req, res, next) => {
     if (!isBrokeyEnabled()) return next();
     if (req.path.startsWith('/img/')) return next();
+    if (req.path === '/diagnostics') return next();
     res.status(503).send(`<!doctype html>
 <html>
 <head>
@@ -126,6 +127,37 @@ async function runSpotifyDiagnostics() {
         }
     }
 }
+
+app.get('/diagnostics', isAuthenticated, async (req, res) => {
+    const userId = req.session?.token?.id;
+    const isTeacherUser = req.session?.permission >= 4 || isOwner(userId);
+    if (!isTeacherUser) {
+        return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
+    }
+
+    const report = {
+        ok: true,
+        brokey: isBrokeyEnabled(),
+        spotify: { ok: true },
+        checkedAt: new Date().toISOString()
+    };
+
+    try {
+        await ensureSpotifyAccessToken();
+        const devicesRes = await spotifyApi.getMyDevices();
+        report.spotify.devices = Array.isArray(devicesRes?.body?.devices) ? devicesRes.body.devices.length : 0;
+    } catch (err) {
+        const status = err?.statusCode ?? err?.response?.statusCode ?? err?.body?.error?.status ?? null;
+        report.ok = false;
+        report.spotify = {
+            ok: false,
+            status,
+            error: err?.body?.error?.message || err?.message || 'Unknown Spotify error'
+        };
+    }
+
+    return res.json(report);
+});
 
 let changelog = [];
 try {
