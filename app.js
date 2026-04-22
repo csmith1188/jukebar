@@ -288,9 +288,11 @@ io.on('connection', (socket) => {
             // Start the vote with expiration callback
             const voteId = `${trackUri}-${Date.now()}`;
             // Do the vote ban with formbar
-            if (FORMBAR_POLL_BAN_VOTE) {
+            console.log(FORMBAR_POLL_BAN_VOTE)
+            if (FORMBAR_POLL_BAN_VOTE === 'true') {
 
                 async function fbBanVoteResults(poll) {
+                    formbarSocket.off('classUpdate')
                     let votesFor = poll.find(r => r.answer == 'Yes').responses
                     let votesAgainst = poll.find(r => r.answer == 'No').responses
 
@@ -309,16 +311,18 @@ io.on('connection', (socket) => {
                             }
                         );
                         io.emit('banVotePassed', data);
+                    } else {
+                        console.log(`Ban vote failed (${votesFor} Yes to ${votesAgainst} No)`)
                     }
                 }
 
                 console.log(`Starting ban poll on formbar for ${trackName} by ${trackArtist}`)
 
                 formbarSocket.emit('startPoll', {
-                    prompt: `Ban ${trackName} by ${trackArtist}?`,
+                    prompt: `Ban "${trackName}" by ${trackArtist}?`,
                     answers: [
-                        { answer: "Yes", weight: 0, color: "#3ae457" },
-                        { answer: "No", weight: 0, color: "#9e0909" }
+                        { answer: "Yes", weight: 0, color: "#00ff2a" },
+                        { answer: "No", weight: 0, color: "#ff0000" }
                     ],
                     blind: false,
                     allowVoteChanges: true,
@@ -327,8 +331,23 @@ io.on('connection', (socket) => {
                 })
 
                 formbarSocket.once('startPoll', () => {
+                    io.emit('formbarVoteStarted', { artist: trackArtist, song: trackName })
                     console.log('Poll started')
+                    let pastData
+
+                    setTimeout(() => {
+                        console.log('Attempting to end poll with data', pastData.poll.responses)
+                        if (pastData.poll.responses) {
+                            fbBanVoteResults(pastData.poll.responses)
+                            formbarSocket.emit('updatePoll', {})
+                            console.log('Auto ended poll')
+                        }
+
+                    }, 45 * 1000)
+
                     formbarSocket.on('classUpdate', (data) => {
+                        pastData = data
+
                         if (!data.poll.status) {
                             console.log('Tallying results')
                             fbBanVoteResults(data.poll.responses)

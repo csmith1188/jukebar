@@ -1102,8 +1102,8 @@
                             searchHasMore = !!data.hasMore;
 
                             const hasAny = currentSearchResults.tracks.length > 0 ||
-                                           currentSearchResults.artists.length > 0 ||
-                                           currentSearchResults.albums.length > 0;
+                                currentSearchResults.artists.length > 0 ||
+                                currentSearchResults.albums.length > 0;
 
                             const tabsEl = document.getElementById('searchFilterTabs');
                             if (hasAny) {
@@ -1142,9 +1142,9 @@
                         header.innerHTML = `
                             <div class="artist-modal-hero">
                                 ${artistImage
-                                    ? `<img src="${artistImage}" alt="${escapeHtml(artistName)}" class="artist-modal-avatar" />`
-                                    : `<div class="artist-modal-avatar artist-modal-avatar--placeholder">🎤</div>`
-                                }
+                                ? `<img src="${artistImage}" alt="${escapeHtml(artistName)}" class="artist-modal-avatar" />`
+                                : `<div class="artist-modal-avatar artist-modal-avatar--placeholder">🎤</div>`
+                            }
                                 <div class="artist-modal-hero-info">
                                     <div class="artist-modal-name">${escapeHtml(artistName)}</div>
                                 </div>
@@ -1303,9 +1303,9 @@
                             header.innerHTML = `
                                 <div class="album-detail-hero">
                                     ${albumImage
-                                        ? `<img src="${albumImage}" alt="${escapeHtml(albumName)}" class="album-detail-cover" />`
-                                        : `<div class="album-detail-cover album-detail-cover--placeholder"></div>`
-                                    }
+                                    ? `<img src="${albumImage}" alt="${escapeHtml(albumName)}" class="album-detail-cover" />`
+                                    : `<div class="album-detail-cover album-detail-cover--placeholder"></div>`
+                                }
                                     <div class="album-detail-info">
                                         <div class="album-detail-name">${escapeHtml(albumName)}</div>
                                         ${resolvedAlbumYear ? `<div class="album-detail-year">${escapeHtml(resolvedAlbumYear)}</div>` : ''}
@@ -2016,6 +2016,10 @@
                             console.log('banVoteStarted received:', data);
                             showBanVote(data);
                         });
+
+                        socket.on('formbarVoteStarted', (data) => {
+                            Notify(`There is a poll on Formbar to ban "${data.song}" by ${data.artist}.`)
+                        })
 
                         socket.on('banVoteUpdate', (data) => {
                             console.log('banVoteUpdate received:', data);
