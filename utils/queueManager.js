@@ -8,6 +8,27 @@ class QueueManager {
         this.lastUpdate = Date.now();
         this.clients = new Set(); // Connected WebSocket clients
         this.lastNetworkError = null; // Track last network error for rate limiting
+        this.spotifyRateLimitedUntil = 0;
+    }
+
+    getRetryDelayMs(retryAfterHeaderValue) {
+        const retryAfterSeconds = Number.parseInt(String(retryAfterHeaderValue || ''), 10);
+        if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+            return retryAfterSeconds * 1000;
+        }
+        return 30000; // Spotify didn't provide Retry-After, use safe default
+    }
+
+    setSpotifyCooldown(retryAfterHeaderValue, source = 'spotify') {
+        const delayMs = this.getRetryDelayMs(retryAfterHeaderValue);
+        this.spotifyRateLimitedUntil = Date.now() + delayMs;
+        console.warn(`[queue-sync] ${source} rate limited (429). Cooling down for ${Math.ceil(delayMs / 1000)}s`);
+        try {
+            const { setSpotifyPlaybackCooldown, READ } = require('../middleware/spotifyPlaybackRateLimit');
+            setSpotifyPlaybackCooldown(READ, retryAfterHeaderValue, `queueManager:${source}`);
+        } catch (err) {
+            // Avoid hard dependency cycle failures in queue sync path.
+        }
     }
 
     // Update currently playing track
@@ -414,9 +435,16 @@ class QueueManager {
     // Track the previous track URI to detect track changes
     previousTrackUri = null;
 
-    // Periodic Spotify sync (called every 5 seconds)
+    // Periodic Spotify sync (interval configured in app.js)
     async syncWithSpotify(spotifyApi) {
         try {
+            if (Date.now() < this.spotifyRateLimitedUntil) {
+                return {
+                    currentTrack: this.currentTrack,
+                    queue: this.queue
+                };
+            }
+
             // Fetch BOTH currently playing AND queue at the same time
             const [currentlyPlayingResponse, queueResponse] = await Promise.all([
                 fetch('https://api.spotify.com/v1/me/player/currently-playing', {
@@ -426,6 +454,17 @@ class QueueManager {
                     headers: { 'Authorization': `Bearer ${spotifyApi.getAccessToken()}` }
                 })
             ]);
+
+            if (currentlyPlayingResponse.status === 429 || queueResponse.status === 429) {
+                const retryAfterHeader =
+                    currentlyPlayingResponse.headers.get('retry-after') ||
+                    queueResponse.headers.get('retry-after');
+                this.setSpotifyCooldown(retryAfterHeader, 'player endpoints');
+                return {
+                    currentTrack: this.currentTrack,
+                    queue: this.queue
+                };
+            }
 
             // Process currently playing
             let currentTrack = null;
@@ -574,6 +613,14 @@ class QueueManager {
 
             return { currentTrack, queue: newQueue };
         } catch (error) {
+            const retryAfterHeader =
+                error?.headers?.['retry-after'] ||
+                error?.response?.headers?.['retry-after'] ||
+                error?.response?.headers?.get?.('retry-after');
+            const statusCode = error?.statusCode ?? error?.response?.statusCode;
+            if (statusCode === 429) {
+                this.setSpotifyCooldown(retryAfterHeader, 'syncWithSpotify');
+            }
             console.error('Error syncing with Spotify:', error.message || error);
             
             // Don't crash the server - return current state

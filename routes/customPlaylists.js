@@ -7,6 +7,7 @@ const { logTransaction } = require('./logging');
 const { isAuthenticated } = require('../middleware/auth');
 const { getCurrentClassId, requestAndWaitForClassId } = require('./socket');
 const queueManager = require('../utils/queueManager');
+const { MODIFY, playbackRateLimit, executePlaybackModify } = require('../middleware/spotifyPlaybackRateLimit');
 
 async function getClassId() {
     const cached = getCurrentClassId();
@@ -569,7 +570,7 @@ router.post('/api/custom-playlists/remove-song', isAuthenticated, async (req, re
 });
 
 // POST /api/custom-playlists/queue — start playback from one of the caller's custom playlists
-router.post('/api/custom-playlists/queue', isAuthenticated, async (req, res) => {
+router.post('/api/custom-playlists/queue', isAuthenticated, playbackRateLimit(MODIFY), async (req, res) => {
     const userId = req.session?.token?.id;
     if (!userId) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const userIsOwner = isOwner(userId);
@@ -610,9 +611,9 @@ router.post('/api/custom-playlists/queue', isAuthenticated, async (req, res) => 
 
         await ensureSpotifyAccessToken();
         const playlistUri = `spotify:playlist:${playlist.spotify_playlist_id}`;
-        await spotifyApi.play({ context_uri: playlistUri });
+        await executePlaybackModify(req, 'customPlaylist-play', () => spotifyApi.play({ context_uri: playlistUri }));
         try {
-            await spotifyApi.setShuffle(true);
+            await executePlaybackModify(req, 'customPlaylist-shuffle', () => spotifyApi.setShuffle(true));
         } catch (shuffleErr) {
             console.warn('[custom-playlists:queue] could not enable shuffle:', shuffleErr.message);
         }
