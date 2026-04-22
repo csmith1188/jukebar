@@ -386,6 +386,7 @@
             let progressInterval = null;
             let currentID = <%= JSON.stringify(userID || null) %>; // User ID which is needed by ban votes
             const ownerIDs = <%= JSON.stringify(ownerIDs) %>; // Array of owner ids
+            window.banVoteMinOnlineUsers = <%= JSON.stringify(typeof banVoteMinOnlineUsers !== 'undefined' ? banVoteMinOnlineUsers : 5) %>;
 
             // Helper function to check if a user ID is an owner
             function isOwnerClient(uid) {
@@ -579,8 +580,9 @@
                             const res = await fetch('/api/online-count');
                             const data = await res.json().catch(() => ({}));
                             const onlineCount = data.count || 0;
-                            if (onlineCount < 5) {
-                                Notify('At least 5 users must be online to start a ban vote', 'error');
+                            const minOnlineUsers = Number(window.banVoteMinOnlineUsers || 5);
+                            if (onlineCount < minOnlineUsers) {
+                                Notify(`At least ${minOnlineUsers} users must be online to start a ban vote`, 'error');
                                 return;
                             }
                         } catch (err) {
@@ -687,7 +689,7 @@
 
                         if (isOwnerClient(currentID)) {
                             const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
-                            addToQueue(uri, anonMode, trackMeta);
+                            addToQueue(uri, anonMode, trackMeta, false);
                             return;
                         }
 
@@ -701,7 +703,7 @@
 
                         // Reset payment flag after using it
                         hasPaid = false;
-                        addToQueue(uri, null, trackMeta);
+                        addToQueue(uri, null, trackMeta, true);
                     }
 
                     async function checkPaymentAndSkip() {
@@ -728,7 +730,7 @@
                         console.log('⏭️ Final skipUri:', skipUri);
 
                         if (isOwnerClient(currentID)) {
-                            skip(skipUri);
+                            skip(skipUri, false);
                             return;
                         }
 
@@ -741,10 +743,10 @@
 
                         // Reset payment flag after using it
                         hasPaid = false;
-                        skip(skipUri);
+                        skip(skipUri, true);
                     }
 
-                    async function skip(uri) {
+                    async function skip(uri, paymentConsumed = false) {
                         try {
                             const response = await fetch('/skip', {
                                 method: 'POST',
@@ -765,7 +767,9 @@
                             } else {
                                 // Other error
                                 Notify(data.error || 'Failed to skip', 'error');
-                                refund();
+                                if (paymentConsumed) {
+                                    refund();
+                                }
                             }
                         } catch (error) {
                             console.error('Error skipping track:', error);
@@ -773,7 +777,7 @@
                         }
                     }
 
-                    function addToQueue(uri, anonMode = null, trackMeta = {}) {
+                    function addToQueue(uri, anonMode = null, trackMeta = {}, paymentConsumed = false) {
                         if (anonMode === null) {
                             anonMode = document.getElementById('anonMode')?.checked || false;
                         }
@@ -788,7 +792,9 @@
                                 } else {
                                     return response.json().then(data => {
                                         Notify(data.error || 'Failed to add track to queue', 'error');
-                                        refund();
+                                        if (paymentConsumed) {
+                                            refund();
+                                        }
                                     });
                                 }
                             })
