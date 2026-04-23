@@ -17,31 +17,6 @@ const voteBanDevModeEnabled = String(process.env.JUKEBAR_DEV_MODE || '').toLower
 const voteBanMinOnlineUsers = voteBanDevModeEnabled ? 1 : 5;
 
 // Brokey mode is tracked for diagnostics only; do not block the UI.
-
-function enableBrokey(reason = 'unknown') {
-    if (brokeyEnabled) return;
-    brokeyEnabled = true;
-    console.error(`[brokey] Enabled due to: ${reason}`);
-}
-
-function isBrokeyEnabled() {
-    return brokeyEnabled;
-}
-
-function toRetryAfterSeconds(valueMs) {
-    const seconds = Math.ceil(Math.max(0, Number(valueMs) || 0) / 1000);
-    return Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-}
-
-function getLimiterRetryAfterSeconds(req) {
-    const resetTime = req.rateLimit?.resetTime;
-    if (!resetTime) return 30;
-    const resetMs = resetTime instanceof Date ? resetTime.getTime() : Number(resetTime);
-    return Math.max(1, toRetryAfterSeconds(resetMs - Date.now()));
-}
-
-app.use(limiter);
-
 app.use((req, res, next) => {
     return next();
 });
@@ -568,9 +543,8 @@ io.on('connection', (socket) => {
                     }
                     formbarBanFinalized = true;
                     formbarSocket.off('classUpdate')
-                    if (!poll || poll.length == 0) return console.error('No current poll, check if class is started.')
-                    let votesFor = poll.find(r => r.answer == 'Yes').responses || 0
-                    let votesAgainst = poll.find(r => r.answer == 'No').responses || 0
+                    let votesFor = poll.find(r => r.answer == 'Yes').responses
+                    let votesAgainst = poll.find(r => r.answer == 'No').responses
 
                     if (votesFor > votesAgainst) {
                         db.run(
@@ -931,3 +905,4 @@ server.listen(port, async () => {
 });
 
 module.exports = { app, io, formbarSocket };
+
