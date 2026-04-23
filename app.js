@@ -40,24 +40,6 @@ function getLimiterRetryAfterSeconds(req) {
     return Math.max(1, toRetryAfterSeconds(resetMs - Date.now()));
 }
 
-const limiter = rateLimit({
-    windowMs: 30 * 1000, // Spotify-like rolling cadence (30s), slightly stricter.
-    limit: 45, // Slightly more aggressive than typical Spotify app-wide throughput.
-    standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
-    ipv6Subnet: 60, // Slightly less aggressive, better CIDR for most v6 deployments
-    // store: ... , // Redis, Memcached, etc. See below.
-    handler: (req, res) => {
-        const retryAfterSeconds = getLimiterRetryAfterSeconds(req);
-        res.set('Retry-After', String(retryAfterSeconds));
-        return res.status(429).render('rateLimit.ejs', {
-            title: 'Jukebar Rate Limited',
-            message: 'Hey bud, you\'re making too many requests. Stop it.',
-            retryAfterSeconds
-        });
-    }
-})
-
 app.use(limiter);
 
 app.use((req, res, next) => {
