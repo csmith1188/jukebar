@@ -531,8 +531,8 @@ io.on('connection', (socket) => {
 
             // Start the vote with expiration callback
             const voteId = `${trackUri}-${Date.now()}`;
+
             // Do the vote ban with formbar
-            console.log(FORMBAR_POLL_BAN_VOTE)
             if (FORMBAR_POLL_BAN_VOTE === 'true') {
                 let formbarBanFinalized = false;
 
