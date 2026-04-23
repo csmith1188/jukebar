@@ -33,7 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 const sessionMiddleware = session({
-    secret: 'thisisasupersecretsigmaskibidikeyandihavethekeytotheuniversebutnobodywillknowabcdefghijklmnopqrstuvwxyz',
+    secret: process.env.FORMBAR_SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
