@@ -13,6 +13,10 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 let brokeyEnabled = false;
+const voteBanDevModeEnabled = String(process.env.JUKEBAR_DEV_MODE || '').toLowerCase() === 'true';
+const voteBanMinOnlineUsers = voteBanDevModeEnabled ? 1 : 5;
+
+// Brokey mode is tracked for diagnostics only; do not block the UI.
 
 function enableBrokey(reason = 'unknown') {
     if (brokeyEnabled) return;
@@ -57,16 +61,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 app.use((req, res, next) => {
-    if (!isBrokeyEnabled()) return next();
-    if (req.path.startsWith('/img/')) return next();
-    if (req.path === '/diagnostics') return next();
-    if (req.path === '/login') return next();
-    return res.status(503).render('rateLimit.ejs', {
-        title: 'Jukebar Brokey',
-        image: '/img/brokey.png',
-        message: 'jukebar brokey... i sorry i fix it tomorrow!',
-        retryAfterSeconds: 30
-    });
+    return next();
 });
 
 const server = http.createServer(app);
@@ -110,6 +105,75 @@ const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
 const { READ, playbackRateLimit, executePlaybackRead, setSpotifyPlaybackCooldown, getRetryAfterFromError, isSpotify429 } = require('./middleware/spotifyPlaybackRateLimit');
 const path = require('path');
 const fs = require('fs');
+
+function reloadSocketSession(socket) {
+    return new Promise((resolve) => {
+        const session = socket?.request?.session;
+        if (!session || typeof session.reload !== 'function') {
+            return resolve(session || null);
+        }
+
+        session.reload((err) => {
+            if (err) {
+                console.warn('[socket] Failed to reload session:', err.message || err);
+                return resolve(socket?.request?.session || session);
+            }
+            return resolve(socket?.request?.session || session);
+        });
+    });
+}
+
+function enableBrokey(reason = 'unknown') {
+    if (brokeyEnabled) return;
+    brokeyEnabled = true;
+    console.error(`[brokey] Enabled due to: ${reason}`);
+}
+
+function isBrokeyEnabled() {
+    return brokeyEnabled;
+}
+
+function toRetryAfterSeconds(valueMs) {
+    const seconds = Math.ceil(Math.max(0, Number(valueMs) || 0) / 1000);
+    return Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+}
+
+function getLimiterRetryAfterSeconds(req) {
+    const resetTime = req.rateLimit?.resetTime;
+    if (!resetTime) return 30;
+    const resetMs = resetTime instanceof Date ? resetTime.getTime() : Number(resetTime);
+    return Math.max(1, toRetryAfterSeconds(resetMs - Date.now()));
+}
+
+const limiter = rateLimit({
+    windowMs: 30 * 1000, // Keep a short rolling window for bursts.
+    limit: 180, // Allow normal UI refresh/fetch bursts without false positives.
+    standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
+    keyGenerator: (req) => {
+        // Prefer a stable per-user key for authenticated requests.
+        const userId = req.session?.token?.id;
+        if (userId !== undefined && userId !== null && String(userId).trim() !== '') {
+            return `user:${String(userId)}`;
+        }
+        // Fallback for unauthenticated traffic (e.g., login/static probes).
+        return `ip:${req.ip}`;
+    },
+    // store: ... , // Redis, Memcached, etc. See below.
+    handler: (req, res) => {
+        const retryAfterSeconds = getLimiterRetryAfterSeconds(req);
+        res.set('Retry-After', String(retryAfterSeconds));
+        return res.status(429).render('rateLimit.ejs', {
+            title: 'Jukebar Rate Limited',
+            message: 'Hey bud, you\'re making too many requests. Stop it.',
+            retryAfterSeconds
+        });
+    }
+})
+
+app.use(limiter);
+
+
 
 async function runSpotifyDiagnostics() {
     if (!process.env.SPOTIFY_CLIENT_ID) return;
@@ -285,8 +349,11 @@ async function handleBanPassed(trackName, trackArtist, trackUri) {
     const removedCount = queueManager.removeByNameAndArtist(trackName, trackArtist);
     console.log(`Removed ${removedCount} matching track(s) from queue`);
 
-    // Check if the banned song is currently playing - if so, skip it
-    if (queueManager.isCurrentlyPlaying(trackName, trackArtist)) {
+    // Check if the banned song is currently playing - prefer URI match, fallback to name/artist.
+    const currentlyPlayingBannedTrack =
+        queueManager.isCurrentTrackUri(trackUri) ||
+        queueManager.isCurrentlyPlaying(trackName, trackArtist);
+    if (currentlyPlayingBannedTrack) {
         console.log('Banned song is currently playing - skipping it');
         try {
             await ensureSpotifyAccessToken();
@@ -299,6 +366,58 @@ async function handleBanPassed(trackName, trackArtist, trackUri) {
     }
 }
 
+let lastAutoSkippedBannedUri = null;
+let lastAutoSkippedAt = 0;
+
+async function enforceCurrentTrackBanByUri() {
+    try {
+        await ensureSpotifyAccessToken();
+        const playback = await executePlaybackRead(
+            { session: null, ip: 'ban-enforcer' },
+            'ban-enforcer-current-track',
+            () => spotifyApi.getMyCurrentPlayingTrack()
+        );
+        const currentUri = String(playback?.body?.item?.uri || '').trim();
+        if (!currentUri) return false;
+
+        const isBanned = await new Promise((resolve) => {
+            db.get(
+                'SELECT 1 FROM banned_songs WHERE TRIM(COALESCE(track_uri, \'\')) = ? LIMIT 1',
+                [currentUri],
+                (err, row) => {
+                    if (err) {
+                        console.error('Failed checking banned track URI:', err);
+                        return resolve(false);
+                    }
+                    return resolve(!!row);
+                }
+            );
+        });
+
+        if (!isBanned) return false;
+
+        // Prevent repeated skip attempts for the same URI in short bursts.
+        if (lastAutoSkippedBannedUri === currentUri && (Date.now() - lastAutoSkippedAt) < 15000) {
+            return false;
+        }
+
+        console.log(`Auto-skipping banned currently playing track URI: ${currentUri}`);
+        lastAutoSkippedBannedUri = currentUri;
+        lastAutoSkippedAt = Date.now();
+
+        await spotifyApi.skipToNext();
+        return true;
+    } catch (err) {
+        if (isSpotify429(err)) {
+            const retryAfter = getRetryAfterFromError(err);
+            setSpotifyPlaybackCooldown(READ, retryAfter, 'ban-enforcer');
+            queueManager.setSpotifyCooldown(retryAfter, 'ban-enforcer');
+        }
+        console.warn('ban-enforcer check failed:', err?.message || err);
+        return false;
+    }
+}
+
 // Formbar Socket.IO connection
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
 const API_KEY = process.env.API_KEY || '';
@@ -308,6 +427,8 @@ console.log('=== Formbar Configuration ===');
 console.log('FORMBAR_ADDRESS:', FORMBAR_ADDRESS);
 console.log('API_KEY present:', !!API_KEY);
 console.log('API_KEY length:', API_KEY.length);
+console.log('JUKEBAR_DEV_MODE:', voteBanDevModeEnabled);
+console.log('Ban vote minimum users:', voteBanMinOnlineUsers);
 console.log('=============================');
 
 const formbarSocket = ioClient(FORMBAR_ADDRESS, {
@@ -399,7 +520,13 @@ io.on('connection', (socket) => {
 
             // Verify payment for non-owners (but DON'T consume it yet)
             if (!userIsOwner) {
-                if (!socket.request?.session?.hasPaid) {
+                let hasPaid = !!socket.request?.session?.hasPaid;
+                if (!hasPaid) {
+                    const refreshedSession = await reloadSocketSession(socket);
+                    hasPaid = !!refreshedSession?.hasPaid;
+                }
+
+                if (!hasPaid) {
                     socket.emit('banVoteError', { error: 'Payment required to start a ban vote' });
                     return;
                 }
@@ -411,8 +538,8 @@ io.on('connection', (socket) => {
             const onlineCount = io.engine.clientsCount;
 
             // Check minimum users requirement
-            if (onlineCount < 5) {
-                socket.emit('banVoteError', { error: 'At least 5 users must be online to start a ban vote' });
+            if (onlineCount < voteBanMinOnlineUsers) {
+                socket.emit('banVoteError', { error: `At least ${voteBanMinOnlineUsers} users must be online to start a ban vote` });
                 return; // Payment NOT consumed – user keeps their digipogs
             }
 
@@ -438,7 +565,11 @@ io.on('connection', (socket) => {
             // --- All checks passed – NOW consume the payment ---
             if (!userIsOwner) {
                 socket.request.session.hasPaid = false;
-                socket.request.session.save();
+                socket.request.session.save((saveErr) => {
+                    if (saveErr) {
+                        console.warn('[socket] Failed to persist hasPaid=false after ban vote start:', saveErr.message || saveErr);
+                    }
+                });
             }
 
             // Start the vote with expiration callback
@@ -446,8 +577,14 @@ io.on('connection', (socket) => {
             // Do the vote ban with formbar
             console.log(FORMBAR_POLL_BAN_VOTE)
             if (FORMBAR_POLL_BAN_VOTE === 'true') {
+                let formbarBanFinalized = false;
 
                 async function fbBanVoteResults(poll) {
+                    if (formbarBanFinalized) {
+                        console.log('Formbar ban vote already finalized; skipping duplicate result handling');
+                        return;
+                    }
+                    formbarBanFinalized = true;
                     formbarSocket.off('classUpdate')
                     if (!poll || poll.length == 0) return console.error('No current poll, check if class is started.')
                     let votesFor = poll.find(r => r.answer == 'Yes').responses || 0
@@ -493,8 +630,8 @@ io.on('connection', (socket) => {
                     let pastData
 
                     setTimeout(() => {
-                        console.log('Attempting to end poll with data', pastData.poll.responses)
-                        if (pastData.poll.responses) {
+                        console.log('Attempting to end poll with data', pastData?.poll?.responses)
+                        if (pastData?.poll?.responses) {
                             fbBanVoteResults(pastData.poll.responses)
                             formbarSocket.emit('updatePoll', {})
                             console.log('Auto ended poll')
@@ -663,13 +800,14 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Call initialization
     initializeQueue();
 
-    const spotifySyncIntervalMs = Math.max(8000, Number(process.env.SPOTIFY_SYNC_INTERVAL_MS) || 10000);
+    const spotifySyncIntervalMs = Math.max(8000, 5000);
     console.log(`Spotify sync interval set to ${spotifySyncIntervalMs}ms`);
 
     // Periodic Spotify sync with safer default interval
     setInterval(async () => {
         try {
             await queueManager.syncWithSpotify(spotifyApi);
+            await enforceCurrentTrackBanByUri();
         } catch (error) {
             console.error('Sync interval error (non-fatal):', error.message);
         }
@@ -696,6 +834,7 @@ app.get('/', isAuthenticated, (req, res) => {
             addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
             removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
             customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
+            banVoteMinOnlineUsers: voteBanMinOnlineUsers,
             changelog: changelog
         });
     } catch (error) {
@@ -721,6 +860,7 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
             removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
             customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
+            banVoteMinOnlineUsers: voteBanMinOnlineUsers,
             changelog: changelog
         });
     } catch (error) {

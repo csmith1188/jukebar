@@ -243,8 +243,9 @@
             .then(data => {
                 const onlineCount = data.count || 0;
 
-                if (onlineCount < 5) {
-                    Notify('At least 5 users must be online to start a ban vote', 'error');
+                const minOnlineUsers = Number(window.banVoteMinOnlineUsers || 5);
+                if (onlineCount < minOnlineUsers) {
+                    Notify(`At least ${minOnlineUsers} users must be online to start a ban vote`, 'error');
                     return;
                 }
 

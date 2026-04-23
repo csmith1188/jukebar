@@ -386,6 +386,7 @@
             let progressInterval = null;
             let currentID = <%= JSON.stringify(userID || null) %>; // User ID which is needed by ban votes
             const ownerIDs = <%= JSON.stringify(ownerIDs) %>; // Array of owner ids
+            window.banVoteMinOnlineUsers = <%= JSON.stringify(typeof banVoteMinOnlineUsers !== 'undefined' ? banVoteMinOnlineUsers : 5) %>;
 
             // Helper function to check if a user ID is an owner
             function isOwnerClient(uid) {
@@ -579,8 +580,9 @@
                             const res = await fetch('/api/online-count');
                             const data = await res.json().catch(() => ({}));
                             const onlineCount = data.count || 0;
-                            if (onlineCount < 5) {
-                                Notify('At least 5 users must be online to start a ban vote', 'error');
+                            const minOnlineUsers = Number(window.banVoteMinOnlineUsers || 5);
+                            if (onlineCount < minOnlineUsers) {
+                                Notify(`At least ${minOnlineUsers} users must be online to start a ban vote`, 'error');
                                 return;
                             }
                         } catch (err) {
@@ -687,7 +689,7 @@
 
                         if (isOwnerClient(currentID)) {
                             const anonMode = document.getElementById('owner-anon-mode')?.checked || false;
-                            addToQueue(uri, anonMode, trackMeta);
+                            addToQueue(uri, anonMode, trackMeta, false);
                             return;
                         }
 
@@ -701,7 +703,7 @@
 
                         // Reset payment flag after using it
                         hasPaid = false;
-                        addToQueue(uri, null, trackMeta);
+                        addToQueue(uri, null, trackMeta, true);
                     }
 
                     async function checkPaymentAndSkip() {
@@ -728,7 +730,7 @@
                         console.log('⏭️ Final skipUri:', skipUri);
 
                         if (isOwnerClient(currentID)) {
-                            skip(skipUri);
+                            skip(skipUri, false);
                             return;
                         }
 
@@ -741,10 +743,10 @@
 
                         // Reset payment flag after using it
                         hasPaid = false;
-                        skip(skipUri);
+                        skip(skipUri, true);
                     }
 
-                    async function skip(uri) {
+                    async function skip(uri, paymentConsumed = false) {
                         try {
                             const response = await fetch('/skip', {
                                 method: 'POST',
@@ -765,7 +767,9 @@
                             } else {
                                 // Other error
                                 Notify(data.error || 'Failed to skip', 'error');
-                                refund();
+                                if (paymentConsumed) {
+                                    refund();
+                                }
                             }
                         } catch (error) {
                             console.error('Error skipping track:', error);
@@ -773,7 +777,7 @@
                         }
                     }
 
-                    function addToQueue(uri, anonMode = null, trackMeta = {}) {
+                    function addToQueue(uri, anonMode = null, trackMeta = {}, paymentConsumed = false) {
                         if (anonMode === null) {
                             anonMode = document.getElementById('anonMode')?.checked || false;
                         }
@@ -788,7 +792,9 @@
                                 } else {
                                     return response.json().then(data => {
                                         Notify(data.error || 'Failed to add track to queue', 'error');
-                                        refund();
+                                        if (paymentConsumed) {
+                                            refund();
+                                        }
                                     });
                                 }
                             })
@@ -856,12 +862,45 @@
                         });
                     }
 
+                    function isFourDigitYear(value) {
+                        return /^\d{4}$/.test((value || '').trim());
+                    }
+
+                    function normalizeAlbumMeta(subtitleValue, releaseYearValue) {
+                        const rawSubtitle = (subtitleValue || '').trim();
+                        let year = (releaseYearValue || '').trim();
+                        let artist = '';
+
+                        if (rawSubtitle) {
+                            const parts = rawSubtitle.split(' · ').map(p => p.trim()).filter(Boolean);
+                            const yearParts = parts.filter(isFourDigitYear);
+                            if (!year && yearParts.length > 0) year = yearParts[yearParts.length - 1];
+                            const artistParts = parts.filter(p => !isFourDigitYear(p));
+                            artist = artistParts.join(' · ').trim();
+                        }
+
+                        if (isFourDigitYear(artist)) artist = '';
+                        if (artist && year && artist === year) artist = '';
+
+                        const display = `${artist}${year ? (artist ? ' · ' : '') + year : ''}`;
+                        return { artist, year, display };
+                    }
+
                     function renderAlbumSearchResults(albums, resultsDiv) {
                         if (!albums || albums.length === 0) return;
                         albums.forEach(album => {
                             const div = document.createElement('div');
                             div.className = 'search-result-item album-result-item';
+                            div.dataset.itemType = 'album';
+                            div.dataset.albumId = album.id || '';
+                            div.dataset.albumName = album.name || '';
+                            div.dataset.albumImage = album.image || '';
+                            const albumArtists = Array.isArray(album.artists)
+                                ? album.artists.map(a => (typeof a === 'string' ? a : a?.name)).filter(Boolean).join(', ')
+                                : (album.artists || album.artist || '');
                             const year = album.release_date ? album.release_date.substring(0, 4) : '';
+                            div.dataset.albumYear = year;
+                            div.dataset.albumArtists = albumArtists;
                             div.innerHTML = `
                                 ${album.image
                                     ? `<img src="${album.image}" alt="${escapeHtml(album.name)}" class="album-cover" />`
@@ -872,29 +911,10 @@
                                     <div class="search-result-content-pushies">
                                         <span class="album-badge">ALBUM</span>
                                         <div class="search-result-title" title="${escapeHtml(album.name)}">${escapeHtml(album.name)}</div>
-                                        <div class="search-result-artist">${escapeHtml(album.artists)}${year ? ' · ' + year : ''}</div>
-                                        <hr>
-                                        <div class="search-result-actions">
-                                            <button class="play-button-icon album-open-btn" title="View album"
-                                                data-album-id="${album.id}"
-                                                data-album-name="${escapeHtml(album.name)}"
-                                                data-album-image="${album.image || ''}"
-                                                data-album-year="${year}">
-                                                <img src="/img/play.png" alt="View" class="play-icon">
-                                            </button>
-                                        </div>
+                                        <div class="search-result-artist">${escapeHtml(albumArtists)}${year ? ' · ' + year : ''}</div>
                                     </div>
                                 </div>
                             `;
-                            div.querySelector('.album-open-btn').addEventListener('click', function () {
-                                logRecentlyQueuedInteraction('album', {
-                                    id: this.dataset.albumId,
-                                    name: this.dataset.albumName,
-                                    subtitle: `${album.artists || ''}${year ? ' · ' + year : ''}`,
-                                    image: this.dataset.albumImage || ''
-                                });
-                                openAlbumDirect(this.dataset.albumId, this.dataset.albumName, this.dataset.albumImage, this.dataset.albumYear);
-                            });
                             resultsDiv.appendChild(div);
                         });
                     }
@@ -938,7 +958,9 @@
                                 artistDiv.dataset.artistId = artistId;
                                 artistDiv.dataset.artistName = item.name || '';
                                 artistDiv.dataset.artistImage = item.album?.image || '';
-                                const subtitle = (item.artist && item.artist !== 'Unknown') ? item.artist : '';
+                                const subtitle = (item.artist && item.artist !== 'Unknown')
+                                    ? item.artist
+                                    : ((item.subtitle && item.subtitle !== 'Unknown') ? item.subtitle : '');
                                 artistDiv.innerHTML = `
                                     ${item.album?.image
                                         ? `<img src="${item.album.image}" alt="${escapeHtml(item.name)}" class="album-cover artist-cover" />`
@@ -963,7 +985,18 @@
                                 albumDiv.dataset.uri = item.uri;
                                 albumDiv.dataset.itemType = 'album';
                                 const albumId = (item.uri || '').split(':')[2] || '';
-                                const subtitle = (item.artist && item.artist !== 'Unknown') ? item.artist : '';
+                                albumDiv.dataset.albumId = albumId;
+                                albumDiv.dataset.albumName = item.name || '';
+                                albumDiv.dataset.albumImage = item.album?.image || '';
+                                albumDiv.dataset.albumYear = item.releaseYear || '';
+                                const rawSubtitle = (item.artist && item.artist !== 'Unknown')
+                                    ? item.artist
+                                    : ((item.subtitle && item.subtitle !== 'Unknown') ? item.subtitle : '');
+                                const normalizedMeta = normalizeAlbumMeta(rawSubtitle, item.releaseYear || '');
+                                const subtitle = normalizedMeta.display;
+                                const subtitleIsYearOnly = isFourDigitYear((subtitle || '').trim());
+                                albumDiv.dataset.albumArtists = normalizedMeta.artist;
+                                albumDiv.dataset.albumYear = normalizedMeta.year;
                                 albumDiv.innerHTML = `
                                     ${item.album?.image
                                         ? `<img src="${item.album.image}" alt="${escapeHtml(item.name)}" class="album-cover" />`
@@ -974,20 +1007,32 @@
                                         <div class="search-result-content-pushies">
                                             <span class="album-badge">ALBUM</span>
                                             <div class="search-result-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-                                            <div class="search-result-artist">${escapeHtml(subtitle)}</div>
-                                            <div class="search-result-actions">
-                                                <button class="play-button-icon album-open-btn" title="View album"
-                                                    data-album-id="${escapeHtml(albumId)}"
-                                                    data-album-name="${escapeHtml(item.name)}"
-                                                    data-album-image="${item.album?.image || ''}"
-                                                    data-album-year="${escapeHtml(item.releaseYear || '')}">
-                                                    <img src="/img/play.png" alt="View" class="play-icon">
-                                                </button>
-                                            </div>
+                                            <div class="search-result-artist" data-album-meta="true">${escapeHtml(subtitle)}</div>
                                         </div>
                                     </div>
                                 `;
                                 resultsDiv.appendChild(albumDiv);
+
+                                // Older history rows can contain only the year (e.g., "1982").
+                                // Backfill artist text from album tracks so cards read "Artist · Year".
+                                if (subtitleIsYearOnly && albumId) {
+                                    fetch(`/api/album/${albumId}/tracks`)
+                                        .then(r => r.json())
+                                        .then(data => {
+                                            if (!data?.ok || !Array.isArray(data.tracks) || data.tracks.length === 0) return;
+                                            const primaryArtist = (data.tracks[0]?.artist || '').trim();
+                                            if (!primaryArtist) return;
+                                            const yearOnly = (normalizedMeta.year || '').trim();
+                                            const enrichedSubtitle = `${primaryArtist}${yearOnly ? ' · ' + yearOnly : ''}`;
+                                            albumDiv.dataset.albumArtists = primaryArtist;
+                                            if (yearOnly) albumDiv.dataset.albumYear = yearOnly;
+                                            const metaEl = albumDiv.querySelector('[data-album-meta="true"]');
+                                            if (metaEl) metaEl.textContent = enrichedSubtitle;
+                                        })
+                                        .catch(() => {
+                                            // Non-fatal: keep existing subtitle if enrichment fails.
+                                        });
+                                }
                                 return;
                             }
 
@@ -1311,6 +1356,7 @@
                         document.getElementById('albumDetailView').style.display = '';
 
                         let resolvedAlbumYear = (albumYear || '').trim();
+                        let resolvedAlbumArtist = '';
                         const header = document.getElementById('albumDetailHeader');
                         const renderAlbumHeader = () => {
                             header.innerHTML = `
@@ -1321,6 +1367,7 @@
                                 }
                                     <div class="album-detail-info">
                                         <div class="album-detail-name">${escapeHtml(albumName)}</div>
+                                        ${resolvedAlbumArtist ? `<div class="album-detail-artist">${escapeHtml(resolvedAlbumArtist)}</div>` : ''}
                                         ${resolvedAlbumYear ? `<div class="album-detail-year">${escapeHtml(resolvedAlbumYear)}</div>` : ''}
                                     </div>
                                 </div>
@@ -1334,10 +1381,13 @@
 
                         try {
                             const tracksData = await fetch(`/api/album/${albumId}/tracks`).then(r => r.json());
+                            if (!resolvedAlbumArtist && tracksData?.tracks?.length > 0) {
+                                resolvedAlbumArtist = String(tracksData.tracks[0]?.artist || '').trim();
+                            }
                             if (!resolvedAlbumYear && tracksData?.releaseYear) {
                                 resolvedAlbumYear = String(tracksData.releaseYear).trim();
-                                renderAlbumHeader();
                             }
+                            renderAlbumHeader();
 
                             if (!tracksData.ok || !tracksData.tracks || tracksData.tracks.length === 0) {
                                 tracksList.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No clean tracks found in this album.</p>';
@@ -1843,20 +1893,21 @@
                             return;
                         }
 
-                        // Handle album open buttons (used by recently queued album items)
-                        if (e.target.matches('.album-open-btn') || e.target.closest('.album-open-btn')) {
-                            const button = e.target.matches('.album-open-btn') ? e.target : e.target.closest('.album-open-btn');
-                            const parentItem = button.closest('.search-result-item');
-                            if (!parentItem || parentItem.dataset.itemType !== 'album') return;
-                            const albumId = button.dataset.albumId;
+                        // Handle album row click (search + recently queued album items)
+                        const albumItem = e.target.closest('.album-result-item');
+                        if (albumItem && albumItem.dataset.itemType === 'album') {
+                            const albumId = albumItem.dataset.albumId;
                             if (albumId) {
+                                const metaText = (albumItem.querySelector('[data-album-meta="true"]')?.textContent || '').trim();
+                                const normalizedMeta = normalizeAlbumMeta(metaText || albumItem.dataset.albumArtists || '', albumItem.dataset.albumYear || '');
+                                const subtitle = normalizedMeta.display;
                                 logRecentlyQueuedInteraction('album', {
                                     id: albumId,
-                                    name: button.dataset.albumName || '',
-                                    subtitle: button.dataset.albumYear || '',
-                                    image: button.dataset.albumImage || ''
+                                    name: albumItem.dataset.albumName || '',
+                                    subtitle,
+                                    image: albumItem.dataset.albumImage || ''
                                 });
-                                openAlbumDirect(button.dataset.albumId, button.dataset.albumName, button.dataset.albumImage, button.dataset.albumYear);
+                                openAlbumDirect(albumId, albumItem.dataset.albumName, albumItem.dataset.albumImage, normalizedMeta.year || albumItem.dataset.albumYear || '');
                             }
                             return;
                         }
