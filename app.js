@@ -36,7 +36,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 const sessionMiddleware = session({
-    secret: 'thisisasupersecretsigmaskibidikeyandihavethekeytotheuniversebutnobodywillknowabcdefghijklmnopqrstuvwxyz',
+    secret: process.env.FORMBAR_SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -569,8 +569,8 @@ io.on('connection', (socket) => {
 
             // Start the vote with expiration callback
             const voteId = `${trackUri}-${Date.now()}`;
+
             // Do the vote ban with formbar
-            console.log(FORMBAR_POLL_BAN_VOTE)
             if (FORMBAR_POLL_BAN_VOTE === 'true') {
                 let formbarBanFinalized = false;
 
@@ -950,3 +950,4 @@ server.listen(port, async () => {
 });
 
 module.exports = { app, io, formbarSocket };
+
