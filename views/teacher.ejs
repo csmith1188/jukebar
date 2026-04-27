@@ -20,9 +20,23 @@
                             <img src="/img/settings.png" alt="JukePix Settings">
                         </button>
                         <% } %>
-                            <p class="user-greeting">Logged in as: <strong>
-                                    <%= user %>
-                                </strong></p>
+                    <% if (typeof spotifyApiConfigured !== 'undefined' && spotifyApiConfigured) { %>
+                        <div class="teacher-spotify-bg-toggle" id="spotifyBackgroundSyncGroup">
+                            <span class="teacher-spotify-bg-label"
+                                title="When off, Jukebar stops automatic Spotify sync and diagnostics in the background to reduce API use and rate limits. Turn on again before class.">Spotify background sync</span>
+                            <div class="toggle-switch" id="spotifyBackgroundSwitch" role="presentation"
+                                onclick="document.getElementById('spotifyBackgroundSyncCheckbox').click()">
+                                <div class="switch-track">
+                                    <div class="switch-thumb"></div>
+                                </div>
+                                <input type="checkbox" id="spotifyBackgroundSyncCheckbox" autocomplete="off" disabled
+                                    style="display: none;" aria-label="Spotify background sync">
+                            </div>
+                        </div>
+                    <% } %>
+                    <p class="user-greeting teacher-toolbar-greeting">Logged in as: <strong>
+                            <%= user %>
+                        </strong></p>
                 </div>
                 <div class="container teacher-layout">
                     <div id="queueHistory">
@@ -713,11 +727,61 @@
         fetchQueueHistory(false);
     });
 
+    async function initSpotifyBackgroundSyncToggle() {
+        const box = document.getElementById('spotifyBackgroundSyncCheckbox');
+        const group = document.getElementById('spotifyBackgroundSyncGroup');
+        if (!box || !group) return;
+
+        let loadOk = false;
+        try {
+            const r = await fetch('/api/spotify-background');
+            if (!r.ok) {
+                if (r.status === 403) {
+                    group.style.display = 'none';
+                }
+                return;
+            }
+            const data = await r.json();
+            if (data && typeof data.enabled === 'boolean') {
+                box.checked = data.enabled;
+            }
+            loadOk = true;
+        } catch (e) {
+            console.warn('Spotify background sync state:', e);
+        }
+        if (!loadOk) {
+            return;
+        }
+        box.disabled = false;
+        box.addEventListener('change', async () => {
+            const want = box.checked;
+            try {
+                const r = await fetch('/api/spotify-background', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: want })
+                });
+                const data = await r.json();
+                if (!r.ok || !data.ok) {
+                    throw new Error(data.error || 'Request failed');
+                }
+                showNotification(
+                    want ? 'Spotify background sync is on' : 'Spotify background sync is off',
+                    'success'
+                );
+            } catch (err) {
+                box.checked = !want;
+                showNotification(err.message || 'Could not update Spotify background sync', 'error');
+            }
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         fetchUsers();
         fetchQueueHistory(true);
         fetchBannedSongs();
         fetchUserPlaylists();
+        initSpotifyBackgroundSyncToggle();
     });
     function handleSearchSubmit(event) {
         event.preventDefault();
@@ -727,8 +791,15 @@
 
     // search feature for banning tracks
     async function searchSpotify() {
-        const query = document.getElementById('searchInput').value;
+        const query = document.getElementById('searchInput').value.trim();
         if (!query) return;
+        if (query.length < 2) {
+            const resultsDiv = document.getElementById('searchResults');
+            if (resultsDiv) {
+                resultsDiv.innerHTML = '<p style="color:#b3b3b3;">Type at least 2 characters to search.</p>';
+            }
+            return;
+        }
 
         try {
             const response = await fetch('/search', {

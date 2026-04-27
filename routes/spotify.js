@@ -553,11 +553,14 @@ async function getCurrentTrackUri() {
     return playback?.body?.item?.uri || null;
 }
 
-async function isPlaylistCurrentlyPlaying(playlistId) {
+async function isPlaylistCurrentlyPlaying(playlistId, preloadedItems = null) {
     const currentTrackUri = await getCurrentTrackUri();
     if (!currentTrackUri) return false;
 
-    const { tracks: playlistItems } = await fetchPlaylistTracks(playlistId);
+    const playlistItems =
+        preloadedItems != null
+            ? preloadedItems
+            : (await fetchPlaylistTracks(playlistId)).tracks;
     return playlistItems.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
@@ -1062,6 +1065,38 @@ router.get('/api/playlists/allowed', isAuthenticated, async (req, res) => {
     }
 });
 
+function buildPlaylistQuoteFromItems(rawItems) {
+    let playableCount = 0;
+    const preview = [];
+    const PREVIEW_MAX = 200;
+
+    for (const item of rawItems) {
+        const track = item?.item ?? item?.track;
+        const playable = !!(track && !track.is_local && track.uri && track.uri.startsWith('spotify:track:'));
+        if (playable) {
+            playableCount += 1;
+        }
+
+        if (preview.length < PREVIEW_MAX) {
+            if (!track) {
+                preview.push({ name: 'Unknown item', artist: '', image: null, playable: false });
+            } else {
+                const name = (track.name || 'Unknown track').trim();
+                const artist = (track.artists || []).map((a) => a.name).filter(Boolean).join(', ') || 'Unknown artist';
+                const image = track.album?.images?.[0]?.url || null;
+                preview.push({ name, artist, image, playable });
+            }
+        }
+    }
+
+    return {
+        playableCount,
+        preview,
+        totalItems: rawItems.length,
+        previewCapped: rawItems.length > preview.length
+    };
+}
+
 router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
     try {
         const { playlistId } = req.body || {};
@@ -1075,24 +1110,24 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
             return res.status(403).json({ ok: false, error: 'This playlist is not allowed' });
         }
 
-        const alreadyPlaying = await isPlaylistCurrentlyPlaying(playlistId);
+        await ensureSpotifyAccessToken();
+        const fetchResult = await fetchPlaylistTracks(playlistId);
+        if (fetchResult.error) {
+            const fe = fetchResult.error;
+            return res.status(fe.status === 403 ? 403 : fe.status === 429 ? 429 : 502).json({ ok: false, error: fe.message });
+        }
+
+        const rawItems = fetchResult.tracks;
+        const alreadyPlaying = await isPlaylistCurrentlyPlaying(playlistId, rawItems);
         if (alreadyPlaying) {
             return res.status(409).json({ ok: false, code: 'PLAYLIST_ALREADY_PLAYING', error: 'This playlist is already playing' });
         }
 
-        await ensureSpotifyAccessToken();
-        const [playlistMeta, playlistStats] = await Promise.all([
-            spotifyApi.getPlaylist(playlistId),
-            getPlaylistPlayableStats(playlistId)
-        ]);
-
-        if (playlistStats.fetchError) {
-            const fe = playlistStats.fetchError;
-            return res.status(fe.status === 403 ? 403 : fe.status === 429 ? 429 : 502).json({ ok: false, error: fe.message });
-        }
-
-        const queueableCount = playlistStats.playableCount;
+        const playlistMeta = await spotifyApi.getPlaylist(playlistId);
+        const quote = buildPlaylistQuoteFromItems(rawItems);
+        const queueableCount = quote.playableCount;
         const cost = computePlaylistCost(queueableCount);
+        const unplayable = Math.max(0, rawItems.length - queueableCount);
 
         return res.json({
             ok: true,
@@ -1101,7 +1136,14 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
                 name: playlistMeta.body?.name || allowedRow.name || 'Untitled Playlist'
             },
             queueableCount,
-            skipped: playlistStats.skipped,
+            tracks: quote.preview,
+            totalTracks: quote.totalItems,
+            previewCapped: quote.previewCapped,
+            skipped: {
+                unplayable,
+                banned: 0,
+                duplicate: 0
+            },
             cost
         });
     } catch (err) {

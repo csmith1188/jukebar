@@ -74,6 +74,9 @@ npm run dev
 
 `http://localhost:5000`
 
+
+> **Note:** For more information on hosting locally, go to [Guide](docs/setup.md)
+
 ## Pages
 
 | Route | Description | Access |
