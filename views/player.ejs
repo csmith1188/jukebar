@@ -130,6 +130,8 @@
                     <div id="playlistPayMeta" class="playlist-pay-meta">0 queueable tracks</div>
                     <div id="playlistPayCost" class="playlist-pay-cost">0 Digipogs</div>
                 </div>
+                <p class="playlist-pay-tracks-heading">Tracks in this playlist</p>
+                <div id="playlistPayTrackList" class="playlist-pay-track-list playlist-tracks-list" aria-live="polite"></div>
                 <p style="color:#ffaa00; font-size:0.85em; text-align:center; margin:8px 0;">Note: Playing a playlist
                     will clear the current queue.</p>
                 <input id="playlist-pay-pin" type="password" pattern="\d*" inputmode="numeric" maxlength="6"
@@ -406,6 +408,15 @@
                 (function () {
                     'use strict';
 
+                    const CHANGELOG_LATEST_KEY = <%- JSON.stringify(typeof changelogLatestKey !== 'undefined' ? changelogLatestKey : '') %>;
+
+                    function markChangelogSeen() {
+                        if (!CHANGELOG_LATEST_KEY) return;
+                        try {
+                            localStorage.setItem('changelog_last_seen', CHANGELOG_LATEST_KEY);
+                        } catch (_) { /* private mode / quota */ }
+                    }
+
                     let useJukebar = true;
 
                     async function fetchAllowedPlaylistsForSidebar() {
@@ -464,6 +475,43 @@
                         }
                     }
 
+                    function escapePlaylistPayText(str) {
+                        return String(str ?? '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;');
+                    }
+
+                    function clearPlaylistPayTrackList() {
+                        const el = document.getElementById('playlistPayTrackList');
+                        if (el) el.innerHTML = '';
+                    }
+
+                    function renderPlaylistPayTrackList(quoteData) {
+                        const el = document.getElementById('playlistPayTrackList');
+                        if (!el) return;
+                        const tracks = quoteData && quoteData.tracks;
+                        if (!tracks || !tracks.length) {
+                            el.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:10px;">No tracks to show.</p>';
+                            return;
+                        }
+                        const capNote = quoteData.previewCapped
+                            ? `<p class="playlist-pay-tracks-note">Showing first ${tracks.length} of ${Number(quoteData.totalTracks) || 0} items in this playlist.</p>`
+                            : '';
+                        const rows = tracks.map((t) => {
+                            const dim = t.playable === false ? ' playlist-pay-track--dim' : '';
+                            const badge = t.playable === false
+                                ? '<span class="playlist-pay-track-badge">Not queued</span>'
+                                : '';
+                            const img = t.image
+                                ? `<img src="${escapePlaylistPayText(t.image)}" alt="" class="playlist-pay-track-img" width="40" height="40" loading="lazy"/>`
+                                : '<div class="playlist-pay-track-img playlist-pay-track-img--ph" aria-hidden="true"></div>';
+                            return `<div class="playlist-pay-track${dim}">${img}<div class="playlist-pay-track-text"><div class="playlist-pay-track-name">${escapePlaylistPayText(t.name)}</div><div class="playlist-pay-track-artist">${escapePlaylistPayText(t.artist)}</div></div>${badge}</div>`;
+                        }).join('');
+                        el.innerHTML = capNote + rows;
+                    }
+
                     async function handlePlaylistClick(playlist) {
                         if (userIsBanned) {
                             Notify('You are banned from using Jukebar.', 'error');
@@ -506,6 +554,7 @@
                             document.getElementById('playlistPayTitle').textContent = quoteData.playlist?.name || 'Playlist';
                             document.getElementById('playlistPayMeta').textContent = `${quoteData.queueableCount} queueable tracks`;
                             document.getElementById('playlistPayCost').textContent = `${quoteData.cost} Digipogs`;
+                            renderPlaylistPayTrackList(quoteData);
                             document.getElementById('playlistPaymentModal').style.display = 'block';
                             document.querySelector('.main-content').classList.add('blurred');
                         } catch (err) {
@@ -1127,8 +1176,17 @@
                     async function searchSpotify() {
                         const now = Date.now();
                         if (mainSearchInFlight || (now - mainSearchLastAt) < SEARCH_SUBMIT_COOLDOWN_MS) return;
-                        const query = document.getElementById('searchInput').value;
+                        const query = document.getElementById('searchInput').value.trim();
                         if (!query) return;
+                        if (query.length < 2) {
+                            const tabsEl = document.getElementById('searchFilterTabs');
+                            if (tabsEl) {
+                                tabsEl.style.display = 'none';
+                            }
+                            document.getElementById('searchResults').innerHTML =
+                                '<p style="color:#b3b3b3;padding:8px 0;">Type at least 2 characters to search.</p>';
+                            return;
+                        }
                         mainSearchInFlight = true;
                         mainSearchLastAt = now;
                         searchCurrentQuery = query;
@@ -1747,6 +1805,7 @@
                         document.getElementById('playlistPaymentModal').style.display = 'none';
                         document.querySelector('.main-content').classList.remove('blurred');
                         selectedPlaylistQuote = null;
+                        clearPlaylistPayTrackList();
                     });
 
                     document.getElementById('playlist-pay-confirm')?.addEventListener('click', async () => {
@@ -1794,6 +1853,7 @@
                             document.getElementById('playlistPaymentModal').style.display = 'none';
                             document.querySelector('.main-content').classList.remove('blurred');
                             selectedPlaylistQuote = null;
+                            clearPlaylistPayTrackList();
 
                             await queuePlaylist(playlistId);
                         } catch (err) {
@@ -1861,7 +1921,7 @@
 
                     document.getElementById('close-changelog')?.addEventListener('click', () => {
                         document.getElementById('changelogModal').style.display = 'none';
-                        localStorage.setItem('changelog_seen', 'v2.0');
+                        markChangelogSeen();
                     });
 
                     // Close modal when clicking outside of it
@@ -1869,13 +1929,17 @@
                         const changelogModal = document.getElementById('changelogModal');
                         if (event.target === changelogModal) {
                             changelogModal.style.display = 'none';
-                            localStorage.setItem('changelog_seen', 'v2.0');
+                            markChangelogSeen();
                         }
                     });
 
-                    // Show changelog on first visit or new version
-                    if (localStorage.getItem('changelog_seen') !== 'v2.0') {
-                        document.getElementById('changelogModal').style.display = 'block';
+                    // Auto-open when changelog.json has a newer top entry than the user last dismissed
+                    if (CHANGELOG_LATEST_KEY) {
+                        try {
+                            if (localStorage.getItem('changelog_last_seen') !== CHANGELOG_LATEST_KEY) {
+                                document.getElementById('changelogModal').style.display = 'block';
+                            }
+                        } catch (_) { /* private mode */ }
                     }
 
                     // Event delegation for dynamically created play and ban buttons
@@ -2175,6 +2239,19 @@
                     // Initialize WebSocket-based queue sync after defining the function
                     initializeQueueSync();
                 })();
+
+                // Custom playlist modals (create / add song) live outside the main IIFE; their search throttles must too
+                const SEARCH_SUBMIT_COOLDOWN_MS = 700;
+                let createPlaylistSearchInFlight = false;
+                let createPlaylistSearchLastAt = 0;
+                let addSongSearchInFlight = false;
+                let addSongSearchLastAt = 0;
+                let createPlaylistSearchQuery = '';
+                let createPlaylistSearchNextOffset = 0;
+                let createPlaylistSearchHasMore = false;
+                let addSongSearchQuery = '';
+                let addSongSearchNextOffset = 0;
+                let addSongSearchHasMore = false;
 
                 // Escape values used inside inline onclick handlers
                 function escapeForInlineOnclick(value) {
@@ -2837,6 +2914,9 @@
                 // --- Create Playlist ---
                 window.openCreatePlaylistModal = function () {
                     createPlaylistSelectedUris = [];
+                    createPlaylistSearchQuery = '';
+                    createPlaylistSearchNextOffset = 0;
+                    createPlaylistSearchHasMore = false;
                     document.getElementById('newPlaylistName').value = '';
                     document.getElementById('createPlaylistSearchInput').value = '';
                     document.getElementById('createPlaylistSearchResults').innerHTML = '';
@@ -2852,21 +2932,120 @@
                     document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
                 };
 
+                function removeCreatePlaylistLoadMore() {
+                    document.getElementById('createPlaylistLoadMoreBtn')?.remove();
+                }
+
+                function addCreatePlaylistLoadMoreIfNeeded(resultsEl) {
+                    removeCreatePlaylistLoadMore();
+                    if (!createPlaylistSearchHasMore) return;
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.id = 'createPlaylistLoadMoreBtn';
+                    btn.className = 'load-more-btn';
+                    btn.style.width = '100%';
+                    btn.style.marginTop = '10px';
+                    btn.textContent = 'Load more';
+                    btn.addEventListener('click', () => void loadCreatePlaylistSearchMore());
+                    resultsEl.appendChild(btn);
+                }
+
+                function appendCreatePlaylistSearchRows(resultsEl, items) {
+                    const existingUris = new Set(
+                        [...resultsEl.querySelectorAll('.create-playlist-add-btn[data-uri]')].map((b) => b.dataset.uri)
+                    );
+                    items.forEach((track) => {
+                        if (existingUris.has(track.uri)) return;
+                        existingUris.add(track.uri);
+                        const alreadyAdded = createPlaylistSelectedUris.find((t) => t.uri === track.uri);
+                        const div = document.createElement('div');
+                        div.className = 'playlist-search-result';
+                        div.innerHTML = `
+                                <img src="${track.album?.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;border-radius:6px;flex-shrink:0;" />
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
+                                    <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
+                                </div>
+                                <button class="primary small-btn create-playlist-add-btn ${alreadyAdded ? 'is-added' : ''}" data-uri="${track.uri}" ${alreadyAdded || createPlaylistSelectedUris.length >= 5 ? 'disabled' : ''} onclick="addToCreatePlaylistSelection('${track.uri}', '${escapeHtml(track.name).replace(/'/g, "\\'")}', '${escapeHtml(track.artist).replace(/'/g, "\\'")}', '${track.album?.image || ''}', this)">${alreadyAdded ? 'Added' : 'Add'}</button>`;
+                        resultsEl.appendChild(div);
+                    });
+                }
+
+                async function loadCreatePlaylistSearchMore() {
+                    if (createPlaylistSearchInFlight) return;
+                    if (!createPlaylistSearchQuery || !createPlaylistSearchHasMore) return;
+                    const resultsEl = document.getElementById('createPlaylistSearchResults');
+                    if (!resultsEl) return;
+                    const btn = document.getElementById('createPlaylistLoadMoreBtn');
+                    if (btn) {
+                        btn.textContent = 'Loading...';
+                        btn.disabled = true;
+                    }
+                    createPlaylistSearchInFlight = true;
+                    try {
+                        const res = await fetch('/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                query: createPlaylistSearchQuery,
+                                offset: createPlaylistSearchNextOffset,
+                                includeArtists: false,
+                                includeAlbums: false
+                            })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.ok) {
+                            if (btn) {
+                                btn.textContent = 'Load more';
+                                btn.disabled = false;
+                            }
+                            return;
+                        }
+                        createPlaylistSearchNextOffset =
+                            typeof data.nextOffset === 'number' ? data.nextOffset : createPlaylistSearchNextOffset;
+                        createPlaylistSearchHasMore = !!data.hasMore;
+                        removeCreatePlaylistLoadMore();
+                        const items = data.tracks?.items || [];
+                        appendCreatePlaylistSearchRows(resultsEl, items);
+                        syncCreatePlaylistSearchButtons();
+                        addCreatePlaylistLoadMoreIfNeeded(resultsEl);
+                    } catch {
+                        if (btn) {
+                            btn.textContent = 'Load more';
+                            btn.disabled = false;
+                        }
+                    } finally {
+                        createPlaylistSearchInFlight = false;
+                    }
+                }
+
                 document.getElementById('createPlaylistSearchForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const now = Date.now();
                     if (createPlaylistSearchInFlight || (now - createPlaylistSearchLastAt) < SEARCH_SUBMIT_COOLDOWN_MS) return;
                     const q = document.getElementById('createPlaylistSearchInput').value.trim();
                     if (!q) return;
+                    const resultsEl = document.getElementById('createPlaylistSearchResults');
+                    if (q.length < 2) {
+                        resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Type at least 2 characters to search.</p>';
+                        return;
+                    }
                     createPlaylistSearchInFlight = true;
                     createPlaylistSearchLastAt = now;
-                    const resultsEl = document.getElementById('createPlaylistSearchResults');
+                    createPlaylistSearchQuery = q;
+                    createPlaylistSearchNextOffset = 0;
+                    createPlaylistSearchHasMore = false;
                     resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Searching...</p>';
                     try {
                         const res = await fetch('/search', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ query: q })
+                            body: JSON.stringify({
+                                query: q,
+                                offset: 0,
+                                includeArtists: false,
+                                includeAlbums: false
+                            })
                         });
                         const data = await res.json();
                         const items = data.tracks?.items || [];
@@ -2874,21 +3053,13 @@
                             resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No results.</p>';
                             return;
                         }
+                        createPlaylistSearchNextOffset =
+                            typeof data.nextOffset === 'number' ? data.nextOffset : 0;
+                        createPlaylistSearchHasMore = !!data.hasMore;
                         resultsEl.innerHTML = '';
-                        items.slice(0, 10).forEach(track => {
-                            const alreadyAdded = createPlaylistSelectedUris.find(t => t.uri === track.uri);
-                            const div = document.createElement('div');
-                            div.className = 'playlist-search-result';
-                            div.innerHTML = `
-                                <img src="${track.album?.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;border-radius:6px;flex-shrink:0;" />
-                                <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
-                                    <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
-                                </div>
-                                <button class="primary small-btn create-playlist-add-btn ${alreadyAdded ? 'is-added' : ''}" data-uri="${track.uri}" ${alreadyAdded || createPlaylistSelectedUris.length >= 5 ? 'disabled' : ''} onclick="addToCreatePlaylistSelection('${track.uri}', '${escapeHtml(track.name).replace(/'/g, "\\'")}', '${escapeHtml(track.artist).replace(/'/g, "\\'")}', '${track.album?.image || ''}', this)">${alreadyAdded ? 'Added' : 'Add'}</button>`;
-                            resultsEl.appendChild(div);
-                        });
+                        appendCreatePlaylistSearchRows(resultsEl, items);
                         syncCreatePlaylistSearchButtons();
+                        addCreatePlaylistLoadMoreIfNeeded(resultsEl);
                     } catch {
                         resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
                     } finally {
@@ -3071,6 +3242,9 @@
                 window.openAddSongToCustomPlaylist = function () {
                     const addTitleEl = document.getElementById('addSongToPlaylistTitle');
                     if (addTitleEl) addTitleEl.textContent = formatCustomPlaylistTitle(currentCustomPlaylistName || 'Playlist');
+                    addSongSearchQuery = '';
+                    addSongSearchNextOffset = 0;
+                    addSongSearchHasMore = false;
                     document.getElementById('addSongSearchInput').value = '';
                     document.getElementById('addSongSearchResults').innerHTML = '';
                     document.getElementById('addSongToPlaylistModal').style.display = 'flex';
@@ -3082,21 +3256,122 @@
                     window.refreshModalBlurState();
                 };
 
+                function removeAddSongLoadMore() {
+                    document.getElementById('addSongLoadMoreBtn')?.remove();
+                }
+
+                function addAddSongLoadMoreIfNeeded(resultsEl) {
+                    removeAddSongLoadMore();
+                    if (!addSongSearchHasMore) return;
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.id = 'addSongLoadMoreBtn';
+                    btn.className = 'load-more-btn';
+                    btn.style.width = '100%';
+                    btn.style.marginTop = '10px';
+                    btn.textContent = 'Load more';
+                    btn.addEventListener('click', () => void loadAddSongSearchMore());
+                    resultsEl.appendChild(btn);
+                }
+
+                function appendAddSongSearchRows(resultsEl, items) {
+                    const existingUris = new Set(
+                        [...resultsEl.querySelectorAll('.add-song-search-add-btn[data-uri]')].map((b) => b.dataset.uri)
+                    );
+                    items.forEach((track) => {
+                        if (existingUris.has(track.uri)) return;
+                        existingUris.add(track.uri);
+                        const div = document.createElement('div');
+                        div.className = 'playlist-search-result';
+                        div.innerHTML = `
+                                <img src="${track.album?.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;border-radius:6px;flex-shrink:0;" />
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
+                                    <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
+                                </div>
+                                <button type="button" class="primary small-btn add-song-search-add-btn" data-uri="${track.uri}">Add</button>`;
+                        const addBtn = div.querySelector('.add-song-search-add-btn');
+                        if (addBtn) {
+                            addBtn.addEventListener('click', () => window.initiateAddSongToPlaylist(track.uri));
+                        }
+                        resultsEl.appendChild(div);
+                    });
+                }
+
+                async function loadAddSongSearchMore() {
+                    if (addSongSearchInFlight) return;
+                    if (!addSongSearchQuery || !addSongSearchHasMore) return;
+                    const resultsEl = document.getElementById('addSongSearchResults');
+                    if (!resultsEl) return;
+                    const btn = document.getElementById('addSongLoadMoreBtn');
+                    if (btn) {
+                        btn.textContent = 'Loading...';
+                        btn.disabled = true;
+                    }
+                    addSongSearchInFlight = true;
+                    try {
+                        const res = await fetch('/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                query: addSongSearchQuery,
+                                offset: addSongSearchNextOffset,
+                                includeArtists: false,
+                                includeAlbums: false
+                            })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.ok) {
+                            if (btn) {
+                                btn.textContent = 'Load more';
+                                btn.disabled = false;
+                            }
+                            return;
+                        }
+                        addSongSearchNextOffset =
+                            typeof data.nextOffset === 'number' ? data.nextOffset : addSongSearchNextOffset;
+                        addSongSearchHasMore = !!data.hasMore;
+                        removeAddSongLoadMore();
+                        const items = data.tracks?.items || [];
+                        appendAddSongSearchRows(resultsEl, items);
+                        addAddSongLoadMoreIfNeeded(resultsEl);
+                    } catch {
+                        if (btn) {
+                            btn.textContent = 'Load more';
+                            btn.disabled = false;
+                        }
+                    } finally {
+                        addSongSearchInFlight = false;
+                    }
+                }
+
                 document.getElementById('addSongSearchForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const now = Date.now();
                     if (addSongSearchInFlight || (now - addSongSearchLastAt) < SEARCH_SUBMIT_COOLDOWN_MS) return;
                     const q = document.getElementById('addSongSearchInput').value.trim();
                     if (!q) return;
+                    const resultsEl = document.getElementById('addSongSearchResults');
+                    if (q.length < 2) {
+                        resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Type at least 2 characters to search.</p>';
+                        return;
+                    }
                     addSongSearchInFlight = true;
                     addSongSearchLastAt = now;
-                    const resultsEl = document.getElementById('addSongSearchResults');
+                    addSongSearchQuery = q;
+                    addSongSearchNextOffset = 0;
+                    addSongSearchHasMore = false;
                     resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">Searching...</p>';
                     try {
                         const res = await fetch('/search', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ query: q })
+                            body: JSON.stringify({
+                                query: q,
+                                offset: 0,
+                                includeArtists: false,
+                                includeAlbums: false
+                            })
                         });
                         const data = await res.json();
                         const items = data.tracks?.items || [];
@@ -3104,19 +3379,11 @@
                             resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No results.</p>';
                             return;
                         }
+                        addSongSearchNextOffset = typeof data.nextOffset === 'number' ? data.nextOffset : 0;
+                        addSongSearchHasMore = !!data.hasMore;
                         resultsEl.innerHTML = '';
-                        items.slice(0, 10).forEach(track => {
-                            const div = document.createElement('div');
-                            div.className = 'playlist-search-result';
-                            div.innerHTML = `
-                                <img src="${track.album?.image || ''}" alt="" class="album-cover" style="width:40px;height:40px;border-radius:6px;flex-shrink:0;" />
-                                <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</div>
-                                    <div style="color:#b3b3b3;font-size:0.78em;">${escapeHtml(track.artist)}</div>
-                                </div>
-                                <button class="primary small-btn" onclick="initiateAddSongToPlaylist('${track.uri}')">Add</button>`;
-                            resultsEl.appendChild(div);
-                        });
+                        appendAddSongSearchRows(resultsEl, items);
+                        addAddSongLoadMoreIfNeeded(resultsEl);
                     } catch {
                         resultsEl.innerHTML = '<p style="color:#ff5555;text-align:center;padding:8px;">Search failed.</p>';
                     } finally {
