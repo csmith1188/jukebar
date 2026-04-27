@@ -631,7 +631,7 @@ io.on('connection', (socket) => {
                             console.log('Auto ended poll')
                         }
 
-                    }, 45 * 1000)
+                    }, process.env.FORMBAR_SONG_BAN_TIME * 1000)
 
                     formbarSocket.on('classUpdate', (data) => {
                         pastData = data

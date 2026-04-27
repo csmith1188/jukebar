@@ -1617,7 +1617,7 @@
                                         itemDiv.innerHTML = `
                                         ${item.album?.image ? `<img src="${item.album.image}" alt="${item.album.name || ''}" class="album-cover" />` : `<div class="album-cover" style="background:#282828;border-radius:4px;flex-shrink:0;"></div>`}
                                         <div class="queue-item-content">
-                                            <div class="queue-item-title">${item.name}</div>
+                                            <div class="queue-item-title" title="${item.name}">${item.name}</div>
                                             <div class="queue-item-artist">${item.artist}</div>
                                             <div class="queue-item-added-by">Added by ${addedByDisplay || 'Spotify'}</div>
                                         </div>
@@ -2425,8 +2425,8 @@
                         <div class="current-item queue-item">
                             <img src="${imageUrl}" alt="${track.name}" class="album-cover-small">
                             <div class="queue-item-content">
-                                <div class="queue-item-title">${track.name}</div>
-                                <div class="queue-item-artist">${track.artist}</div>
+                                <div class="queue-item-title" title="${track.name}">${track.name}</div>
+                                <div class="queue-item-artist" title="${track.artist}">${track.artist}</div>
                                 <div class="queue-item-added-by">Added by ${addedByDisplay}</div>
                                 ${shieldCount > 0 ? `<span class="shield-badge"><img src="/img/skipShield.png" alt="shield" class="shield-badge-icon"> ${shieldCount}</span>` : ''}
                                 <div class="progress-container">
