@@ -437,9 +437,30 @@ h1 {
 .teacher-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    flex-wrap: wrap;
     gap: 12px;
     padding: 0 2px;
+}
+
+.teacher-toolbar .teacher-toolbar-greeting {
+    margin-left: auto;
+}
+
+.teacher-spotify-bg-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.teacher-spotify-bg-label {
+    color: #b3b3b3;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.teacher-spotify-bg-toggle .toggle-switch#spotifyBackgroundSwitch {
+    flex-shrink: 0;
 }
 
 .container.teacher-layout {
@@ -599,7 +620,7 @@ h1 {
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 14px;
     box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
-    max-width: 460px;
+    max-width: 520px;
 }
 
 .playlist-pay-summary {
@@ -630,6 +651,81 @@ h1 {
 
 .playlist-pay-save {
     margin-top: 10px;
+}
+
+.playlist-pay-tracks-heading {
+    font-size: 0.85rem;
+    color: #b3b3b3;
+    margin: 0 0 8px 0;
+    text-align: left;
+}
+
+.playlist-pay-track-list {
+    max-height: min(42vh, 280px);
+    margin-bottom: 10px;
+}
+
+.playlist-pay-tracks-note {
+    font-size: 0.78rem;
+    color: #888;
+    margin: 0 0 8px 0;
+    text-align: center;
+}
+
+.playlist-pay-track {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.playlist-pay-track--dim {
+    opacity: 0.65;
+}
+
+.playlist-pay-track-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.playlist-pay-track-img--ph {
+    background: #282828;
+}
+
+.playlist-pay-track-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.playlist-pay-track-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlist-pay-track-artist {
+    font-size: 0.78rem;
+    color: #b3b3b3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlist-pay-track-badge {
+    font-size: 0.65rem;
+    color: #ffaa00;
+    font-weight: 600;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
 
@@ -4395,17 +4491,24 @@ p {
 
 #createPlaylistModal .playlist-modal-body-but-better {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: min(36vh, 300px);
     height: auto;
     align-items: stretch;
+    align-content: stretch;
     overflow: hidden;
 }
 
 #createPlaylistModal .create-playlist-songs,
 #createPlaylistModal .playlist-selected-songs {
     flex: 1 1 0;
+    min-width: 0;
     min-height: 0;
+    width: 50%;
+    max-width: 50%;
+    display: flex;
+    flex-direction: column;
     height: auto;
+    align-self: stretch;
 }
 
 #createPlaylistModal .playlist-selected-songs:empty {
@@ -4421,15 +4524,27 @@ p {
     content: "No songs added.";
 }
 
-#createPlaylistModal .create-playlist-songs {
-    display: flex;
-    flex-direction: column;
+#createPlaylistModal .playlist-selected-songs > p {
+    flex-shrink: 0;
+    margin: 0 0 6px 0;
+}
+
+#createPlaylistModal .create-playlist-songs > label.small {
+    flex-shrink: 0;
+}
+
+#createPlaylistModal .create-playlist-songs .playlist-modal-search-form {
+    flex-shrink: 0;
 }
 
 #createPlaylistModal .create-playlist-songs .playlist-search-results {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
 
 .playlist-modal-actions {
@@ -4495,10 +4610,12 @@ p {
     box-shadow: none !important;
 }
 
-/* Create modal search should stay compact */
+/* Create modal: list fills column so it lines up with Selected column */
 #createPlaylistModal .playlist-search-results {
-    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
     max-height: none;
+    height: auto;
 }
 
 /* Add-song modal search should be roomier and never feel cramped */
@@ -4554,14 +4671,14 @@ p {
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 10px;
     padding: 8px;
-    flex: 1 1 auto;
     height: auto;
+    box-sizing: border-box;
 }
 .playlist-selected-songs-scroll {
     flex: 1 1 0;
     min-height: 0;
     overflow-y: auto;
-    height: 100%;
+    height: auto;
 }
 .playlist-selected-item {
     display: flex;
@@ -4618,7 +4735,13 @@ p {
         max-height: 220px;
     }
     #createPlaylistModal .playlist-search-results {
+        flex: 0 0 auto;
         height: 180px;
+        min-height: 180px;
+        max-height: 180px;
+    }
+    #createPlaylistModal .playlist-selected-songs-scroll {
+        flex: 0 0 auto;
         min-height: 180px;
         max-height: 180px;
     }
@@ -4632,7 +4755,7 @@ p {
     display: flex;
     flex-direction: row;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
     gap: 10px;
     min-height: 0;
     height: auto;

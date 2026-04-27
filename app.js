@@ -16,6 +16,9 @@ let brokeyEnabled = false;
 const voteBanDevModeEnabled = String(process.env.JUKEBAR_DEV_MODE || '').toLowerCase() === 'true';
 const voteBanMinOnlineUsers = voteBanDevModeEnabled ? 1 : 5;
 
+/** In-memory: periodic Spotify sync + diagnostics. Toggle via POST /api/spotify-background (no server restart). */
+let spotifyBackgroundApiEnabled = String(process.env.SPOTIFY_BACKGROUND_API || 'true').toLowerCase() !== 'false';
+
 // Brokey mode is tracked for diagnostics only; do not block the UI.
 app.use((req, res, next) => {
     return next();
@@ -284,6 +287,32 @@ app.get('/diagnostics', isAuthenticated, playbackRateLimit(READ), async (req, re
     return res.json(report);
 });
 
+function canManageSpotifyBackgroundApi(req) {
+    const userId = req.session?.token?.id;
+    return (req.session?.permission >= 4 || isOwner(userId)) && !!process.env.SPOTIFY_CLIENT_ID;
+}
+
+app.get('/api/spotify-background', isAuthenticated, (req, res) => {
+    if (!canManageSpotifyBackgroundApi(req)) {
+        return res.status(403).json({ ok: false, error: 'Insufficient permissions or Spotify not configured' });
+    }
+    return res.json({ ok: true, enabled: spotifyBackgroundApiEnabled });
+});
+
+app.post('/api/spotify-background', isAuthenticated, (req, res) => {
+    if (!canManageSpotifyBackgroundApi(req)) {
+        return res.status(403).json({ ok: false, error: 'Insufficient permissions or Spotify not configured' });
+    }
+    if (typeof req.body?.enabled !== 'boolean') {
+        return res.status(400).json({ ok: false, error: 'JSON body must include boolean "enabled"' });
+    }
+    spotifyBackgroundApiEnabled = req.body.enabled;
+    console.log(
+        `[spotify] Background API ${spotifyBackgroundApiEnabled ? 'enabled' : 'disabled'} (user ${req.session?.token?.id})`
+    );
+    return res.json({ ok: true, enabled: spotifyBackgroundApiEnabled });
+});
+
 let changelog = [];
 try {
     const changelogPath = path.join(__dirname, 'changelog.json');
@@ -297,6 +326,15 @@ try {
     changelog = [];
 }
 
+function getChangelogLatestKey(entries) {
+    if (!Array.isArray(entries) || !entries[0]) {
+        return '';
+    }
+    const e = entries[0];
+    return `${String(e.version || '').trim()}|${String(e.releaseDate || '').trim()}`;
+}
+
+const changelogLatestKey = getChangelogLatestKey(changelog);
 
 // Helper function to handle ban - removes from queue and skips if currently playing
 async function handleBanPassed(trackName, trackArtist, trackUri) {
@@ -761,6 +799,7 @@ if (process.env.SPOTIFY_CLIENT_ID) {
 
     // Periodic Spotify sync with safer default interval
     setInterval(async () => {
+        if (!spotifyBackgroundApiEnabled) return;
         try {
             await queueManager.syncWithSpotify(spotifyApi);
             await enforceCurrentTrackBanByUri();
@@ -791,7 +830,8 @@ app.get('/', isAuthenticated, (req, res) => {
             removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
             customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
             banVoteMinOnlineUsers: voteBanMinOnlineUsers,
-            changelog: changelog
+            changelog: changelog,
+            changelogLatestKey
         });
     } catch (error) {
         res.send(error.message);
@@ -817,7 +857,8 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
             customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
             banVoteMinOnlineUsers: voteBanMinOnlineUsers,
-            changelog: changelog
+            changelog: changelog,
+            changelogLatestKey
         });
     } catch (error) {
         res.send(error.message);
@@ -871,7 +912,8 @@ app.get('/teacher', isAuthenticated, (req, res) => {
                 jukepixEnabled: jukepixUtils.isJukepixEnabled(),
                 jukepixFeatureEnabled: jukepixUtils.isJukepixFeatureEnabled(),
                 userPermission: req.session.permission || null,
-                ownerIDs: getOwnerIds()
+                ownerIDs: getOwnerIds(),
+                spotifyApiConfigured: !!process.env.SPOTIFY_CLIENT_ID
             });
         } else {
             res.redirect('/');
@@ -893,11 +935,14 @@ app.use('/', require('./routes/customPlaylists'));
 server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
-    runSpotifyDiagnostics().catch((err) => {
-        console.warn('[diagnostics] Initial Spotify diagnostics failed:', err?.message || err);
-    });
+    if (spotifyBackgroundApiEnabled) {
+        runSpotifyDiagnostics().catch((err) => {
+            console.warn('[diagnostics] Initial Spotify diagnostics failed:', err?.message || err);
+        });
+    }
     // Runtime diagnostics: if Spotify starts rate limiting, fail closed to brokey mode.
     setInterval(() => {
+        if (!spotifyBackgroundApiEnabled) return;
         runSpotifyDiagnostics().catch((err) => {
             console.warn('[diagnostics] Spotify diagnostics failed:', err?.message || err);
         });

@@ -1,5 +1,19 @@
 [
     {
+        "version": "2.4.0",
+        "releaseDate": "04/27/26",
+        "changes": [
+            {
+                "type": "bugfix",
+                "text": "Fixed an issue where the search would not work when searching for a song in the create playlist modal"
+            },
+            {
+                "type": "improvement",
+                "text": "When purchasing a teacher playlist, the pay modal now shows a scrollable list of tracks in that playlist (up to 200) before you enter your PIN, including items that will not be queued (e.g. local files)"
+            }
+        ]
+    },
+    {
         "version": "2.3.0",
         "releaseDate": "04/22/26",
         "changes": [
