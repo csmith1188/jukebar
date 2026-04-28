@@ -52,7 +52,7 @@ npm install
 
 3. Create a `.env` file from `.env-template` and fill in all values (see [Environment Variables](#environment-variables) below).
 
-4. Set up Spotify credentials — see [`spotify_developer_setup.md`](spotify_developer_setup.md) for a step-by-step guide. Use `spotify.js` to generate your refresh token:
+4. Set up Spotify credentials — see [`setup.md`](docs/setup.md) for a step-by-step guide. Use `spotify.js` to generate your refresh token:
 
 ```bash
 node spotify.js
