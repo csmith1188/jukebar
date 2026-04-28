@@ -88,7 +88,8 @@ function build429Response(res, message, retryAfterMs) {
     res.set('Retry-After', String(retryAfterSec));
     return res.status(429).json({
         ok: false,
-        error: message
+        error: message,
+        retryAfterSeconds: retryAfterSec
     });
 }
 

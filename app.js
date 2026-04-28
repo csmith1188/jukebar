@@ -98,6 +98,14 @@ function toRetryAfterSeconds(valueMs) {
     return Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
 }
 
+/** Seconds Spotify asks to wait after 429; default matches playback middleware when Retry-After is missing. */
+function spotifyRetryAfterSecondsFromError(error) {
+    const raw = getRetryAfterFromError(error);
+    const sec = Number.parseInt(String(raw || ''), 10);
+    if (Number.isFinite(sec) && sec > 0) return sec;
+    return 10;
+}
+
 function getLimiterRetryAfterSeconds(req) {
     const resetTime = req.rateLimit?.resetTime;
     if (!resetTime) return 30;
@@ -161,6 +169,7 @@ app.get('/diagnostics', isAuthenticated, playbackRateLimit(READ), async (req, re
     const report = {
         timestamp: new Date().toISOString(),
         brokey: isBrokeyEnabled(),
+        searchRateLimitedForSeconds: 0,
         tests: {}
     };
 
@@ -186,18 +195,24 @@ app.get('/diagnostics', isAuthenticated, playbackRateLimit(READ), async (req, re
 
         try {
             const searchResult = await spotifyApi.searchTracks('test', { limit: 1 });
+            report.searchRateLimitedForSeconds = 0;
             report.tests.searchScope = {
                 status: 'pass',
                 message: 'Search endpoint working',
-                totalResults: searchResult.body?.tracks?.total || 0
+                totalResults: searchResult.body?.tracks?.total || 0,
+                rateLimitedForSeconds: 0
             };
         } catch (error) {
-            if (Number(error?.statusCode) === 429) enableBrokey('Diagnostics /searchScope returned 429');
+            const is429 = Number(error?.statusCode) === 429;
+            if (is429) enableBrokey('Diagnostics /searchScope returned 429');
+            const rateLimitedForSeconds = is429 ? spotifyRetryAfterSecondsFromError(error) : 0;
+            report.searchRateLimitedForSeconds = rateLimitedForSeconds;
             report.tests.searchScope = {
                 status: 'fail',
                 message: error.message || 'Search failed',
                 statusCode: error.statusCode,
-                errorBody: error.body?.error || null
+                errorBody: error.body?.error || null,
+                rateLimitedForSeconds
             };
         }
 
@@ -281,6 +296,7 @@ app.get('/diagnostics', isAuthenticated, playbackRateLimit(READ), async (req, re
             enableBrokey('Diagnostics endpoint returned 429');
         }
         report.error = err?.message || 'Diagnostics endpoint failed';
+        report.brokey = isBrokeyEnabled();
         return res.status(500).json(report);
     }
 

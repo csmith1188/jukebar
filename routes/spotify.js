@@ -25,11 +25,16 @@ let isPlayingSound = false;
 
 const APRIL_FOOLS_URI = 'spotify:track:0rQvvjAkX1B0gcJwjEGQZW';
 const APRIL_FOOLS_CHANCE = 0.3; // 30% chance
-const SEARCH_CACHE_TTL_MS = 8000;
-const SEARCH_MIN_INTERVAL_MS = 600;
+const SEARCH_CACHE_TTL_MS = 12_000;
+/** Minimum time between POST /search calls per user (stricter = fewer Spotify search API hits). */
+const SEARCH_MIN_INTERVAL_MS = 2500;
+/** Rolling cap: max search requests per user within the window (in addition to min interval). */
+const SEARCH_BURST_WINDOW_MS = 60 * 1000;
+const SEARCH_MAX_PER_WINDOW = 8;
 const SEARCH_CACHE_MAX_ITEMS = 500;
 const searchResponseCache = new Map();
 const searchRequesterLastAt = new Map();
+const searchRequesterBurstTimestamps = new Map();
 let spotifySearchRateLimitedUntil = 0;
 
 function isAprilFools() {
@@ -43,6 +48,40 @@ function shouldAprilFool() {
 
 function getSearchRequesterKey(req) {
     return String(req.session?.token?.id || req.ip || 'anonymous');
+}
+
+function pruneSearchBurstTimestamps(requesterKey, now) {
+    const cutoff = now - SEARCH_BURST_WINDOW_MS;
+    let ts = searchRequesterBurstTimestamps.get(requesterKey);
+    if (!ts) {
+        ts = [];
+    } else {
+        ts = ts.filter((t) => t > cutoff);
+    }
+    searchRequesterBurstTimestamps.set(requesterKey, ts);
+    return ts;
+}
+
+/** @returns {{ ok: true } | { ok: false, retryAfterMs: number }} */
+function tryConsumeSearchBurstSlot(requesterKey, now) {
+    const ts = pruneSearchBurstTimestamps(requesterKey, now);
+    if (ts.length >= SEARCH_MAX_PER_WINDOW) {
+        const oldest = ts[0];
+        return { ok: false, retryAfterMs: Math.max(1, SEARCH_BURST_WINDOW_MS - (now - oldest)) };
+    }
+    ts.push(now);
+    searchRequesterBurstTimestamps.set(requesterKey, ts);
+    return { ok: true };
+}
+
+function sendSearchClientRateLimit(res, message, retryAfterMs) {
+    const retryAfterSec = Math.max(1, Math.ceil(retryAfterMs / 1000));
+    res.set('Retry-After', String(retryAfterSec));
+    return res.status(429).json({
+        ok: false,
+        error: message,
+        retryAfterSeconds: retryAfterSec
+    });
 }
 
 function pruneSearchCache(now) {
@@ -583,7 +622,8 @@ router.post('/search', async (req, res) => {
             res.set('Retry-After', String(retryAfterSeconds));
             return res.status(429).json({
                 ok: false,
-                error: 'Spotify search is temporarily cooling down due to rate limits. Try again in a moment.'
+                error: 'Spotify search is temporarily cooling down due to rate limits. Try again in a moment.',
+                retryAfterSeconds
             });
         }
 
@@ -591,7 +631,7 @@ router.post('/search', async (req, res) => {
         const MAX_SEARCH_LIMIT = SPOTIFY_SEARCH_LIMIT_MAX;
         const DEFAULT_DESIRED_TOTAL = 10;
         const MAX_DESIRED_TOTAL = 20;
-        const MAX_SEARCH_PAGES = 2;
+        const MAX_SEARCH_PAGES = 1;
         const MAX_SEARCH_OFFSET = 1000;
 
         const parsedLimit = Number.parseInt(limit, 10);
@@ -612,11 +652,22 @@ router.post('/search', async (req, res) => {
         const requesterKey = getSearchRequesterKey(req);
         const lastRequestAt = searchRequesterLastAt.get(requesterKey) || 0;
         if ((now - lastRequestAt) < SEARCH_MIN_INTERVAL_MS) {
-            return res.status(429).json({
-                ok: false,
-                error: 'You are searching too quickly. Please wait a moment before searching again.'
-            });
+            return sendSearchClientRateLimit(
+                res,
+                'You are searching too quickly. Please wait a moment before searching again.',
+                SEARCH_MIN_INTERVAL_MS - (now - lastRequestAt)
+            );
         }
+
+        const burst = tryConsumeSearchBurstSlot(requesterKey, now);
+        if (!burst.ok) {
+            return sendSearchClientRateLimit(
+                res,
+                'Too many searches in a short period. Please wait before searching again.',
+                burst.retryAfterMs
+            );
+        }
+
         searchRequesterLastAt.set(requesterKey, now);
 
         const cacheKey = JSON.stringify({
@@ -701,7 +752,8 @@ router.post('/search', async (req, res) => {
             res.set('Retry-After', String(retryAfterSeconds));
             return res.status(429).json({
                 ok: false,
-                error: 'Spotify is rate limiting search requests right now. Please wait a few seconds and try again.'
+                error: 'Spotify is rate limiting search requests right now. Please wait a few seconds and try again.',
+                retryAfterSeconds
             });
         }
 
