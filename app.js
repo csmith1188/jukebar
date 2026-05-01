@@ -575,12 +575,12 @@ io.on('connection', (socket) => {
                 let formbarBanFinalized = false;
 
                 async function fbBanVoteResults(poll) {
-                    if (formbarBanFinalized) {
-                        console.log('Formbar ban vote already finalized; skipping duplicate result handling');
-                        return;
-                    }
                     formbarBanFinalized = true;
                     formbarSocket.off('classUpdate')
+
+                    if (formbarBanFinalized) return console.log('Formbar ban vote already finalized; skipping duplicate result handling');
+                    if (!poll || !poll.responses) return console.log('Ban failed: No poll or no poll responses.')
+
                     let votesFor = poll.find(r => r.answer == 'Yes').responses
                     let votesAgainst = poll.find(r => r.answer == 'No').responses
 
@@ -598,7 +598,9 @@ io.on('connection', (socket) => {
                                 }
                             }
                         );
+
                         io.emit('banVotePassed', data);
+
                     } else {
                         console.log(`Ban vote failed (${votesFor} Yes to ${votesAgainst} No)`)
                     }
