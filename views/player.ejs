@@ -122,6 +122,7 @@
             </div>
         </div>
 
+        <!-- Playlist Payment Modal -->
         <div id="playlistPaymentModal" class="payment-modal" style="display:none;">
             <div class="payment-content playlist-pay-content">
                 <h3 class="ban-reason-title">Play Playlist</h3>
@@ -147,6 +148,7 @@
             </div>
         </div>
 
+        <!-- Owner Skip Shield Modal -->
         <div id="ownerShieldModal" class="owner-shield-modal">
             <div class="owner-shield-content">
                 <button id="owner-shield-close" class="owner-shield-close">&times;</button>
@@ -286,6 +288,7 @@
             </div>
         </div>
 
+        <!-- this allows us to use the same ban vote modal for the owner and students -->
         <div id="banVoteModal" class="ban-vote-modal minimized" style="display: none;">
             <div class="ban-vote-header">
                 <span id="banVoteStatus">Ban vote in progress...</span>
@@ -345,7 +348,7 @@
                 clearTimeout(notificationTimeout);
                 notificationTimeout = setTimeout(closeNotification, 5000);
             }
-
+            // Close notification when the close button is clicked
             function closeNotification() {
                 let notification = document.getElementById("notification");
                 clearTimeout(notificationTimeout);
@@ -401,7 +404,7 @@
         </script>
 
         <%- include('partials/songMenu') %>
-
+            
             <script>
                 let currentTrackActionState = null;
 
@@ -418,7 +421,7 @@
                     }
 
                     let useJukebar = true;
-
+                    // Check if user has seen the latest changelog or show the changelog modal on page load
                     async function fetchAllowedPlaylistsForSidebar() {
                         const list = document.getElementById('studentPlaylistsList');
                         if (!list) return;
@@ -435,7 +438,7 @@
                                 list.innerHTML = '<p style="text-align:center;color:#b3b3b3;">No playlists yet.</p>';
                                 return;
                             }
-
+                            // Limit to 30 playlists for sidebar 
                             list.innerHTML = '';
                             playlists.slice(0, 30).forEach((p) => {
                                 const row = document.createElement('button');
@@ -474,7 +477,7 @@
                             list.innerHTML = '<p style="text-align:center;color:#ff4444;">Failed to load playlists.</p>';
                         }
                     }
-
+                    
                     function escapePlaylistPayText(str) {
                         return String(str ?? '')
                             .replace(/&/g, '&amp;')
@@ -487,7 +490,7 @@
                         const el = document.getElementById('playlistPayTrackList');
                         if (el) el.innerHTML = '';
                     }
-
+                    // Render the track list in the playlist payment modal, showing which tracks are queueable and which are not
                     function renderPlaylistPayTrackList(quoteData) {
                         const el = document.getElementById('playlistPayTrackList');
                         if (!el) return;
@@ -1893,6 +1896,7 @@
                     // Load recently queued songs on page load
                     loadRecentlyQueued();
 
+                    // Owner-only shield purchase modal: allows owners to buy skip shields for tracks
                     // Owner shield modal
                     document.getElementById('owner-shield-close')?.addEventListener('click', () => {
                         document.getElementById('ownerShieldModal').style.display = 'none';
@@ -1914,11 +1918,13 @@
                         purchaseShieldAfterPayment(uri, addedAt, qty);
                     });
 
-                    // Changelog button event listeners
+                    // Changelog button event listeners: manual modal open/close
+                    // Auto-opens on page load if there's a new entry (see below)
                     document.getElementById('changelog-button')?.addEventListener('click', () => {
                         document.getElementById('changelogModal').style.display = 'block';
                     });
 
+                    // Close button marks changelog as read so it won't auto-open again
                     document.getElementById('close-changelog')?.addEventListener('click', () => {
                         document.getElementById('changelogModal').style.display = 'none';
                         markChangelogSeen();
@@ -2015,11 +2021,13 @@
                     });
 
                     // Expose minimal API via custom events for pay.ejs communication
+                    // pay.ejs (payment modal in iframe) emits 'paymentSuccess' when user completes payment
                     window.addEventListener('paymentSuccess', () => {
                         onPaymentSuccess();
                     });
 
                     // Expose read-only state for pay.ejs (cannot be directly manipulated from console)
+                    // pay.ejs reads this to determine payment amount based on pending action
                     window.getPlayerState = function () {
                         return {
                             hasPaid: hasPaid,
@@ -2090,7 +2098,8 @@
                         }
                     }
 
-                    // WebSocket-based queue synchronization
+                    // WebSocket-based queue synchronization: real-time queue updates from server
+                    // Handles currentTrack, queue changes, bans, votes, and playback state
                     function initializeQueueSync() {
                         socket.on('connect', () => {
                             socket.emit('requestQueueUpdate');
@@ -2180,8 +2189,8 @@
                             const isSearchActive = searchInput && searchInput.value.trim() !== '';
 
                             if (!isSearchActive) {
-                                // Recently queued is visible — prepend the new track without a full refetch.
-                                // Remove any existing entry for this URI so it moves to the top (dedup).
+                                // Recently queued is visible — prepend the new track without a full refetch
+                                // Remove any existing entry for this URI so it moves to the top 
                                 searchResults.querySelectorAll(`.search-result-item[data-uri="${track.uri}"]`).forEach(el => el.remove());
 
                                 const header = searchResults.querySelector('.recently-queued-header');
@@ -2216,7 +2225,7 @@
                                     loadRecentlyQueued();
                                 }
                             }
-                            // If search is active we leave it alone; the list will be fresh next time the input is cleared.
+                            // If search is active we leave it alone; the list will be fresh next time the input is cleared
                         });
 
                         socket.on('queueHistoryUpdated', () => {
@@ -2240,7 +2249,8 @@
                     initializeQueueSync();
                 })();
 
-                // Custom playlist modals (create / add song) live outside the main IIFE; their search throttles must too
+                // Custom playlist modals live outside the main IIFE; their search throttles must too
+                // Separate delay/state tracking prevents search spam across multiple modal contexts
                 const SEARCH_SUBMIT_COOLDOWN_MS = 700;
                 let createPlaylistSearchInFlight = false;
                 let createPlaylistSearchLastAt = 0;
@@ -2254,6 +2264,8 @@
                 let addSongSearchHasMore = false;
 
                 // Escape values used inside inline onclick handlers
+                // Prevents JavaScript injection and string-breaking in dynamic onclick attributes
+                // More aggressive than HTML escaping to handle quotes and backslashes
                 function escapeForInlineOnclick(value) {
                     return String(value ?? '')
                         .replace(/&/g, '&amp;')
@@ -2265,11 +2277,12 @@
                 }
 
                 // Update queue display with WebSocket data
+                // Server sends queue array; we render it as clickable items with action buttons
                 function updateQueueDisplay(data) {
                     const queueDiv = document.getElementById('queue');
                     if (!queueDiv) return;
 
-                    // Handle different data structures
+                    // Handle different data structures from different socket events
                     let queue = data.queue || data.data?.queue || [];
 
                     if (queue && queue.length > 0) {
@@ -2318,8 +2331,10 @@
                 }
 
                 // Track the last displayed track to avoid unnecessary re-renders
+                // Prevents full DOM rebuild when only progress updates 
                 let lastDisplayedTrackUri = null;
 
+                // Disable/enable playback action buttons (skip, ban, shield) when no track is playing
                 function setControlButtonsDisabled(disabled) {
                     ['skip-button', 'now-ban-button', 'now-shield-button'].forEach(id => {
                         const btn = document.getElementById(id);
@@ -2328,13 +2343,15 @@
                 }
 
                 // Update currently playing with WebSocket data
+                // Renders track info and updates global playback state
+                // Tracks progress internally; progress is sent with queue syncs from server
                 function updateCurrentlyPlaying(track, isPlaying) {
                     const currentDiv = document.getElementById('currentlyPlaying');
                     const railDiv = document.getElementById('railNowPlaying');
                     if (!currentDiv) return;
 
                     if (track) {
-                        // Get the current track URI
+                        // Get the current track URI for skip/shield actions
                         const trackUri = track.uri || track.id;
                         const trackUriForActions = trackUri;
                         const addedAtForActions = track.addedAt || 0;
@@ -2371,7 +2388,7 @@
                         // Enable controls when a track is active
                         setControlButtonsDisabled(false);
 
-                        // Update shield badge on skip button (must be before early return)
+                        // Update shield badge on skip button 
                         const currentShieldCount = track.skipShields || 0;
                         const skipBtnShield = document.getElementById('skip-button-showie-shield');
                         if (skipBtnShield) {
@@ -2383,16 +2400,16 @@
                             }
                         }
 
-                        // If same track, just update progress bar without re-rendering
+                        // If same track, just update progress bar without rerendering
                         if (lastDisplayedTrackUri === trackUri) {
                             updateProgressDisplay();
                             return;
                         }
 
-                        // Different track - do full re-render
+                        // Different track - do full rerender
                         lastDisplayedTrackUri = trackUri;
 
-                        // Handle anonymous mode display
+                        // Handle anonymous mode display: show 'Spotify' instead of real username if anonymously queued
                         let addedByDisplay = track.addedBy || 'Spotify';
                         if (typeof addedByDisplay === 'object' || addedByDisplay === '[object Object]') {
                             addedByDisplay = 'Spotify';
@@ -2471,9 +2488,10 @@
                     }
                 }
 
-                // Start interval to update progress every second
+                // Start interval to update progress every second 
+                // Server sends actual progress with queue sync; this just keeps bar smooth between updates
                 function startProgressInterval() {
-                    stopProgressInterval(); // Clear any existing interval
+                    stopProgressInterval(); // Clear any existing interval to prevent duplicates
 
                     progressInterval = setInterval(() => {
                         if (isCurrentlyPlaying && currentProgress < currentDuration) {
@@ -2492,6 +2510,7 @@
                 }
 
                 // Update just the progress display without re-rendering everything
+                // Lightweight update: only affects progress text and progress fill bar width
                 function updateProgressDisplay() {
                     const progressDisplay = document.getElementById('track-progress-display');
                     const progressFill = document.getElementById('progress-fill');
@@ -2547,7 +2566,7 @@
                     const button = event?.target.closest('.ellipsis-button');
                     const rect = button?.getBoundingClientRect();
 
-                    // Calculate dropdown position (below and to the left of button)
+                    // Calculate dropdown position 
                     const x = rect ? rect.left - 150 : 100; // Offset left to align with button
                     const y = rect ? rect.bottom + 5 : 100; // Below button with small gap
 
@@ -2559,13 +2578,15 @@
 
                 let voteTimerInterval = null;
 
+                // Show ban vote modal when a vote is initiated
+                // Displays track name, vote counts, and countdown timer
                 function showBanVote(data) {
                     const modal = document.getElementById('banVoteModal');
                     const title = document.getElementById('banVoteTitle');
                     const status = document.getElementById('banVoteStatus');
                     const banReason = data.reason ? ` Reason: ${data.reason}` : '';
 
-                    // gives the name of the user that started the ban
+                    // Display the name of the user that started the ban vote
                     title.textContent = `${data.initiator} has started a vote to ban "${data.trackName}" by ${data.trackArtist}`;
 
                     const onlineCount = data.onlineCount || data.totalOnline || 0;
@@ -2581,7 +2602,8 @@
                     modal.classList.remove('minimized'); // Start expanded
                     modal.style.display = 'block';
 
-                    // If current user is the initiator, disable voting buttons (they already voted yes)
+                    // If current user is the initiator, disable voting buttons
+                    // Prevents modifying their initial vote
                     const currentUserId = <%= JSON.stringify(userID || null) %>;
                     const voteButtons = modal.querySelectorAll('.vote-yes-btn, .vote-no-btn');
                     if (currentUserId && data.initiatorId && String(currentUserId) === String(data.initiatorId)) {
@@ -2603,6 +2625,8 @@
                     startVoteTimer(data.expiresIn || 60000);
                 }
 
+                // Update ban vote display with new vote counts from WebSocket
+                // Called when other users cast votes to update the totals in real time
                 function updateBanVoteDisplay(data) {
                     const modal = document.getElementById('banVoteModal');
                     if (!modal || modal.style.display === 'none') return;
@@ -2618,6 +2642,8 @@
                     }
                 }
 
+                // Submit a yes/no vote on the current ban vote via WebSocket
+                // Disables buttons after voting to prevent vote changes
                 function castVote(vote) {
                     const modal = document.getElementById('banVoteModal');
                     const voteId = modal.dataset.voteId;
@@ -2646,8 +2672,10 @@
                     }
                 }
 
+                // Start countdown timer for ban vote expiration 
+                // Updates display every 100ms and closes modal when timer reaches zero
                 function startVoteTimer(durationMs) {
-                    // Clear any existing timer
+                    // Clear any existing timer to prevent multiple timers running
                     if (voteTimerInterval) {
                         clearInterval(voteTimerInterval);
                     }
@@ -2679,6 +2707,7 @@
                     }, 100);
                 }
 
+                // Close/hide the ban vote modal and clear the countdown timer
                 function hideBanVote() {
                     const modal = document.getElementById('banVoteModal');
                     if (modal) {
@@ -2693,6 +2722,8 @@
                     }
                 }
 
+                // Toggle minimized state of ban vote modal (collapse/expand)
+                // Minimized state shows + button; expanded shows − button
                 function toggleBanVoteMinimize() {
                     const modal = document.getElementById('banVoteModal');
                     if (modal) {
@@ -2710,9 +2741,14 @@
                 // ============================================================
                 // CUSTOM PLAYLISTS
                 // ============================================================
+                // User-created playlists (stored in database)
+                // Supports: create, add songs, remove songs, play entire playlist
+                // Most actions require payment unless user is owner (free)
 
+                // Switch between Teacher Playlists and Class Playlists tabs
                 function switchSidebarTab(tab) {
                     closeCustomPlaylistContextMenu();
+                    // Toggle visibility of each tab panel
                     document.getElementById('tab-playlists-panel').style.display = tab === 'playlists' ? '' : 'none';
                     document.getElementById('tab-my-playlists-panel').style.display = tab === 'my-playlists' ? '' : 'none';
                     document.getElementById('tab-playlists').classList.toggle('active', tab === 'playlists');
@@ -2721,6 +2757,8 @@
                 }
                 window.switchSidebarTab = switchSidebarTab;
 
+                // Load user's custom playlists from server
+                // Fetches all playlists created by or editable by current user
                 async function loadMyPlaylists() {
                     const listEl = document.getElementById('myPlaylistsList');
                     listEl.innerHTML = '<p style="text-align:center;color:#b3b3b3;">Loading...</p>';
@@ -2782,6 +2820,8 @@
                     }
                 }
 
+                // Open right-click context menu for playlist
+                // Positions menu near cursor while keeping it on screen
                 function openCustomPlaylistContextMenu(playlist, event) {
                     const menu = document.getElementById('customPlaylistContextMenu');
                     if (!menu) return;
@@ -2794,6 +2834,7 @@
 
                     menu.style.display = 'block';
 
+                    // Position menu with margin, keeping it visible within viewport
                     const margin = 8;
                     const rect = menu.getBoundingClientRect();
                     let left = event.clientX;
@@ -2816,11 +2857,13 @@
                     customPlaylistContextTarget = null;
                 }
 
+                // Format playlist name for display 
                 function formatCustomPlaylistTitle(playlistName) {
                     const safeName = String(playlistName || 'Playlist').trim();
                     return `Custom Playlist: ${safeName}`;
                 }
 
+                // Queue entire custom playlist for playback 
                 async function playCustomPlaylist(playlistId) {
                     try {
                         const res = await fetch('/api/custom-playlists/queue', {
@@ -2843,6 +2886,7 @@
                     }
                 }
 
+                // Initiate custom playlist play: route through payment for non-owners
                 function initiateCustomPlaylistPlay(playlistId) {
                     const parsedPlaylistId = Number(playlistId);
                     if (!parsedPlaylistId) {
@@ -2850,11 +2894,13 @@
                         return;
                     }
 
+                    // Check if user is banned
                     if (userIsBanned) {
                         Notify('You are banned from using Jukebar.', 'error');
                         return;
                     }
 
+                    // Owners play for free; others must pay via payment modal
                     if (isOwnerClient(currentID)) {
                         playCustomPlaylist(parsedPlaylistId);
                         return;
@@ -2907,12 +2953,16 @@
                 window.addEventListener('resize', closeCustomPlaylistContextMenu);
                 window.addEventListener('scroll', closeCustomPlaylistContextMenu, true);
 
+                // Escape HTML special characters for safe text interpolation
+                // Used for display in non-onclick contexts where less aggressive escaping is OK
                 function escapeHtml(str) {
                     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 }
 
-                // --- Create Playlist ---
+                // --- Create Playlist --- (modal for user to build and name a custom playlist)
+                // Max 5 songs per playlist initially
                 window.openCreatePlaylistModal = function () {
+                    // Reset form state
                     createPlaylistSelectedUris = [];
                     createPlaylistSearchQuery = '';
                     createPlaylistSearchNextOffset = 0;
@@ -2932,6 +2982,7 @@
                     document.querySelector('.player-bottom-bar')?.classList.remove('blurred');
                 };
 
+                // Remove 'Load more' button from search results (called before re-adding if needed)
                 function removeCreatePlaylistLoadMore() {
                     document.getElementById('createPlaylistLoadMoreBtn')?.remove();
                 }
@@ -2950,6 +3001,8 @@
                     resultsEl.appendChild(btn);
                 }
 
+                // Add search result rows to playlist creation modal
+                // Prevents duplicates by checking existing URIs in DOM
                 function appendCreatePlaylistSearchRows(resultsEl, items) {
                     const existingUris = new Set(
                         [...resultsEl.querySelectorAll('.create-playlist-add-btn[data-uri]')].map((b) => b.dataset.uri)
@@ -2971,7 +3024,9 @@
                     });
                 }
 
+                // Load next page of search results for create playlist modal
                 async function loadCreatePlaylistSearchMore() {
+                    // Guard against simultaneous requests or incomplete state
                     if (createPlaylistSearchInFlight) return;
                     if (!createPlaylistSearchQuery || !createPlaylistSearchHasMore) return;
                     const resultsEl = document.getElementById('createPlaylistSearchResults');
@@ -3019,6 +3074,7 @@
                     }
                 }
 
+                // Handle search form submission in create playlist modal: validate input, trigger search, display results
                 document.getElementById('createPlaylistSearchForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const now = Date.now();
@@ -3067,6 +3123,7 @@
                     }
                 });
 
+                // Sync button states based on selection - disable if song already added or limit reached
                 function syncCreatePlaylistSearchButtons() {
                     const buttons = document.querySelectorAll('#createPlaylistSearchResults .create-playlist-add-btn');
                     const reachedLimit = createPlaylistSelectedUris.length >= 5;
@@ -3113,11 +3170,13 @@
                     syncCreatePlaylistSearchButtons();
                 }
 
+                // Remove a selected song from the create playlist modal
                 window.removeFromCreatePlaylistSelection = function (index) {
                     createPlaylistSelectedUris.splice(index, 1);
                     renderCreatePlaylistSelectedSongs();
                 };
 
+                // Submit playlist creation: validate name, trigger payment for non owners
                 window.submitCreatePlaylist = function () {
                     const name = document.getElementById('newPlaylistName').value.trim();
                     if (!name) { Notify('Please enter a playlist name.', 'error'); return; }
@@ -3132,6 +3191,7 @@
                     showPayment();
                 };
 
+                // Create the playlist in the database after payment is approved 
                 async function finalizeCreatePlaylist() {
                     try {
                         const uris = createPlaylistSelectedUris.map(t => t.uri);
@@ -3152,6 +3212,7 @@
                 }
 
                 // --- View Custom Playlist Tracks ---
+                // Open modal showing all tracks in a playlist with remove button 
                 window.openCustomPlaylistTracks = async function (playlistId, playlistName, canEdit = true) {
                     currentCustomPlaylistId = playlistId;
                     currentCustomPlaylistName = playlistName || 'Playlist';
@@ -3177,6 +3238,8 @@
                     }
                 };
 
+                // Render the list of tracks in a playlist
+                // Each track shows album art, title, artist, and remove button
                 function renderCustomPlaylistTracks(data) {
                     const el = document.getElementById('customPlaylistTracksList');
                     if (!data.ok) { el.innerHTML = `<p style="color:#ff5555;">${escapeHtml(data.error || 'Error')}</p>`; return; }
@@ -3196,6 +3259,7 @@
                     });
                 }
 
+                // Close the custom playlist tracks modal and reset state
                 window.closeCustomPlaylistTracksModal = function () {
                     document.getElementById('customPlaylistTracksModal').style.display = 'none';
                     window.refreshModalBlurState();
@@ -3204,6 +3268,7 @@
                     currentCustomPlaylistCanEdit = false;
                 };
 
+                // Request to remove a song from custom playlist: trigger payment for non owners
                 window.initiateRemoveSong = function (trackUri) {
                     pendingCustomPlaylistTrackUri = trackUri;
                     pendingCustomPlaylistId = currentCustomPlaylistId;
@@ -3217,6 +3282,7 @@
                     showPayment();
                 };
 
+                // Remove a song from the playlist after payment is approved (or immediately for owners)
                 async function finalizeRemoveSongFromPlaylist(trackUri) {
                     try {
                         const res = await fetch('/api/custom-playlists/remove-song', {
@@ -3239,9 +3305,11 @@
                 }
 
                 // --- Add Song to Custom Playlist ---
+                // Open modal to search for and add a song to the current custom playlist
                 window.openAddSongToCustomPlaylist = function () {
                     const addTitleEl = document.getElementById('addSongToPlaylistTitle');
                     if (addTitleEl) addTitleEl.textContent = formatCustomPlaylistTitle(currentCustomPlaylistName || 'Playlist');
+                    // Reset search state for fresh search
                     addSongSearchQuery = '';
                     addSongSearchNextOffset = 0;
                     addSongSearchHasMore = false;
@@ -3251,6 +3319,7 @@
                     window.refreshModalBlurState();
                 };
 
+                // Close the add song to playlist modal
                 window.closeAddSongToPlaylistModal = function () {
                     document.getElementById('addSongToPlaylistModal').style.display = 'none';
                     window.refreshModalBlurState();
@@ -3274,6 +3343,8 @@
                     resultsEl.appendChild(btn);
                 }
 
+                // Convert search results into DOM elements for add-to-playlist modal
+                // Each track shows album art, name, artist, and an Add button
                 function appendAddSongSearchRows(resultsEl, items) {
                     const existingUris = new Set(
                         [...resultsEl.querySelectorAll('.add-song-search-add-btn[data-uri]')].map((b) => b.dataset.uri)
@@ -3298,6 +3369,7 @@
                     });
                 }
 
+                // Load next page of search results for add song to playlist modal
                 async function loadAddSongSearchMore() {
                     if (addSongSearchInFlight) return;
                     if (!addSongSearchQuery || !addSongSearchHasMore) return;
@@ -3344,7 +3416,7 @@
                         addSongSearchInFlight = false;
                     }
                 }
-
+                // Handle search form submission in add song to playlist modal
                 document.getElementById('addSongSearchForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const now = Date.now();
@@ -3391,6 +3463,7 @@
                     }
                 });
 
+                // Request to add a song to custom playlist: trigger payment for non owners
                 window.initiateAddSongToPlaylist = function (trackUri) {
                     pendingCustomPlaylistTrackUri = trackUri;
                     pendingCustomPlaylistId = currentCustomPlaylistId;
@@ -3405,6 +3478,8 @@
                     showPayment();
                 };
 
+                // Add a song to the playlist after payment is approved 
+                // Refreshes the playlist view to show the newly added track
                 async function finalizeAddSongToPlaylist(trackUri) {
                     try {
                         const res = await fetch('/api/custom-playlists/add-song', {

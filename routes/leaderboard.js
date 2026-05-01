@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getOwnerIds } = require('../utils/owners');
 
+// Route to get the leaderboard data
 router.get('/api/leaderboard', async (req, res) => {
     try {
         const db = require('../utils/database');

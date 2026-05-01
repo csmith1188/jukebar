@@ -257,6 +257,7 @@ function getAllowedPlaylist(playlistId, classId) {
     });
 }
 
+// Fetches all allowed playlists for the given class ID, sorted by name
 function getAllowedPlaylists(classId) {
     return new Promise((resolve, reject) => {
         db.all(
@@ -274,6 +275,7 @@ function getAllowedPlaylists(classId) {
     });
 }
 
+// Fetches a map of playlist ID 
 function getAllowedPlaylistMap(classId) {
     return new Promise((resolve, reject) => {
         db.all(
@@ -367,6 +369,7 @@ function setPlaylistAllowedState(playlistId, isAllowed, teacherId, classId) {
     });
 }
 
+// Fetches all tracks from a playlist, returns array of tracks
 async function fetchAllUserPlaylists() {
     const allItems = [];
     const limit = 50;
@@ -383,6 +386,7 @@ async function fetchAllUserPlaylists() {
     return allItems;
 }
 
+// Deletes allowed playlists for the class that are not in the provided playlistIds array
 function pruneAllowedPlaylistsNotInLibrary(classId, playlistIds) {
     return new Promise((resolve, reject) => {
         const uniqueIds = [...new Set((playlistIds || []).filter(Boolean))];
@@ -412,6 +416,7 @@ function pruneAllowedPlaylistsNotInLibrary(classId, playlistIds) {
     });
 }
 
+// Fetches all tracks from a playlist, returns array of track items 
 async function fetchPlaylistTracks(playlistId) {
     await ensureSpotifyAccessToken();
     const tracks = [];
@@ -483,6 +488,7 @@ async function getQueueablePlaylistTracks(playlistId) {
     const queueableTracks = [];
     const skipped = { unplayable: 0, banned: 0, duplicate: 0 };
 
+    // Feb 2026 Spotify API changes renamed .track to .item, so check both places for track data
     for (const item of rawItems) {
         const track = item?.item ?? item?.track; // .track renamed to .item in Feb 2026 Spotify API changes
         if (!track || track.is_local || !track.uri || !track.uri.startsWith('spotify:track:')) {
@@ -515,6 +521,7 @@ async function getQueueablePlaylistTracks(playlistId) {
     return { queueableTracks, skipped };
 }
 
+// Fetches all tracks from a playlist, returns count of playable tracks and skipped tracks breakdown
 async function getPlaylistPlayableStats(playlistId) {
     const { tracks: rawItems, error: fetchError } = await fetchPlaylistTracks(playlistId);
 
@@ -553,6 +560,7 @@ async function getCurrentTrackUri() {
     return playback?.body?.item?.uri || null;
 }
 
+// Checks if any track from the playlist is currently playing
 async function isPlaylistCurrentlyPlaying(playlistId, preloadedItems = null) {
     const currentTrackUri = await getCurrentTrackUri();
     if (!currentTrackUri) return false;
@@ -564,7 +572,7 @@ async function isPlaylistCurrentlyPlaying(playlistId, preloadedItems = null) {
     return playlistItems.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
-
+// Socket.IO setup to communicate with Formbar for classroom management
 router.post('/search', async (req, res) => {
     try {
         let { query, source, offset, limit, desiredTotal, includeArtists, includeAlbums } = req.body || {};
@@ -805,6 +813,7 @@ router.post('/search', async (req, res) => {
     }
 });
 
+// Returns the user's recently queued songs based on their transaction history, excluding cleared history
 router.get('/recentlyQueued', async (req, res) => {
     if (!req.session?.token?.id) {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -835,6 +844,7 @@ router.get('/recentlyQueued', async (req, res) => {
             return res.json({ ok: true, tracks: [] });
         }
 
+        // Map transactions to track objects, inferring type and handling missing data
         const tracks = uniqueRows.map((r) => {
             const itemType = r.action === 'artist_click' ? 'artist' : (r.action === 'album_click' ? 'album' : 'track');
             const fallbackSubtitle = itemType === 'track' ? 'Unknown' : '';
@@ -857,6 +867,7 @@ router.get('/recentlyQueued', async (req, res) => {
     }
 });
 
+// Logs interactions with recently queued items 
 router.post('/recentlyQueued/interactions', isAuthenticated, async (req, res) => {
     const userId = req.session?.token?.id;
     if (!userId) {
@@ -899,6 +910,7 @@ router.post('/recentlyQueued/interactions', isAuthenticated, async (req, res) =>
     }
 });
 
+// Clear the user's recently queued history by setting to now
 router.post('/clearQueueHistory', async (req, res) => {
     if (!req.session?.token?.id) {
         return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -946,6 +958,7 @@ router.post('/clearAllRecentlyQueued', isAuthenticated, requireTeacherAccess, as
     }
 });
 
+// Fetches the user's Spotify playlists, merges with allowed playlists from DB, and returns the combined data
 router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
@@ -992,6 +1005,7 @@ router.get('/api/spotify/playlists', isAuthenticated, requireTeacherAccess, asyn
     }
 });
 
+// Teacher only: allow a playlist by ID, inserting/updating metadata and setting allowed state to true
 router.post('/api/spotify/playlists/allow', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         const { playlistId, name, owner, image, totalTracks } = req.body || {};
@@ -1022,6 +1036,7 @@ router.post('/api/spotify/playlists/allow', isAuthenticated, requireTeacherAcces
     }
 });
 
+// Teacher only: disallow a playlist by ID, setting allowed state to false 
 router.post('/api/spotify/playlists/disallow', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         const { playlistId } = req.body || {};
@@ -1046,6 +1061,7 @@ router.post('/api/spotify/playlists/disallow', isAuthenticated, requireTeacherAc
     }
 });
 
+// Teacher only: fetch all allowed playlists for the class, returning metadata and allowed state
 router.get('/api/playlists/allowed', isAuthenticated, async (req, res) => {
     try {
         const classId = await getClassId();
@@ -1065,6 +1081,7 @@ router.get('/api/playlists/allowed', isAuthenticated, async (req, res) => {
     }
 });
 
+// Builds a quote for a playlist by counting playable tracks and creating a preview of the first 200 tracks with metadata and playability info
 function buildPlaylistQuoteFromItems(rawItems) {
     let playableCount = 0;
     const preview = [];
@@ -1097,6 +1114,7 @@ function buildPlaylistQuoteFromItems(rawItems) {
     };
 }
 
+// Endpoint to quote a playlist: checks if playlist is allowed, counts playable tracks, checks if it's already playing, and returns metadata and cost info for queuing
 router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
     try {
         const { playlistId } = req.body || {};
@@ -1151,6 +1169,7 @@ router.post('/api/playlists/quote', isAuthenticated, async (req, res) => {
     }
 });
 
+// checks if playlist is allowed, counts playable tracks, checks if it's already playing, verifies payment and user status, then starts playback and logs the transaction
 router.post('/api/playlists/queue', isAuthenticated, playbackRateLimit(MODIFY), async (req, res) => {
     try {
         const userId = req.session?.token?.id;
@@ -1269,6 +1288,7 @@ router.post('/api/playlists/queue', isAuthenticated, playbackRateLimit(MODIFY), 
     }
 });
 
+// Teacher only: Unban a track by name/artist, removing from the banned_songs table 
 router.post('/unbanTrack', isAuthenticated, requireTeacherAccess, async (req, res) => {
     try {
         const { name, artist } = req.body || {};
@@ -1333,6 +1353,7 @@ router.post('/banTrack', isAuthenticated, requireTeacherAccess, async (req, res)
     }
 });
 
+// Fetches the current Spotify queue, merges with metadata from the database, and returns the combined data
 router.get('/getQueue', playbackRateLimit(READ), async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
@@ -1709,7 +1730,7 @@ router.post('/addToQueue', playbackRateLimit(MODIFY), async (req, res) => {
     }
 });
 
-
+// Fetches the currently playing track from Spotify, checks if something is playing, and returns the track info or an empty response if nothing is playing
 router.get('/currentlyPlaying', playbackRateLimit(READ), async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
@@ -2080,6 +2101,7 @@ router.post('/checkTrackExists', isAuthenticated, async (req, res) => {
     }
 });
 
+// Purchase skip shields for a track
 router.post('/purchaseShield', isAuthenticated, async (req, res) => {
     console.log('=== PURCHASE SHIELD REQUEST ===');
     const { trackUri } = req.body;
@@ -2337,7 +2359,7 @@ router.post('/purchaseShield', isAuthenticated, async (req, res) => {
     }
 });
 
-
+// Endpoint to get the currently playing track with more direct Spotify API access 
 router.get('/api/currentTrack', playbackRateLimit(READ), async (req, res) => {
     try {
         await ensureSpotifyAccessToken();
@@ -2594,6 +2616,7 @@ router.get('/api/artist/:id/top-tracks', async (req, res) => {
     }
 });
 
+// Get albums for an artist, paginated
 router.get('/api/artist/:id/albums', async (req, res) => {
     try {
         const { id } = req.params;
@@ -2636,6 +2659,7 @@ router.get('/api/artist/:id/albums', async (req, res) => {
     }
 });
 
+// Get tracks for an album, filtering out explicit, local, long, and banned tracks
 router.get('/api/album/:id/tracks', async (req, res) => {
     try {
         const { id } = req.params;
