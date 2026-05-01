@@ -8,6 +8,8 @@
             <button class="close-modal" onclick="this.closest('.transaction-modal').remove()">x</button>
         </div>
     </div>
+
+    <!-- Displays a table of user transactions (song plays) with pagination controls -->
     <div class="transaction-modal-body">
         <% if (transactions.length > 0) { %>
             <div class="table-wrapper">
@@ -23,6 +25,7 @@
                     </thead>
                     <tbody>
                         <% transactions.forEach(function(transaction) { %>
+                            <!-- Renders each transaction as a table row with track info, cost, and time -->
                             <tr>
                                 <td style="width:50px;padding:4px;">
                                     <% if (transaction.image_url) { %>
@@ -44,6 +47,7 @@
             <p class="no-transactions">No plays found for this user.</p>
         <% } %>
     </div>
+    <!-- Pagination controls for navigating through transaction history pages -->
     <div class="transaction-modal-footer">
         <div class="pagination-controls">
             <button class="pagination-btn" id="prevBtn" <%= !pagination.hasPrevPage ? 'disabled' : '' %>>

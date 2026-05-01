@@ -9,6 +9,7 @@ const { READ, playbackRateLimit, executePlaybackRead } = require('../middleware/
 const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
 const POOL_ID = Number(process.env.POOL_ID);
 
+// Validate critical configuration on startup
 if (!POOL_ID || isNaN(POOL_ID)) {
     console.error('[payment.js] FATAL: POOL_ID is not set or invalid in .env. Payments will be rejected.');
 }
@@ -45,6 +46,7 @@ function getRollingTopUsers() {
     });
 }
 
+// Fetches all tracks from a playlist, handling pagination and API errors
 async function fetchPlaylistTrackItems(playlistId) {
     await ensureSpotifyAccessToken();
     const items = [];
@@ -92,6 +94,7 @@ async function isPlaylistCurrentlyPlaying(playlistId, playlistItems = null) {
     return items.some((item) => (item?.item ?? item?.track)?.uri === currentTrackUri);
 }
 
+// Counts how many tracks in the playlist are playable 
 async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
     const items = playlistItems || await fetchPlaylistTrackItems(playlistId);
     let playableCount = 0;
@@ -106,7 +109,7 @@ async function getPlaylistPlayableTrackCount(playlistId, playlistItems = null) {
 
     return playableCount;
 }
-
+// Checks if a playlist is allowed based on the allowed_playlists table in the database
 function isPlaylistAllowed(playlistId) {
     return new Promise((resolve, reject) => {
         db.get(
@@ -120,6 +123,7 @@ function isPlaylistAllowed(playlistId) {
     });
 }
 
+// Route to handle payment transfers for various actions 
 router.post('/transfer', playbackRateLimit(READ), async (req, res) => {
     try {
         const to = POOL_ID;
@@ -366,6 +370,7 @@ router.post('/refund', async (req, res) => {
     }
 });
 
+// Route to save the user's payment PIN
 router.post('/savePin', (req, res) => {
     const { pin } = req.body || {};
 
@@ -389,6 +394,7 @@ router.post('/savePin', (req, res) => {
     });
 });
 
+// Route to retrieve the user's saved PIN
 router.post('/getPin', (req, res) => {
     if (!req.session.token || !req.session.token.id) {
         return res.status(401).json({ ok: false, error: 'Not authenticated' });
@@ -426,6 +432,7 @@ router.get('/paymentStatus', (req, res) => {
     res.json({ ok: true, hasPaid: !!req.session.hasPaid });
 });
 
+// TEMPORARY TEST ENDPOINT - REMOVE IN PRODUCTION
 router.post('/getAmount', playbackRateLimit(READ), async (req, res) => {
     try {
         const db = require('../utils/database');
