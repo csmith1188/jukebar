@@ -251,6 +251,7 @@
         await jpLoadOverrides();
     }
 
+    // Toggle JukePix on/off for current track
     async function jpHandleToggleChange(e) {
         try {
             const trackRes = await fetch('/api/currentTrack');
@@ -283,6 +284,7 @@
         }
     }
 
+    // Update the toggle label based on the checkbox state
     function jpUpdateToggleLabel() {
         const checkbox = document.getElementById('jukepixToggleCheckbox');
         const label = document.getElementById('jukepixToggleLabel');
@@ -381,6 +383,7 @@
         } catch (e) { showNotification('Failed to load JukePix defaults', 'error'); }
     }
 
+    // Save global defaults to server
     async function jpSaveDefaults() {
         try {
             await jpApi('/api/settings/defaults', {
@@ -469,6 +472,7 @@
         const o = jpOverrides.find(x => x.id === id);
         if (o) openJPModal(o);
     }
+    // Save new or edited override to server
     async function jpSaveOverride() {
         const editId = document.getElementById('jp-modal-id').value;
         const type = document.getElementById('jp-modal-type').value;

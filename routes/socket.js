@@ -41,6 +41,7 @@ function setupFormbarSocket(io, formbarSocket, key) {
         currentClassId = userClassId;
     });
 
+    // Listen for class updates from Formbar and broadcast them to connected clients
     formbarSocket.on('classUpdate', (classroomData) => {
         currentClassroom = classroomData;
 
