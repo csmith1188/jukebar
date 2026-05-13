@@ -1539,7 +1539,7 @@ router.post('/addToQueue', playbackRateLimit(MODIFY), async (req, res) => {
                 isAnon: isAnon
             };
             //console.log('Adding track to queue with addedBy:', username, 'type:', typeof username); // Debug log
-            queueManager.addToQueue(queueTrack);
+            queueManager.addToQueue(queueTrack, req.session.token.id);
 
             // Save metadata to database (synchronously)
             //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username);
@@ -1690,7 +1690,7 @@ router.post('/addToQueue', playbackRateLimit(MODIFY), async (req, res) => {
             image: track.album.images[0]?.url,
             isAnon: isAnon
         };
-        queueManager.addToQueue(queueTrack);
+        queueManager.addToQueue(queueTrack, req.session.token.id);
 
         // 📝 Save metadata to database (synchronously)
         //console.log('Saving to DB - URI:', track.uri, 'addedBy:', username2, 'type:', typeof username2);
@@ -1874,7 +1874,7 @@ router.post('/skip', playbackRateLimit(MODIFY), async (req, res) => {
             await executePlaybackModify(req, 'skip', () => spotifyApi.skipToNext());
 
             // Update queueManager and broadcast to clients
-            const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher');
+            const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher', req.session.token.id);
             //console.log(`Skip successful for owner (ID: ${req.session.token.id})`);
             res.json({ ok: true, currentTrack: nextTrack });
             return;
@@ -1977,7 +1977,7 @@ router.post('/skip', playbackRateLimit(MODIFY), async (req, res) => {
                     skippedTrack: { name: trackName }
                 };
 
-                queueManager.broadcastUpdate('skip', skipEvent);
+                queueManager.broadcastUpdate('skip', skipEvent, req.session.token.id);
 
                 console.log('Returning shield blocked response to client');
                 console.log(`Played sound: ${soundFile}`);
@@ -2001,7 +2001,7 @@ router.post('/skip', playbackRateLimit(MODIFY), async (req, res) => {
         await executePlaybackModify(req, 'skip', () => spotifyApi.skipToNext());
 
         // Update queueManager and broadcast to clients
-        const nextTrack = await queueManager.skipTrack(req.session.user || 'Someone');
+        const nextTrack = await queueManager.skipTrack(req.session.user || 'Someone', req.session.token.id);
 
         if (currentTrack) {
             await logTransaction({
@@ -2061,7 +2061,7 @@ router.post('/queue/add', async (req, res) => {
             addedAt: Date.now()
         };
 
-        queueManager.addToQueue(track);
+        queueManager.addToQueue(track, req.session.token?.id ?? null);
 
         // Log the transaction
         if (req.session.token?.id) {
@@ -2083,7 +2083,7 @@ router.post('/queue/skip', playbackRateLimit(MODIFY), async (req, res) => {
             return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
         }
 
-        const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher');
+        const nextTrack = await queueManager.skipTrack(req.session.user || 'Teacher', req.session.token?.id ?? null);
 
         if (nextTrack) {
             // Actually skip on Spotify

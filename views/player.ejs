@@ -2557,6 +2557,8 @@
                     }));
                 }
 
+                window.openSongMenu = openSongMenu;
+
                 let voteTimerInterval = null;
 
                 function showBanVote(data) {
@@ -2645,6 +2647,8 @@
                         Notify(`You voted ${vote}`, 'info');
                     }
                 }
+
+                window.castVote = castVote;
 
                 function startVoteTimer(durationMs) {
                     // Clear any existing timer
