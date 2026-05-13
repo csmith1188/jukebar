@@ -16,6 +16,10 @@ let brokeyEnabled = false;
 const voteBanDevModeEnabled = String(process.env.JUKEBAR_DEV_MODE || '').toLowerCase() === 'true';
 const voteBanMinOnlineUsers = voteBanDevModeEnabled ? 1 : 5;
 
+const SPOTIFY_DIAG_INTERVAL_ACTIVE_MS = 10000;
+const SPOTIFY_DIAG_INTERVAL_IDLE_MS = 120000;
+let lastSpotifyDiagnosticsRunAt = 0;
+
 /** In-memory: periodic Spotify sync + diagnostics. Toggle via POST /api/spotify-background (no server restart). */
 let spotifyBackgroundApiEnabled = String(process.env.SPOTIFY_BACKGROUND_API || 'true').toLowerCase() !== 'false';
 
@@ -591,12 +595,12 @@ io.on('connection', (socket) => {
                 let formbarBanFinalized = false;
 
                 async function fbBanVoteResults(poll) {
-                    if (formbarBanFinalized) {
-                        console.log('Formbar ban vote already finalized; skipping duplicate result handling');
-                        return;
-                    }
                     formbarBanFinalized = true;
                     formbarSocket.off('classUpdate')
+
+                    if (formbarBanFinalized) return console.log('Formbar ban vote already finalized; skipping duplicate result handling');
+                    if (!poll || !poll.responses) return console.log('Ban failed: No poll or no poll responses.')
+
                     let votesFor = poll.find(r => r.answer == 'Yes').responses
                     let votesAgainst = poll.find(r => r.answer == 'No').responses
 
@@ -614,7 +618,9 @@ io.on('connection', (socket) => {
                                 }
                             }
                         );
+
                         io.emit('banVotePassed', data);
+
                     } else {
                         console.log(`Ban vote failed (${votesFor} Yes to ${votesAgainst} No)`)
                     }
@@ -816,6 +822,13 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Periodic Spotify sync with safer default interval
     setInterval(async () => {
         if (!spotifyBackgroundApiEnabled) return;
+        const minGapMs = queueManager.getSpotifyPlaybackPollMinGapMs();
+        if (
+            queueManager.lastSpotifyPlayerFetchAt &&
+            Date.now() - queueManager.lastSpotifyPlayerFetchAt < minGapMs
+        ) {
+            return;
+        }
         try {
             await queueManager.syncWithSpotify(spotifyApi);
             await enforceCurrentTrackBanByUri();
@@ -952,6 +965,7 @@ server.listen(port, async () => {
     io.disconnectSockets();
     console.log(`Server listening at http://localhost:${port}`);
     if (spotifyBackgroundApiEnabled) {
+        lastSpotifyDiagnosticsRunAt = Date.now();
         runSpotifyDiagnostics().catch((err) => {
             console.warn('[diagnostics] Initial Spotify diagnostics failed:', err?.message || err);
         });
@@ -959,6 +973,17 @@ server.listen(port, async () => {
     // Runtime diagnostics: if Spotify starts rate limiting, fail closed to brokey mode.
     setInterval(() => {
         if (!spotifyBackgroundApiEnabled) return;
+        const diagGapMs = queueManager.isSpotifyPlaybackPollLongIdleBackoff()
+            ? SPOTIFY_DIAG_INTERVAL_IDLE_MS
+            : SPOTIFY_DIAG_INTERVAL_ACTIVE_MS;
+        const now = Date.now();
+        if (
+            lastSpotifyDiagnosticsRunAt &&
+            now - lastSpotifyDiagnosticsRunAt < diagGapMs
+        ) {
+            return;
+        }
+        lastSpotifyDiagnosticsRunAt = now;
         runSpotifyDiagnostics().catch((err) => {
             console.warn('[diagnostics] Spotify diagnostics failed:', err?.message || err);
         });
