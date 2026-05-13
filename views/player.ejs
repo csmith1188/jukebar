@@ -2576,6 +2576,8 @@
                     }));
                 }
 
+                window.openSongMenu = openSongMenu;
+
                 let voteTimerInterval = null;
 
                 // Show ban vote modal when a vote is initiated
@@ -2671,6 +2673,8 @@
                         Notify(`You voted ${vote}`, 'info');
                     }
                 }
+
+                window.castVote = castVote;
 
                 // Start countdown timer for ban vote expiration 
                 // Updates display every 100ms and closes modal when timer reaches zero

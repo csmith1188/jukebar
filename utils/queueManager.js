@@ -1,4 +1,8 @@
 const { isJukepixEnabled } = require('./jukepix');
+const SPOTIFY_IDLE_POLL_ACTIVE_GAP_MS = 8000;
+const SPOTIFY_IDLE_POLL_IDLE_GAP_MS = 120000;
+const SPOTIFY_IDLE_POLL_STABLE_CYCLES = 10;
+
 class QueueManager {
     constructor() {
         this.currentTrack = null;
@@ -9,6 +13,38 @@ class QueueManager {
         this.clients = new Set(); // Connected WebSocket clients
         this.lastNetworkError = null; // Track last network error for rate limiting
         this.spotifyRateLimitedUntil = 0;
+        /** Unix ms of last successful currently-playing + queue fetch (no 429). */
+        this.lastSpotifyPlayerFetchAt = 0;
+        this._lastPlaybackSignatureForIdle = null;
+        this._stablePlaybackObservationCount = 0;
+    }
+
+    getSpotifyPlaybackPollMinGapMs() {
+        return this.peekSpotifyPlaybackPollMinGapMs();
+    }
+
+    peekSpotifyPlaybackPollMinGapMs() {
+        if (this.clients.size > 0) return SPOTIFY_IDLE_POLL_ACTIVE_GAP_MS;
+        if (this._stablePlaybackObservationCount >= SPOTIFY_IDLE_POLL_STABLE_CYCLES) {
+            return SPOTIFY_IDLE_POLL_IDLE_GAP_MS;
+        }
+        return SPOTIFY_IDLE_POLL_ACTIVE_GAP_MS;
+    }
+
+    // No Socket.IO subscribers and queue snapshot unchanged for STABLE_CYCLES.
+    isSpotifyPlaybackPollLongIdleBackoff() {
+        return this.clients.size === 0 &&
+            this._stablePlaybackObservationCount >= SPOTIFY_IDLE_POLL_STABLE_CYCLES;
+    }
+
+    _recordIdlePlaybackObservation(currentUriKey, queueUris) {
+        const signature = `${currentUriKey || ''}\x1e${queueUris.join('\x1e')}`;
+        if (this._lastPlaybackSignatureForIdle === signature) {
+            this._stablePlaybackObservationCount += 1;
+        } else {
+            this._lastPlaybackSignatureForIdle = signature;
+            this._stablePlaybackObservationCount = 1;
+        }
     }
 
     getRetryDelayMs(retryAfterHeaderValue) {
@@ -39,7 +75,7 @@ class QueueManager {
     }
 
     // Add track to queue
-    addToQueue(track) {
+    addToQueue(track, prioritizeActorUserId = null) {
         //console.log('addToQueue called with track:', track);
         this.queue.push(track);
         //console.log('Queue after adding:', this.queue.length, 'tracks');
@@ -51,10 +87,10 @@ class QueueManager {
             isPlaying: this.isPlaying,
             progress: this.progress,
             lastUpdate: this.lastUpdate
-        });
+        }, prioritizeActorUserId);
 
         // Also send notification data
-        this.broadcastUpdate('queueAdd', { track, queue: this.queue });
+        this.broadcastUpdate('queueAdd', { track, queue: this.queue }, prioritizeActorUserId);
     }
 
     // Remove track from queue
@@ -126,7 +162,7 @@ class QueueManager {
     }
 
     // Skip to next track
-    async skipTrack(actor = null) {
+    async skipTrack(actor = null, prioritizeActorUserId = null) {
         if (this.queue.length > 0) {
             const skippedTrack = this.currentTrack;
             const nextTrack = this.queue.shift();
@@ -149,7 +185,7 @@ class QueueManager {
             this.previousTrackUri = nextTrack?.uri || null;
 
             // Send queue update with updated current track
-            this.broadcastUpdate('queueUpdate', this.getCurrentState());
+            this.broadcastUpdate('queueUpdate', this.getCurrentState(), prioritizeActorUserId);
             // Send skip for notifications
             const skipEvent = {
                 currentTrack: this.currentTrack,
@@ -160,7 +196,7 @@ class QueueManager {
                 skippedType: 'song'
             };
 
-            this.broadcastUpdate('skip', skipEvent);
+            this.broadcastUpdate('skip', skipEvent, prioritizeActorUserId);
             return nextTrack;
         }
         return null;
@@ -198,33 +234,58 @@ class QueueManager {
         };
     }
 
-    // Broadcast updates to all connected clients
-    broadcastUpdate(type, data) {
-        //console.log(`Broadcasting ${type} event to ${this.clients.size} clients with data:`, data);
-
-        let successCount = 0;
-        let failCount = 0;
-
-        this.clients.forEach(client => {
+    // Broadcast updates to all connected clients (prioritize actor user tabs via setImmediate for everyone else).
+    broadcastUpdate(type, data, prioritizeActorUserId = null) {
+        const emitToSocket = (client) => {
             try {
-                // Handle Socket.IO clients
                 if (client.emit && typeof client.emit === 'function') {
                     client.emit(type, data);
-                    successCount++;
-                }
-                // Handle raw WebSocket clients (fallback)
-                else if (client.readyState === 1) {
+                } else if (client.readyState === 1) {
                     const message = JSON.stringify({ type, data, timestamp: Date.now() });
                     client.send(message);
-                    successCount++;
                 }
             } catch (error) {
                 console.error(`Failed to send ${type} to client:`, error.message);
-                failCount++;
             }
+        };
+
+        const normalizedId =
+            prioritizeActorUserId !== undefined &&
+            prioritizeActorUserId !== null &&
+            prioritizeActorUserId !== ''
+                ? String(prioritizeActorUserId)
+                : null;
+
+        if (!normalizedId) {
+            this.clients.forEach(emitToSocket);
+            return;
+        }
+
+        const actorClients = [];
+        const otherClients = [];
+
+        this.clients.forEach((client) => {
+            let uid = null;
+            if (client.emit && typeof client.emit === 'function') {
+                const raw = client.request?.session?.token?.id;
+                if (raw !== undefined && raw !== null) uid = String(raw);
+            }
+            if (uid === normalizedId) actorClients.push(client);
+            else otherClients.push(client);
         });
 
-        //console.log(`Broadcast complete: ${successCount} sent, ${failCount} failed`);
+        if (actorClients.length === 0) {
+            this.clients.forEach(emitToSocket);
+            return;
+        }
+
+        actorClients.forEach(emitToSocket);
+
+        if (otherClients.length > 0) {
+            setImmediate(() => {
+                otherClients.forEach(emitToSocket);
+            });
+        }
     }
 
     // Add WebSocket client
@@ -500,6 +561,11 @@ class QueueManager {
                 const queueData = await queueResponse.json();
                 queueTracks = queueData.queue || [];
             }
+
+            const idleCurrentUriKey = currentTrack?.uri ?? '';
+            const idleQueueUris = queueTracks.map(t => t.uri).filter(Boolean);
+            this._recordIdlePlaybackObservation(idleCurrentUriKey, idleQueueUris);
+            this.lastSpotifyPlayerFetchAt = Date.now();
 
             // Detect track change - clean up metadata for PREVIOUS track ONLY if it's finished (not in queue and not currently playing)
             if (currentTrack && currentTrack.uri) {
