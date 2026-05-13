@@ -18,6 +18,7 @@
         <div id="leaderboard"></div>
     </div>
     <script>
+        // Fetches leaderboard data from the server and renders it; refreshes every 30s
         async function loadLeaderboard() {
             try {
                 const res = await fetch('/api/leaderboard');
@@ -30,7 +31,8 @@
                 
                 const container = document.getElementById('leaderboard');
                 container.innerHTML = '';
-                
+
+                // Renders each user with rank, name, play count, and banned badge 
                 data.leaderboard.forEach((user, index) => {
                     const rank = index + 1;
                     let rankClass = '';
@@ -40,6 +42,7 @@
                     
                     const bannedBadge = user.isBanned ? '<span style="color:#ff4444;font-size:0.75em;font-weight:600;margin-left:6px;">😂🤣 BANNED LOL 😂🤣</span>' : '';
 
+                    // Create leaderboard item element with user info and styling
                     const item = document.createElement('div');
                     item.className = 'leaderboard-item';
                     item.innerHTML = `

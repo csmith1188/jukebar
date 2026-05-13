@@ -190,6 +190,7 @@ const trackCheckInterval = setInterval(async () => {
 
             console.log('[JUKEPIX] Sending new track to formpix:', JSON.stringify(progressBody, null, 2));
 
+            // Construct URL with query parameters for progress update
             const params = new URLSearchParams(progressBody);
             const progressUrl = `${jukepix}/api/progress?${params.toString()}`;
             console.log('[JUKEPIX] Progress Request Details:', {
@@ -296,6 +297,7 @@ function displayTrack(track, settings = null) {
     }
 }
 
+// Function to enable or disable JukePix display
 function setJukepix(enabled) {
     if (enabled && !isJukepixFeatureEnabled()) {
         console.log('[JUKEPIX] Jukepix cannot be enabled because JUKEPIX_ENABLED is disabled');

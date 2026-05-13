@@ -1,5 +1,6 @@
 const db = require("../utils/database");
 
+// Function to log a transaction
 async function logTransaction({ userID, displayName, action, trackURI = null, trackName = null, artistName = null, imageURL = null, cost }) {
     return new Promise((resolve, reject) => {
         const query = `INSERT INTO transactions (user_id, display_name, action, track_uri, track_name, artist_name, image_url, cost) 
@@ -14,7 +15,7 @@ async function logTransaction({ userID, displayName, action, trackURI = null, tr
         });
     });
 }
-
+// Function to get transactions for a specific user
 async function getTransactionsByUser(userID) {
     return new Promise((resolve, reject) => {
         const query = `SELECT * FROM transactions WHERE user_id = ? ORDER BY timestamp DESC`;

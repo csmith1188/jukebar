@@ -113,6 +113,7 @@ function getCustomPlaylist(playlistDbId, userId) {
     });
 }
 
+// Fetch a playlist by ID only if it belongs to the specified class; used for playlist operations when ownership is not required
 function getCustomPlaylistForClass(playlistDbId, classId) {
     return new Promise((resolve, reject) => {
         db.get(
@@ -130,7 +131,7 @@ function isSpotifyNotFoundError(err) {
     return err?.statusCode === 404 || err?.body?.error?.status === 404;
 }
 
-
+// If a playlist is found to be deleted from Spotify, remove it from the database to prevent future errors for users
 function deleteCustomPlaylistById(playlistDbId) {
     return new Promise((resolve, reject) => {
         db.run('DELETE FROM custom_playlists WHERE id = ?', [playlistDbId], function (err) {
@@ -140,6 +141,7 @@ function deleteCustomPlaylistById(playlistDbId) {
     });
 }
 
+// If the playlist still exists but its image has changed, update our record to keep it fresh
 function updateCustomPlaylistImage(playlistDbId, imageUrl) {
     return new Promise((resolve, reject) => {
         db.run('UPDATE custom_playlists SET image_url = ? WHERE id = ?', [imageUrl || null, playlistDbId], (err) => {
@@ -251,6 +253,7 @@ router.post('/api/custom-playlists/create', isAuthenticated, async (req, res) =>
         return res.status(400).json({ ok: false, error: `You can add up to ${INITIAL_FREE_SONGS} songs on creation` });
     }
 
+    // Validate track URIs before creating the playlist to avoid creating empty playlists if validation fails
     try {
         const trackValidation = await validateTrackUris(trackUris);
         if (!trackValidation.valid) {
@@ -291,6 +294,7 @@ router.post('/api/custom-playlists/create', isAuthenticated, async (req, res) =>
             }
         }
 
+        // Store the new playlist in our database so we can show it in the UI and track ownership
         const dbId = await new Promise((resolve, reject) => {
             db.run(
                 'INSERT INTO custom_playlists (user_id, class_id, spotify_playlist_id, name, song_count, image_url) VALUES (?, ?, ?, ?, ?, ?)',
@@ -430,6 +434,7 @@ router.post('/api/custom-playlists/add-song', isAuthenticated, async (req, res) 
     if (isNaN(playlistDbId)) return res.status(400).json({ ok: false, error: 'Invalid playlist ID' });
     if (!isValidTrackUri(trackUri)) return res.status(400).json({ ok: false, error: 'Invalid track URI' });
 
+    // Validate that the playlist exists and belongs to the caller's class, and that the track URI is valid before attempting to modify the playlist on Spotify
     try {
         const classId = await getClassId();
         const playlist = await getCustomPlaylistForClass(playlistDbId, classId);
@@ -445,6 +450,7 @@ router.post('/api/custom-playlists/add-song', isAuthenticated, async (req, res) 
             return res.status(400).json({ ok: false, error: trackValidation.error });
         }
 
+        // Check if the track is already in the playlist to prevent duplicates
         await ensureSpotifyAccessToken();
         const accessToken = spotifyApi.getAccessToken();
         const addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlist.spotify_playlist_id}/items`, {
@@ -467,6 +473,7 @@ router.post('/api/custom-playlists/add-song', isAuthenticated, async (req, res) 
             req.session.payment = null;
         }
 
+        // Log the transaction with details about the playlist and track added
         const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
         await logTransaction({
             userID: userId,
@@ -549,6 +556,7 @@ router.post('/api/custom-playlists/remove-song', isAuthenticated, async (req, re
             req.session.payment = null;
         }
 
+        // Log the transaction with details about the playlist and track removed
         const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
         await logTransaction({
             userID: userId,
@@ -624,6 +632,7 @@ router.post('/api/custom-playlists/queue', isAuthenticated, playbackRateLimit(MO
             console.warn('[custom-playlists:queue] queue sync failed:', syncErr.message);
         }
 
+        // Log the transaction with details about the playlist played
         const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
         await logTransaction({
             userID: userId,

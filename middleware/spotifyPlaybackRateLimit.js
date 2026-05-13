@@ -32,6 +32,7 @@ function getRequesterKey(req) {
     return `ip:${req.ip || 'unknown'}`;
 }
 
+// Parses the Retry-After header value and returns the cooldown duration in milliseconds, defaulting to 10s if parsing fails
 function parseRetryAfterMs(retryAfterHeaderValue) {
     const retryAfterSeconds = Number.parseInt(String(retryAfterHeaderValue || ''), 10);
     if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
@@ -39,7 +40,7 @@ function parseRetryAfterMs(retryAfterHeaderValue) {
     }
     return 10000;
 }
-
+// Sets a cooldown for the specified category based on the Retry-After header value, and logs the cooldown duration and source
 function setSpotifyPlaybackCooldown(category, retryAfterHeaderValue, source = 'spotify') {
     const waitMs = parseRetryAfterMs(retryAfterHeaderValue);
     cooldownUntilByCategory[category] = nowMs() + waitMs;
@@ -50,7 +51,7 @@ function setSpotifyPlaybackCooldown(category, retryAfterHeaderValue, source = 's
 function getSpotifyPlaybackCooldownMs(category) {
     return Math.max(0, cooldownUntilByCategory[category] - nowMs());
 }
-
+// Middleware to enforce rate limits on Spotify playback-related requests using the token buckets 
 function consumeToken(category, requesterKey) {
     const cfg = CATEGORY_CONFIG[category];
     const categoryBuckets = buckets[category];
@@ -103,7 +104,7 @@ function playbackRateLimit(category) {
                 cooldownMs
             );
         }
-
+        // Use requesterKey to track rate limits per user or IP
         const requesterKey = getRequesterKey(req);
         const bucketResult = consumeToken(category, requesterKey);
         if (!bucketResult.allowed) {
@@ -120,7 +121,7 @@ function playbackRateLimit(category) {
         return next();
     };
 }
-
+// Executes a read operation with deduplication and rate limit handling
 async function executePlaybackRead(req, operationKey, run) {
     const requesterKey = req?.spotifyPlaybackLimiter?.requesterKey || getRequesterKey(req || {});
     const dedupeKey = `${requesterKey}:${operationKey}`;
@@ -143,7 +144,7 @@ async function executePlaybackRead(req, operationKey, run) {
     inFlightReads.set(dedupeKey, promise);
     return promise;
 }
-
+// Executes a modify operation with queuing and rate limit handling
 async function executePlaybackModify(req, operationKey, run) {
     const requesterKey = req?.spotifyPlaybackLimiter?.requesterKey || getRequesterKey(req || {});
     const queueKey = `${requesterKey}:${operationKey}`;

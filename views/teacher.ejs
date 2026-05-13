@@ -118,9 +118,11 @@
             </div>
 </body>
 <script>
+    // Teacher dashboard scripting: fetch data, render controls, and handle teacher actions
     const ownerIDs = <%- JSON.stringify(ownerIDs) %>;
     let onTeacherBanReasonConfirm = null;
 
+    // Opens the ban reason modal and remembers the callback to invoke when confirmed
     function openTeacherBanReasonModal(onConfirm) {
         const modal = document.getElementById('teacherBanReasonModal');
         const input = document.getElementById('teacherBanReasonInput');
@@ -142,6 +144,7 @@
         document.querySelector('.main-content')?.classList.remove('blurred');
     }
 
+    // Wire modal close actions to hide the ban reason modal
     document.getElementById('teacher-ban-reason-close')?.addEventListener('click', closeTeacherBanReasonModal);
     document.getElementById('teacher-ban-reason-cancel')?.addEventListener('click', closeTeacherBanReasonModal);
     document.getElementById('teacher-ban-reason-confirm')?.addEventListener('click', () => {
@@ -165,6 +168,7 @@
         }
     });
 
+    // Create and show a temporary toast notification at the bottom of the page
     function showNotification(message, type = 'info') {
         console.log('showNotification called:', message, type);
         const notification = document.createElement('div');
@@ -184,6 +188,7 @@
         }, 3000);
     }
 
+    // Fetch the user list and render the teacher user management table
     async function fetchUsers() {
         try {
             const res = await fetch('/api/users');
@@ -296,6 +301,7 @@
         }
     }
 
+    // Escape text values before inserting them into generated HTML
     function escapeHtml(value) {
         return String(value || '')
             .replace(/&/g, '&amp;')
@@ -305,6 +311,7 @@
             .replace(/'/g, '&#39;');
     }
 
+    // Load banned songs from the backend and render the banned songs panel
     async function fetchBannedSongs() {
         const list = document.getElementById('bannedSongsList');
         if (!list) return;
@@ -352,6 +359,7 @@
         }
     }
 
+    // Load the teacher's playlists and render allow/disallow controls for student access
     async function fetchUserPlaylists() {
         const list = document.getElementById('playlistList');
         if (!list) return;
@@ -461,6 +469,7 @@
         }
     }
 
+    // Handle click events in the banned songs panel using event delegation
     document.getElementById('bannedSongsList')?.addEventListener('click', async (e) => {
         const button = e.target.closest('.banned-song-unban-btn');
         if (!button) return;
@@ -491,6 +500,7 @@
         }
     });
 
+    // Lazily create or return the flyout tooltip used for banned song metadata
     function getBannedSongTooltip() {
         let tooltip = document.getElementById('bannedSongMetaTooltip');
         if (!tooltip) {
@@ -834,6 +844,7 @@
         }
     }
 
+    // Initialize socket.io for real-time queue updates
     const socket = io();
 
 

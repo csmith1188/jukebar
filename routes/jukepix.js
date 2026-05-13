@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { setJukepix, isJukepixEnabled, jukepix } = require('../utils/jukepix');
 
+// Route to toggle JukePix display on or off
 router.post('/toggleJukepix', (req, res) => {
     const { enabled } = req.body;
     console.log('[JUKEPIX ROUTE] Toggle request received:', { enabled, type: typeof enabled });

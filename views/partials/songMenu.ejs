@@ -252,6 +252,7 @@
                 // Check if user is owner (owners can start votes for free)
                 const userIsOwner = (typeof isOwnerClient === 'function') ? isOwnerClient(currentID) : false;
 
+                // If not owner, open modal to enter ban reason before proceeding to payment
                 openBanReasonModal(function (reason) {
                     if (userIsOwner) {
                         startBanVote(currentMenuTrackUri, trackData.trackName, trackData.trackArtist, reason, trackData.trackImage);

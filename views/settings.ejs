@@ -537,6 +537,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
+        // JukePix settings page scripting for form sync, preview, and API persistence.
         // ── Helpers ──
         function showToast(msg, type = 'success') {
             const t = document.getElementById('toast');
@@ -545,6 +546,7 @@
             setTimeout(() => t.classList.remove('show'), 3000);
         }
 
+        // Fetch JSON API responses with consistent error handling.
         async function api(url, opts = {}) {
             const res = await fetch(url, {
                 headers: { 'Content-Type': 'application/json', ...opts.headers },
@@ -556,6 +558,7 @@
         }
 
         // ── Color picker sync ──
+        // Link a color picker and its hex-value input so both stay in sync.
         function syncColor(pickerId, hexId) {
             const picker = document.getElementById(pickerId);
             const hex = document.getElementById(hexId);
@@ -593,6 +596,7 @@
         });
 
         // ── Preview ──
+        // Update the live preview area using the current default color settings
         function updatePreview() {
             const txtC = document.getElementById('def-text-color').value;
             const bgC = document.getElementById('def-bg-color').value;
@@ -613,6 +617,7 @@
         // ── Sound dropdowns ──
         let soundFiles = [];
 
+        // Load available sound files and populate the sound selector dropdowns
         async function loadSounds() {
             try {
                 const data = await api('/api/settings/sounds');
@@ -627,6 +632,7 @@
             populateSoundSelect('modal-shield-sound');
         }
 
+        // Populate a sound selection control with the loaded sound files
         function populateSoundSelect(selectId) {
             const sel = document.getElementById(selectId);
             const current = sel.value;
@@ -641,6 +647,7 @@
         }
 
         // ── Load Defaults ──
+        // Load saved default JukePix settings from the server
         async function loadDefaults() {
             try {
                 const data = await api('/api/settings/defaults');
@@ -667,10 +674,12 @@
             }
         }
 
+        // Set the value of an input element by id
         function setValue(id, val) {
             document.getElementById(id).value = val;
         }
 
+        // Save the default settings back to the backend
         async function saveDefaults() {
             try {
                 await api('/api/settings/defaults', {
@@ -704,6 +713,7 @@
             }
         }
 
+        // Render the saved overrides into the overrides table
         function renderOverrides() {
             const tbody = document.getElementById('overrides-body');
             if (overrides.length === 0) {
@@ -727,6 +737,7 @@
             `).join('');
         }
 
+        // Escape string values before inserting them into HTML content
         function escHtml(str) {
             const d = document.createElement('div');
             d.textContent = str || '';
@@ -734,6 +745,7 @@
         }
 
         // ── Modal ──
+        // Show the override modal and populate fields for add/edit mode
         function openOverrideModal(data = null) {
             const modal = document.getElementById('override-modal');
             document.getElementById('modal-title').textContent = data ? 'Edit Override' : 'Add Override';
@@ -760,15 +772,18 @@
             modal.classList.add('active');
         }
 
+        // Close the override modal
         function closeOverrideModal() {
             document.getElementById('override-modal').classList.remove('active');
         }
 
+        // Open the modal to edit an existing override row
         function editOverride(id) {
             const o = overrides.find(x => x.id === id);
             if (o) openOverrideModal(o);
         }
 
+        // Create or update an override on the server
         async function saveOverride() {
             const editId = document.getElementById('modal-edit-id').value;
             const body = {
@@ -811,6 +826,7 @@
             }
         }
 
+        // Delete an override and reload the list after confirmation
         async function deleteOverride(id) {
             if (!confirm('Delete this override?')) return;
             try {
