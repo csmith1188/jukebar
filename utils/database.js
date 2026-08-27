@@ -1,18 +1,20 @@
 const sqlite3 = require("sqlite3").verbose();
 const fs = require("fs");
-const folderPath = 'db';
+const path = require("path");
 
-const db = new sqlite3.Database('db/database.db', (err) => {
+const dbPath = process.env.DATABASE_PATH || "db/database.db";
+
+const dbFolder = path.dirname(dbPath);
+
+if (!fs.existsSync(dbFolder)) {
+    fs.mkdirSync(dbFolder, { recursive: true });
+}
+
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
-        console.error('Database connection error:', err);
-        if (err.code === 'SQLITE_CANTOPEN') {
-            fs.mkdirSync(folderPath, { recursive: true });
-            //console.log(`Created folder: ${folderPath}`);
-            const db = new sqlite3.Database('db/database.db');
-            return db;
-        }
+        console.error("Database connection error:", err);
     } else {
-        //console.log("Connected to database");
+        console.log(`Connected to SQLite database: ${dbPath}`);
     }
 });
 
