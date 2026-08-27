@@ -1,0 +1,40 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Create the service from this file or mirror these settings in the dashboard.
+services:
+  - type: web
+    name: jukebar
+    runtime: node
+    plan: starter
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/online-count
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/database.db
+      # Set these in the dashboard (or sync: false secrets):
+      - key: URL
+        sync: false
+      - key: FORMBAR_ADDRESS
+        sync: false
+      - key: FORMBAR_SESSION_SECRET
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: POOL_ID
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: OWNER_PIN
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_REFRESH_TOKEN
+        sync: false
+    disk:
+      name: jukebar-data
+      mountPath: /var/data
+      sizeGB: 1

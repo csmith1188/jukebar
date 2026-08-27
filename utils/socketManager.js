@@ -11,7 +11,7 @@
 const { io: ioClient } = require('socket.io-client');
 require('dotenv').config({ quiet: true });
 
-const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const FORMBAR_ADDRESS = String(process.env.FORMBAR_ADDRESS || '').replace(/\/+$/, '');
 const API_KEY = process.env.API_KEY || '';
 
 // Singleton socket instance

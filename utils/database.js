@@ -24,44 +24,49 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     displayName TEXT,
     pin INTEGER,
     songsPlayed INTEGER DEFAULT 0
-);`);
-
-// Migrate: add isBanned column if it doesn't exist
-db.all("PRAGMA table_info(users)", (err, columns) => {
-    if (err) {
-        console.error('Error checking users schema:', err);
+)`, (createErr) => {
+    if (createErr) {
+        console.error('Error creating users table:', createErr.message);
         return;
     }
-    const hasIsBanned = columns && columns.some(c => c.name === 'isBanned');
-    if (!hasIsBanned) {
-        db.run("ALTER TABLE users ADD COLUMN isBanned INTEGER DEFAULT 0", (alterErr) => {
-            if (alterErr) {
-                console.error('Error adding isBanned column:', alterErr);
-            } else {
-                console.log('Added isBanned column to users table');
-            }
-        });
-    }
-    const hasPermission = columns && columns.some(c => c.name === 'permission');
-    if (!hasPermission) {
-        db.run("ALTER TABLE users ADD COLUMN permission INTEGER DEFAULT 2", (alterErr) => {
-            if (alterErr) {
-                console.error('Error adding permission column:', alterErr);
-            } else {
-                console.log('Added permission column to users table');
-            }
-        });
-    }
-    const hasClearedAt = columns && columns.some(c => c.name === 'recently_queued_cleared_at');
-    if (!hasClearedAt) {
-        db.run("ALTER TABLE users ADD COLUMN recently_queued_cleared_at TEXT", (alterErr) => {
-            if (alterErr) {
-                console.error('Error adding recently_queued_cleared_at column:', alterErr);
-            } else {
-                console.log('Added recently_queued_cleared_at column to users table');
-            }
-        });
-    }
+
+    // Migrate: add columns if they don't exist
+    db.all("PRAGMA table_info(users)", (err, columns) => {
+        if (err) {
+            console.error('Error checking users schema:', err);
+            return;
+        }
+        const hasIsBanned = columns && columns.some(c => c.name === 'isBanned');
+        if (!hasIsBanned) {
+            db.run("ALTER TABLE users ADD COLUMN isBanned INTEGER DEFAULT 0", (alterErr) => {
+                if (alterErr) {
+                    console.error('Error adding isBanned column:', alterErr);
+                } else {
+                    console.log('Added isBanned column to users table');
+                }
+            });
+        }
+        const hasPermission = columns && columns.some(c => c.name === 'permission');
+        if (!hasPermission) {
+            db.run("ALTER TABLE users ADD COLUMN permission INTEGER DEFAULT 2", (alterErr) => {
+                if (alterErr) {
+                    console.error('Error adding permission column:', alterErr);
+                } else {
+                    console.log('Added permission column to users table');
+                }
+            });
+        }
+        const hasClearedAt = columns && columns.some(c => c.name === 'recently_queued_cleared_at');
+        if (!hasClearedAt) {
+            db.run("ALTER TABLE users ADD COLUMN recently_queued_cleared_at TEXT", (alterErr) => {
+                if (alterErr) {
+                    console.error('Error adding recently_queued_cleared_at column:', alterErr);
+                } else {
+                    console.log('Added recently_queued_cleared_at column to users table');
+                }
+            });
+        }
+    });
 });
 
 db.run(`CREATE TABLE IF NOT EXISTS transactions (
@@ -76,17 +81,22 @@ db.run(`CREATE TABLE IF NOT EXISTS transactions (
     cost INTEGER NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
-)`);
-
-// Auto-migrate: add image_url column if it doesn't exist yet (added for recently-queued album art)
-db.all("PRAGMA table_info(transactions)", (err, cols) => {
-    if (err || !cols) return;
-    if (!cols.some(c => c.name === 'image_url')) {
-        db.run("ALTER TABLE transactions ADD COLUMN image_url TEXT", (alterErr) => {
-            if (alterErr) console.error('Error adding image_url to transactions:', alterErr);
-            else console.log('Added image_url column to transactions table');
-        });
+)`, (createErr) => {
+    if (createErr) {
+        console.error('Error creating transactions:', createErr.message);
+        return;
     }
+
+    // Auto-migrate: add image_url column if it doesn't exist yet (added for recently-queued album art)
+    db.all("PRAGMA table_info(transactions)", (err, cols) => {
+        if (err || !cols) return;
+        if (!cols.some(c => c.name === 'image_url')) {
+            db.run("ALTER TABLE transactions ADD COLUMN image_url TEXT", (alterErr) => {
+                if (alterErr) console.error('Error adding image_url to transactions:', alterErr);
+                else console.log('Added image_url column to transactions table');
+            });
+        }
+    });
 });
 
 db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
@@ -98,52 +108,57 @@ db.run(`CREATE TABLE IF NOT EXISTS banned_songs (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     banned_by TEXT NOT NULL DEFAULT 'unknown',
     reason TEXT DEFAULT 'No reason given'
-)`);
-
-// Migrate: ensure banned_songs has all required columns
-db.all("PRAGMA table_info(banned_songs)", (err, columns) => {
-    if (err) {
-        console.error('Error checking banned_songs schema:', err);
+)`, (createErr) => {
+    if (createErr) {
+        console.error('Error creating banned_songs:', createErr.message);
         return;
     }
 
-    const hasColumn = (name) => columns && columns.some(c => c.name === name);
-    const migrations = [];
+    // Migrate: ensure banned_songs has all required columns
+    db.all("PRAGMA table_info(banned_songs)", (err, columns) => {
+        if (err) {
+            console.error('Error checking banned_songs schema:', err);
+            return;
+        }
 
-    if (!hasColumn('track_name')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN track_name TEXT");
-    }
-    if (!hasColumn('artist_name')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN artist_name TEXT");
-    }
-    if (!hasColumn('track_uri')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN track_uri TEXT");
-    }
-    if (!hasColumn('timestamp')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP");
-    }
-    if (!hasColumn('banned_by')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN banned_by TEXT DEFAULT 'unknown'");
-    }
-    if (!hasColumn('reason')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN reason TEXT DEFAULT 'No reason given'");
-    }
-    if (!hasColumn('image_url')) {
-        migrations.push("ALTER TABLE banned_songs ADD COLUMN image_url TEXT");
-    }
+        const hasColumn = (name) => columns && columns.some(c => c.name === name);
+        const migrations = [];
 
-    if (migrations.length === 0) {
-        return;
-    }
+        if (!hasColumn('track_name')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN track_name TEXT");
+        }
+        if (!hasColumn('artist_name')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN artist_name TEXT");
+        }
+        if (!hasColumn('track_uri')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN track_uri TEXT");
+        }
+        if (!hasColumn('timestamp')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP");
+        }
+        if (!hasColumn('banned_by')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN banned_by TEXT DEFAULT 'unknown'");
+        }
+        if (!hasColumn('reason')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN reason TEXT DEFAULT 'No reason given'");
+        }
+        if (!hasColumn('image_url')) {
+            migrations.push("ALTER TABLE banned_songs ADD COLUMN image_url TEXT");
+        }
 
-    db.serialize(() => {
-        migrations.forEach((sql) => {
-            db.run(sql, (migrationErr) => {
-                if (migrationErr) {
-                    console.error('Error migrating banned_songs table:', migrationErr);
-                } else {
-                    console.log(`Applied migration: ${sql}`);
-                }
+        if (migrations.length === 0) {
+            return;
+        }
+
+        db.serialize(() => {
+            migrations.forEach((sql) => {
+                db.run(sql, (migrationErr) => {
+                    if (migrationErr) {
+                        console.error('Error migrating banned_songs table:', migrationErr);
+                    } else {
+                        console.log(`Applied migration: ${sql}`);
+                    }
+                });
             });
         });
     });
@@ -250,7 +265,20 @@ db.run(`CREATE TABLE IF NOT EXISTS allowed_playlists (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     class_id INTEGER,
     UNIQUE(spotify_playlist_id, class_id)
-)`);
+)`, (createErr) => {
+    if (createErr) {
+        console.error('Error creating allowed_playlists:', createErr.message);
+        return;
+    }
+
+    // Clean up duplicate allowed_playlists rows with NULL class_id (caused by old bug)
+    db.run(`DELETE FROM allowed_playlists WHERE id NOT IN (
+        SELECT MIN(id) FROM allowed_playlists GROUP BY spotify_playlist_id, COALESCE(class_id, '__NULL__')
+    )`, function (err) {
+        if (err) console.error('Error cleaning up duplicate allowed_playlists:', err.message);
+        else if (this.changes) console.log(`Cleaned up ${this.changes} duplicate allowed_playlists row(s)`);
+    });
+});
 
 // Migrate: recreate allowed_playlists with composite unique key if old schema detected
 db.all("PRAGMA index_list(allowed_playlists)", (err, indexes) => {
@@ -309,15 +337,6 @@ db.all("PRAGMA index_list(allowed_playlists)", (err, indexes) => {
         });
     }
 });
-
-// Clean up duplicate allowed_playlists rows with NULL class_id (caused by old bug)
-db.run(`DELETE FROM allowed_playlists WHERE id NOT IN (
-    SELECT MIN(id) FROM allowed_playlists GROUP BY spotify_playlist_id, COALESCE(class_id, '__NULL__')
-)`, function (err) {
-    if (err) console.error('Error cleaning up duplicate allowed_playlists:', err.message);
-    else if (this.changes) console.log(`Cleaned up ${this.changes} duplicate allowed_playlists row(s)`);
-});
-
 db.run(`CREATE TABLE IF NOT EXISTS custom_playlists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -328,23 +347,30 @@ db.run(`CREATE TABLE IF NOT EXISTS custom_playlists (
     image_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
-)`);
-
-// Migrate: add class_id to custom_playlists if it doesn't exist
-db.all("PRAGMA table_info(custom_playlists)", (err, columns) => {
-    if (!err && columns && !columns.some(c => c.name === 'class_id')) {
-        db.run("ALTER TABLE custom_playlists ADD COLUMN class_id INTEGER", (alterErr) => {
-            if (alterErr) console.error('Error adding class_id to custom_playlists:', alterErr);
-            else console.log('Added class_id column to custom_playlists table');
-        });
+)`, (createErr) => {
+    if (createErr) {
+        console.error('Error creating custom_playlists:', createErr.message);
+        return;
     }
 
-    if (!err && columns && !columns.some(c => c.name === 'image_url')) {
-        db.run("ALTER TABLE custom_playlists ADD COLUMN image_url TEXT", (alterErr) => {
-            if (alterErr) console.error('Error adding image_url to custom_playlists:', alterErr);
-            else console.log('Added image_url column to custom_playlists table');
-        });
-    }
+    // Migrate: add class_id / image_url to custom_playlists if they don't exist
+    db.all("PRAGMA table_info(custom_playlists)", (err, columns) => {
+        if (err || !columns) return;
+
+        if (!columns.some(c => c.name === 'class_id')) {
+            db.run("ALTER TABLE custom_playlists ADD COLUMN class_id INTEGER", (alterErr) => {
+                if (alterErr) console.error('Error adding class_id to custom_playlists:', alterErr);
+                else console.log('Added class_id column to custom_playlists table');
+            });
+        }
+
+        if (!columns.some(c => c.name === 'image_url')) {
+            db.run("ALTER TABLE custom_playlists ADD COLUMN image_url TEXT", (alterErr) => {
+                if (alterErr) console.error('Error adding image_url to custom_playlists:', alterErr);
+                else console.log('Added image_url column to custom_playlists table');
+            });
+        }
+    });
 });
 
 // JukePix custom settings per artist/song
@@ -378,9 +404,15 @@ db.run(`CREATE TABLE IF NOT EXISTS jukepix_defaults (
     shield_sound TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
-
-// Insert default row if it doesn't exist
-db.run(`INSERT OR IGNORE INTO jukepix_defaults (id) VALUES (1)`);
+)`, (err) => {
+    if (err) {
+        console.error('Error creating jukepix_defaults:', err.message);
+        return;
+    }
+    // Insert default row if it doesn't exist
+    db.run(`INSERT OR IGNORE INTO jukepix_defaults (id) VALUES (1)`, (insertErr) => {
+        if (insertErr) console.error('Error seeding jukepix_defaults:', insertErr.message);
+    });
+});
 
 module.exports = db;

@@ -6,7 +6,7 @@ const { isOwner, getFirstOwnerId } = require('../utils/owners');
 const { transfer, refund: poolRefund } = require('../utils/transferManager');
 const { READ, playbackRateLimit, executePlaybackRead } = require('../middleware/spotifyPlaybackRateLimit');
 
-const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const FORMBAR_ADDRESS = String(process.env.FORMBAR_ADDRESS || '').replace(/\/+$/, '');
 const POOL_ID = Number(process.env.POOL_ID);
 
 // Validate critical configuration on startup
@@ -172,7 +172,7 @@ router.post('/transfer', playbackRateLimit(READ), async (req, res) => {
             }
         } else if (pendingAction === 'Skip Shield') {
             // Skip Shields are a fixed cost (no discounts)
-            amount = Number(process.env.SKIP_SHIELD) || 75;
+            amount = Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75;
         } else if (pendingAction === 'Ban Vote') {
             // Ban Votes are a fixed cost (no discounts)
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
@@ -460,7 +460,7 @@ router.post('/getAmount', playbackRateLimit(READ), async (req, res) => {
             const queueableCount = await getPlaylistPlayableTrackCount(playlistId, playlistItems);
             amount = computePlaylistCost(queueableCount);
         } else if (pendingAction === 'Skip Shield') {
-            amount = Number(process.env.SKIP_SHIELD) || 75;
+            amount = Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75;
         } else if (pendingAction === 'Ban Vote') {
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else if (pendingAction === 'createPlaylist') {

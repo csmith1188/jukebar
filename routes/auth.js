@@ -4,29 +4,55 @@ const jwt = require('jsonwebtoken');
 const db = require('../utils/database');
 const { setRawToken } = require('./socket');
 
-const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
-const API_KEY = process.env.API_KEY || '';
-const port = process.env.PORT || 5000;
-const URL = process.env.URL || `http://localhost`;
+function stripTrailingSlash(value) {
+    return String(value || '').replace(/\/+$/, '');
+}
+
+/**
+ * Public base URL for OAuth redirects.
+ * On Render, use URL or RENDER_EXTERNAL_URL (https://….onrender.com) — never append
+ * the internal PORT. Locally, URL=http://localhost plus PORT still works.
+ */
+function getPublicBaseUrl() {
+    const configured = stripTrailingSlash(
+        process.env.URL || process.env.RENDER_EXTERNAL_URL || ''
+    );
+    const port = process.env.PORT || 5000;
+
+    if (!configured) {
+        return `http://localhost:${port}`;
+    }
+
+    try {
+        const parsed = new URL(configured);
+        const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+        // Legacy local template used URL=http://localhost without a port.
+        if (isLocal && !parsed.port) {
+            return `${parsed.protocol}//${parsed.hostname}:${port}`;
+        }
+        return stripTrailingSlash(parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname));
+    } catch {
+        return configured;
+    }
+}
+
+const FORMBAR_ADDRESS = stripTrailingSlash(process.env.FORMBAR_ADDRESS);
 const AUTH_URL = `${FORMBAR_ADDRESS}/oauth`;
-const THIS_URL = `${URL}:${port}/login`;
+const THIS_URL = `${getPublicBaseUrl()}/login`;
 
 router.get('/login', (req, res) => {
     if (req.query.token) {
         const rawToken = req.query.token; // Get the actual raw token
         const tokenData = jwt.decode(rawToken);
-        
+
         req.session.token = tokenData;
         req.session.user = tokenData.displayName;
         req.session.permission = tokenData.permissions;
         req.session.rawToken = rawToken;
-        
+
         // Set the token for WebSocket authentication
         setRawToken(rawToken);
-        
-        // console.log('Token data:', tokenData);
-//console.log('User permission:', req.session.permission);
-        
+
         // Update permission level on every login so it's available for ban checks
         db.run("UPDATE users SET permission = ? WHERE id = ?", [tokenData.permissions || 2, tokenData.id]);
 
@@ -66,7 +92,7 @@ router.get('/login', (req, res) => {
             }
         });
     } else {
-        res.redirect(`${AUTH_URL}?redirectURL=${THIS_URL}`);
+        res.redirect(`${AUTH_URL}?redirectURL=${encodeURIComponent(THIS_URL)}`);
     }
 });
 
@@ -75,8 +101,8 @@ function getRawToken(req) {
 }
 
 router.get('/logout', (req, res) => {
-    res.redirect(`${AUTH_URL}?redirectURL=${THIS_URL}`);
+    res.redirect(`${AUTH_URL}?redirectURL=${encodeURIComponent(THIS_URL)}`);
     req.session.destroy();
 });
 
-module.exports = { router, getRawToken };
+module.exports = { router, getRawToken, getPublicBaseUrl };

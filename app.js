@@ -11,8 +11,12 @@ const rateLimit = require('express-rate-limit');
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = Number(process.env.PORT) || 5000;
+const host = process.env.HOST || '0.0.0.0';
 let brokeyEnabled = false;
+
+// Required on Render (and other reverse proxies) so secure cookies and req.ip work.
+app.set('trust proxy', 1);
 const voteBanDevModeEnabled = String(process.env.JUKEBAR_DEV_MODE || '').toLowerCase() === 'true';
 const voteBanMinOnlineUsers = voteBanDevModeEnabled ? 1 : 5;
 
@@ -434,9 +438,9 @@ async function enforceCurrentTrackBanByUri() {
 }
 
 // Formbar Socket.IO connection
-const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const FORMBAR_ADDRESS = String(process.env.FORMBAR_ADDRESS || '').replace(/\/+$/, '');
 const API_KEY = process.env.API_KEY || '';
-const FORMBAR_POLL_BAN_VOTE = process.env.FORMBAR_POLL_BAN_VOTE
+const FORMBAR_POLL_BAN_VOTE = process.env.FORMBAR_POLL_BAN_VOTE;
 
 console.log('=== Formbar Configuration ===');
 console.log('FORMBAR_ADDRESS:', FORMBAR_ADDRESS);
@@ -446,17 +450,22 @@ console.log('JUKEBAR_DEV_MODE:', voteBanDevModeEnabled);
 console.log('Ban vote minimum users:', voteBanMinOnlineUsers);
 console.log('=============================');
 
-const formbarSocket = ioClient(FORMBAR_ADDRESS, {
-    extraHeaders: { api: API_KEY },
-    transports: ['websocket', 'polling'],
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 5
-});
+let formbarSocket = null;
+if (FORMBAR_ADDRESS) {
+    formbarSocket = ioClient(FORMBAR_ADDRESS, {
+        extraHeaders: { api: API_KEY },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5
+    });
 
-console.log('Formbar socket client created, attempting connection...');
-
-setupFormbarSocket(io, formbarSocket, API_KEY);
+    console.log('Formbar socket client created, attempting connection...');
+    setupFormbarSocket(io, formbarSocket, API_KEY);
+} else {
+    console.error('FORMBAR_ADDRESS is not set — Formbar OAuth/socket features will not work.');
+    formbarSocket = { connected: false, id: null, io: null, on() {}, once() {}, off() {}, emit() {} };
+}
 
 // WebSocket connection handling for queue sync
 // Initialize VoteManager
@@ -852,7 +861,7 @@ app.get('/', isAuthenticated, (req, res) => {
             ownerIDs: getOwnerIds(),
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
-            skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
+            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75,
             voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
             createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
             addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
@@ -879,7 +888,7 @@ app.get('/spotify', isAuthenticated, (req, res) => {
             ownerIDs: getOwnerIds(),
             songAmount: Number(process.env.SONG_AMOUNT) || 50,
             skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
-            skipShieldAmount: Number(process.env.SKIP_SHIELD) || 75,
+            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75,
             voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
             createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
             addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
@@ -961,9 +970,9 @@ app.use('/', require('./routes/jukepix'));
 app.use('/', require('./routes/settings'));
 app.use('/', require('./routes/customPlaylists'));
 
-server.listen(port, async () => {
+server.listen(port, host, async () => {
     io.disconnectSockets();
-    console.log(`Server listening at http://localhost:${port}`);
+    console.log(`Server listening on http://${host}:${port}`);
     if (spotifyBackgroundApiEnabled) {
         lastSpotifyDiagnosticsRunAt = Date.now();
         runSpotifyDiagnostics().catch((err) => {

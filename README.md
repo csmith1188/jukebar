@@ -41,14 +41,16 @@ Jukebar is a Node.js classroom jukebox that integrates with Spotify and Formbar.
 
 ```bash
 git clone <repository-url>
-cd Jukebar
+cd jukebar
 ```
 
-2. Install dependencies:
+2. Install dependencies and initialize the database:
 
 ```bash
-npm install
+npm run build
 ```
+
+(`build` runs `npm install` then `npm run migrate`.)
 
 3. Create a `.env` file from `.env-template` and fill in all values (see [Environment Variables](#environment-variables) below).
 
@@ -61,7 +63,7 @@ node spotify.js
 5. Start the app:
 
 ```bash
-node app.js
+npm start
 ```
 
 For development with auto-restart:
@@ -74,6 +76,18 @@ npm run dev
 
 `http://localhost:5000`
 
+## Deploy on Render
+
+1. Connect this repo as a **Web Service** (Node).
+2. **Build Command:** `npm run build`
+3. **Start Command:** `npm start`
+4. Set environment variables from `.env-template`. Important:
+   - `URL` = your public Render URL (e.g. `https://jukebar.onrender.com`) — do **not** append Render’s internal `PORT`
+   - `FORMBAR_ADDRESS` = your Formbar base URL (no trailing slash)
+   - `DATABASE_PATH=/var/data/database.db` if you attach a persistent disk at `/var/data`
+5. Optional: use the included `render.yaml` Blueprint.
+
+Render sets `PORT` and `NODE_ENV=production` for you. The app binds to `0.0.0.0` and trusts the proxy so sessions and Formbar OAuth redirects work.
 
 > **Note:** For more information on hosting locally, go to [Guide](docs/setup.md)
 
@@ -90,10 +104,15 @@ npm run dev
 Use `.env-template` as the source of truth. Key variables:
 
 ```env
+# Server / Render
+NODE_ENV=production
+URL=https://your-service.onrender.com
+DATABASE_PATH=/var/data/database.db
+
 # Formbar
-FORMBAR_ADDRESS=http://localhost:420
+FORMBAR_ADDRESS=https://formbar.yorktechapps.com
+FORMBAR_SESSION_SECRET=...
 API_KEY=your_formbar_api_key
-URL=http://localhost
 POOL_ID=your_pool_id
 OWNER_ID=comma_separated_owner_ids
 OWNER_PIN=first_owner_pin
@@ -119,9 +138,6 @@ JUKEPIX_ENABLED=false
 JUKEPIX_URL=http://localhost:421
 JUKEPIX_API_KEY=...
 JUKEPIX_LENGTH=100
-
-# Optional
-PORT=5000
 ```
 
 ## Default Pricing

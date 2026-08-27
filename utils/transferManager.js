@@ -16,7 +16,7 @@
 require('dotenv').config({ quiet: true });
 const socketManager = require('./socketManager');
 
-const FORMBAR_ADDRESS = process.env.FORMBAR_ADDRESS;
+const FORMBAR_ADDRESS = String(process.env.FORMBAR_ADDRESS || '').replace(/\/+$/, '');
 const POOL_ID = Number(process.env.POOL_ID);
 
 /**
