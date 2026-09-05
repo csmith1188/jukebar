@@ -1,5 +1,27 @@
 [
     {
+        "version": "3.0.0",
+        "releaseDate": "09/08/26",
+        "changes": [
+            {
+                "type": "feature",
+                "text": "Welcome to Jukebar 3.0! I got bored last week and decided to make one last Jukebar update before it's officially passed onto the next generation of students (yes I know it technically already was passed on I don't care let me have my moment)"
+            },
+            {
+                "type": "improvement",
+                "text": "Jukebar is now in React! Now you can enjoy Jukebar and it's slightly refined UI! And since it's in react it can do <span class=\"jb-fun-rainbow\">fun stuff like this</span>! <span class=\"jb-fun-pulse\">ooooooooooh</span>! look at this <span class=\"jb-fun-letter\" style=\"animation-delay:0s\">t</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.06s\">e</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.12s\">x</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.18s\">t</span> <span class=\"jb-fun-letter\" style=\"animation-delay:0.3s\">a</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.36s\">n</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.42s\">i</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.48s\">m</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.54s\">a</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.6s\">t</span><span class=\"jb-fun-letter\" style=\"animation-delay:0.66s\">e</span> and do <span class=\"jb-fun-wiggle\">react things</span>! <span class=\"jb-fun-tada\">isnt this fun</span>!"
+            },
+            {
+                "type": "bugfix",
+                "text": "Finally fixed the bug that displayed the wrong persons name when queuing a song that has already been queued"
+            },
+            {
+                "type": "note",
+                "text": "Expect a few more updates to Jukebar every now and then depennds on if I feel like coding or not"
+            }
+        ]
+    },
+    {
         "version": "2.4.0",
         "releaseDate": "04/27/26",
         "changes": [

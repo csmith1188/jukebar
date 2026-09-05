@@ -3,3 +3,5 @@
 db/
 spotify.js
 *.db
+client/node_modules
+client/dist

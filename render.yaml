@@ -5,7 +5,7 @@ services:
     name: jukebar
     runtime: node
     plan: starter
-    buildCommand: npm run build
+buildCommand: npm run build && npm run client:install && npm run client:build
     startCommand: npm start
     healthCheckPath: /api/online-count
     envVars:

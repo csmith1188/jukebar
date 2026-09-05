@@ -19,6 +19,17 @@ function computePlaylistCost(trackCount) {
     return Math.min(trackCount * songAmount, 500);
 }
 
+// First 5 songs on a new custom playlist are included in the flat creation
+// price; each additional song (6th onward) adds a flat surcharge on top.
+const CREATE_PLAYLIST_FREE_SONGS = 5;
+function computeCreatePlaylistCost(songCount) {
+    const base = Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700;
+    const extraPerSong = Number(process.env.CREATE_PLAYLIST_EXTRA_SONG_AMOUNT) || 25;
+    const count = Number.isFinite(songCount) && songCount > 0 ? Math.floor(songCount) : 0;
+    const overage = Math.max(0, count - CREATE_PLAYLIST_FREE_SONGS);
+    return base + overage * extraPerSong;
+}
+
 
 // Returns the top non-owner user IDs ranked by plays in the last 7 days (same source as the leaderboard)
 function getRollingTopUsers() {
@@ -177,7 +188,7 @@ router.post('/transfer', playbackRateLimit(READ), async (req, res) => {
             // Ban Votes are a fixed cost (no discounts)
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else if (pendingAction === 'createPlaylist') {
-            amount = Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700;
+            amount = computeCreatePlaylistCost(Number(req.body?.songCount));
         } else if (pendingAction === 'addPlaylistSong') {
             amount = Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100;
         } else if (pendingAction === 'removePlaylistSong') {
@@ -245,6 +256,7 @@ router.post('/transfer', playbackRateLimit(READ), async (req, res) => {
                     amount: Number(amount),
                     pendingAction: pendingAction || null,
                     playlistId: (pendingAction === 'playlist' || pendingAction === 'addPlaylistSong' || pendingAction === 'removePlaylistSong' || pendingAction === 'customPlaylistPlay') ? String(playlistId || '') : null,
+                    songCount: pendingAction === 'createPlaylist' ? (Number.isFinite(Number(req.body?.songCount)) ? Math.floor(Number(req.body.songCount)) : 0) : null,
                     at: Date.now()
                 };
             return req.session.save((err) => {
@@ -464,7 +476,7 @@ router.post('/getAmount', playbackRateLimit(READ), async (req, res) => {
         } else if (pendingAction === 'Ban Vote') {
             amount = Number(process.env.VOTE_BAN_AMOUNT) || 500;
         } else if (pendingAction === 'createPlaylist') {
-            amount = Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700;
+            amount = computeCreatePlaylistCost(Number(req.body?.songCount));
         } else if (pendingAction === 'addPlaylistSong') {
             amount = Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100;
         } else if (pendingAction === 'removePlaylistSong') {

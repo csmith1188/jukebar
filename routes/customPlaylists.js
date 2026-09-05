@@ -21,6 +21,19 @@ const ADD_PLAYLIST_SONG_AMOUNT = () => Number(process.env.ADD_PLAYLIST_SONG_AMOU
 const REMOVE_PLAYLIST_SONG_AMOUNT = () => Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50;
 const CUSTOM_PLAYLIST_PLAY_AMOUNT = () => Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250;
 const INITIAL_FREE_SONGS = 5;
+// Songs 6+ on a new playlist cost extra (see routes/payment.js computeCreatePlaylistCost,
+// which this mirrors) — this cap just guards against an unreasonably large
+// one-shot playlist / Spotify API payload, not a pricing rule.
+const MAX_PLAYLIST_CREATE_SONGS = 30;
+// No point letting anyone create an empty (or single-song) "playlist" — the
+// client also enforces this before you can even hit Create.
+const MIN_PLAYLIST_CREATE_SONGS = 2;
+const CREATE_PLAYLIST_EXTRA_SONG_AMOUNT = () => Number(process.env.CREATE_PLAYLIST_EXTRA_SONG_AMOUNT) || 25;
+function computeCreatePlaylistCost(songCount) {
+    const count = Number.isFinite(songCount) && songCount > 0 ? Math.floor(songCount) : 0;
+    const overage = Math.max(0, count - INITIAL_FREE_SONGS);
+    return CREATE_PLAYLIST_AMOUNT() + overage * CREATE_PLAYLIST_EXTRA_SONG_AMOUNT();
+}
 
 function isValidTrackUri(uri) {
     return typeof uri === 'string' && /^spotify:track:[a-zA-Z0-9]{22}$/.test(uri);
@@ -239,6 +252,8 @@ router.post('/api/custom-playlists/create', isAuthenticated, async (req, res) =>
         }
     }
 
+    const paidSongCount = req.session?.payment?.songCount;
+
     const userBanned = await getUserBanned(userId).catch(() => false);
     if (userBanned) return res.status(403).json({ ok: false, error: 'You have been banned from using Jukebar.' });
 
@@ -249,8 +264,20 @@ router.post('/api/custom-playlists/create', isAuthenticated, async (req, res) =>
         return res.status(400).json({ ok: false, error: 'Playlist name must be between 1 and 100 characters' });
     }
 
-    if (!Array.isArray(trackUris) || trackUris.length > INITIAL_FREE_SONGS) {
-        return res.status(400).json({ ok: false, error: `You can add up to ${INITIAL_FREE_SONGS} songs on creation` });
+    if (!Array.isArray(trackUris) || trackUris.length > MAX_PLAYLIST_CREATE_SONGS) {
+        return res.status(400).json({ ok: false, error: `You can add up to ${MAX_PLAYLIST_CREATE_SONGS} songs when creating a playlist` });
+    }
+
+    if (trackUris.length < MIN_PLAYLIST_CREATE_SONGS) {
+        return res.status(400).json({ ok: false, error: `Add at least ${MIN_PLAYLIST_CREATE_SONGS} songs to create a playlist` });
+    }
+
+    // The amount charged in /transfer was computed from the song count the
+    // client reported at payment time — make sure it still matches what's
+    // actually being submitted here, so nobody can pay for 5 songs and then
+    // slip in more for free.
+    if (!userIsOwner && Number(paidSongCount) !== trackUris.length) {
+        return res.status(409).json({ ok: false, error: 'Payment does not match the number of songs in this playlist. Please try again.' });
     }
 
     // Validate track URIs before creating the playlist to avoid creating empty playlists if validation fails
@@ -319,7 +346,7 @@ router.post('/api/custom-playlists/create', isAuthenticated, async (req, res) =>
             trackURI: null,
             trackName: trimmedName,
             artistName: `${trackUris.length} initial track(s)`,
-            cost: userIsOwner ? 0 : CREATE_PLAYLIST_AMOUNT()
+            cost: userIsOwner ? 0 : computeCreatePlaylistCost(trackUris.length)
         }).catch(err => console.error('[custom-playlists:create] log failed:', err));
 
         req.session.save(() => {
@@ -574,6 +601,60 @@ router.post('/api/custom-playlists/remove-song', isAuthenticated, async (req, re
     } catch (err) {
         console.error('[custom-playlists:remove-song]', err);
         res.status(500).json({ ok: false, error: 'Failed to remove song from playlist' });
+    }
+});
+
+// Teacher/owner moderation gate — same permission bar as routes/users.js's requireTeacherAccess
+const requireTeacherAccess = (req, res, next) => {
+    if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
+        next();
+    } else {
+        res.status(403).json({ ok: false, error: 'Insufficient permissions' });
+    }
+};
+
+// DELETE /api/custom-playlists/:id — teacher moderation: remove any student's
+// custom playlist from the caller's current class (not just their own).
+router.delete('/api/custom-playlists/:id', isAuthenticated, requireTeacherAccess, async (req, res) => {
+    const playlistDbId = parseInt(req.params.id);
+    if (isNaN(playlistDbId)) return res.status(400).json({ ok: false, error: 'Invalid playlist ID' });
+
+    try {
+        const classId = await getClassId();
+        const playlist = await getCustomPlaylistForClass(playlistDbId, classId);
+        if (!playlist) return res.status(404).json({ ok: false, error: 'Playlist not found' });
+
+        if (playlist.spotify_playlist_id) {
+            try {
+                await ensureSpotifyAccessToken();
+                await fetch(`https://api.spotify.com/v1/playlists/${playlist.spotify_playlist_id}/followers`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${spotifyApi.getAccessToken()}` }
+                });
+            } catch (unfollowErr) {
+                // Not fatal — worst case an orphaned Spotify playlist is left behind,
+                // but it's already gone from Jukebar's database and UI either way.
+                console.warn('[custom-playlists:delete] could not unfollow Spotify playlist:', unfollowErr.message);
+            }
+        }
+
+        await deleteCustomPlaylistById(playlistDbId);
+
+        const username = typeof req.session.user === 'string' ? req.session.user : String(req.session.user || 'Unknown');
+        await logTransaction({
+            userID: req.session?.token?.id,
+            displayName: username,
+            action: 'deletePlaylist',
+            trackURI: null,
+            trackName: playlist.name,
+            artistName: 'Custom Playlist (removed by teacher)',
+            cost: 0
+        }).catch(err => console.error('[custom-playlists:delete] log failed:', err));
+
+        res.json({ ok: true, message: `Deleted playlist "${playlist.name}"` });
+    } catch (err) {
+        console.error('[custom-playlists:delete]', err);
+        res.status(500).json({ ok: false, error: 'Failed to delete playlist' });
     }
 });
 
