@@ -2,6 +2,12 @@ const { isJukepixEnabled } = require('./jukepix');
 const SPOTIFY_IDLE_POLL_ACTIVE_GAP_MS = 8000;
 const SPOTIFY_IDLE_POLL_IDLE_GAP_MS = 120000;
 const SPOTIFY_IDLE_POLL_STABLE_CYCLES = 10;
+/** After this many ms of confirmed zero playback/queue change (regardless of
+ * whether any browser tab is connected), back off further than the normal
+ * 120s idle gap — this is what actually protects against the "left running
+ * overnight" rate-limit scenario. */
+const SPOTIFY_DEEP_IDLE_AFTER_MS = Number(process.env.SPOTIFY_DEEP_IDLE_AFTER_MS) || 30 * 60 * 1000; // 30 min
+const SPOTIFY_DEEP_IDLE_POLL_GAP_MS = Number(process.env.SPOTIFY_DEEP_IDLE_POLL_GAP_MS) || 5 * 60 * 1000; // 5 min
 
 class QueueManager {
     constructor() {
@@ -17,24 +23,46 @@ class QueueManager {
         this.lastSpotifyPlayerFetchAt = 0;
         this._lastPlaybackSignatureForIdle = null;
         this._stablePlaybackObservationCount = 0;
+        /** Unix ms since the current playback+queue signature first became stable; null while unknown/changing. */
+        this._stableSinceMs = null;
     }
 
     getSpotifyPlaybackPollMinGapMs() {
         return this.peekSpotifyPlaybackPollMinGapMs();
     }
 
+    // Deliberately NOT gated on this.clients.size — an idle browser tab left
+    // open (e.g. a classroom PC overnight) keeps a socket connected forever,
+    // and previously that alone was enough to disable backoff entirely and
+    // poll Spotify every 8s all night. Backoff now depends only on whether
+    // playback/queue state has actually stopped changing, so any real
+    // activity (new song, new queue item) still snaps straight back to the
+    // fast 8s cadence for everyone, tab open or not.
     peekSpotifyPlaybackPollMinGapMs() {
-        if (this.clients.size > 0) return SPOTIFY_IDLE_POLL_ACTIVE_GAP_MS;
         if (this._stablePlaybackObservationCount >= SPOTIFY_IDLE_POLL_STABLE_CYCLES) {
+            if (this._stableSinceMs && (Date.now() - this._stableSinceMs) >= SPOTIFY_DEEP_IDLE_AFTER_MS) {
+                return SPOTIFY_DEEP_IDLE_POLL_GAP_MS;
+            }
             return SPOTIFY_IDLE_POLL_IDLE_GAP_MS;
         }
         return SPOTIFY_IDLE_POLL_ACTIVE_GAP_MS;
     }
 
-    // No Socket.IO subscribers and queue snapshot unchanged for STABLE_CYCLES.
+    // Playback/queue snapshot unchanged for STABLE_CYCLES — used to slow the
+    // diagnostics loop in app.js the same way. No longer tied to whether any
+    // Socket.IO clients are connected (see comment above).
     isSpotifyPlaybackPollLongIdleBackoff() {
-        return this.clients.size === 0 &&
-            this._stablePlaybackObservationCount >= SPOTIFY_IDLE_POLL_STABLE_CYCLES;
+        return this._stablePlaybackObservationCount >= SPOTIFY_IDLE_POLL_STABLE_CYCLES;
+    }
+
+    isSpotifyPlaybackPollDeepIdleBackoff() {
+        return this.isSpotifyPlaybackPollLongIdleBackoff()
+            && this._stableSinceMs
+            && (Date.now() - this._stableSinceMs) >= SPOTIFY_DEEP_IDLE_AFTER_MS;
+    }
+
+    getSpotifyDeepIdlePollGapMs() {
+        return SPOTIFY_DEEP_IDLE_POLL_GAP_MS;
     }
 
     _recordIdlePlaybackObservation(currentUriKey, queueUris) {
@@ -44,9 +72,14 @@ class QueueManager {
         } else {
             this._lastPlaybackSignatureForIdle = signature;
             this._stablePlaybackObservationCount = 1;
+            this._stableSinceMs = Date.now();
         }
     }
 
+    // Fallback only — used if the middleware require below ever fails.
+    // Normally the middleware's own exponential-backoff calculation (which
+    // escalates on repeated consecutive 429s, capped at SPOTIFY_MAX_BACKOFF_MS)
+    // is the single source of truth for how long to wait.
     getRetryDelayMs(retryAfterHeaderValue) {
         const retryAfterSeconds = Number.parseInt(String(retryAfterHeaderValue || ''), 10);
         if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
@@ -56,15 +89,27 @@ class QueueManager {
     }
 
     setSpotifyCooldown(retryAfterHeaderValue, source = 'spotify') {
-        const delayMs = this.getRetryDelayMs(retryAfterHeaderValue);
-        this.spotifyRateLimitedUntil = Date.now() + delayMs;
-        console.warn(`[queue-sync] ${source} rate limited (429). Cooling down for ${Math.ceil(delayMs / 1000)}s`);
+        let delayMs;
         try {
             const { setSpotifyPlaybackCooldown, READ } = require('../middleware/spotifyPlaybackRateLimit');
-            setSpotifyPlaybackCooldown(READ, retryAfterHeaderValue, `queueManager:${source}`);
+            // Shared with runSpotifyDiagnostics/enforceCurrentTrackBanByUri in
+            // app.js so ALL background jobs back off together, not just sync.
+            delayMs = setSpotifyPlaybackCooldown(READ, retryAfterHeaderValue, `queueManager:${source}`);
         } catch (err) {
             // Avoid hard dependency cycle failures in queue sync path.
+            delayMs = this.getRetryDelayMs(retryAfterHeaderValue);
         }
+        this.spotifyRateLimitedUntil = Date.now() + delayMs;
+        console.warn(`[queue-sync] ${source} rate limited (429). Cooling down for ${Math.ceil(delayMs / 1000)}s`);
+    }
+
+    // Align this loop's local skip-flag with the shared middleware cooldown
+    // without incrementing the consecutive-429 counter (e.g. after another
+    // background job already recorded a 429, or brokey applied a floor).
+    extendSpotifyCooldownMs(delayMs) {
+        const waitMs = Math.max(0, Number(delayMs) || 0);
+        if (waitMs <= 0) return;
+        this.spotifyRateLimitedUntil = Math.max(this.spotifyRateLimitedUntil, Date.now() + waitMs);
     }
 
     // Update currently playing track
@@ -333,7 +378,7 @@ class QueueManager {
                 const db = require('./database');
                 const currentMetadata = await new Promise((resolve, reject) => {
                     db.get(
-                        'SELECT * FROM queue_metadata WHERE track_uri = ? ORDER BY added_at ASC LIMIT 1',
+                        'SELECT * FROM queue_metadata WHERE track_uri = ? ORDER BY added_at DESC LIMIT 1',
                         [currentUri],
                         (err, row) => {
                             if (err) reject(err);
@@ -505,6 +550,15 @@ class QueueManager {
     // Periodic Spotify sync (interval configured in app.js)
     async syncWithSpotify(spotifyApi) {
         try {
+            try {
+                const { getSpotifyPlaybackCooldownMs, READ } = require('../middleware/spotifyPlaybackRateLimit');
+                const sharedRemaining = getSpotifyPlaybackCooldownMs(READ);
+                if (sharedRemaining > 0) {
+                    this.extendSpotifyCooldownMs(sharedRemaining);
+                }
+            } catch (err) {
+                // Non-fatal — avoid hard dependency cycle failures in queue sync path.
+            }
             if (Date.now() < this.spotifyRateLimitedUntil) {
                 return {
                     currentTrack: this.currentTrack,
@@ -566,6 +620,15 @@ class QueueManager {
             const idleQueueUris = queueTracks.map(t => t.uri).filter(Boolean);
             this._recordIdlePlaybackObservation(idleCurrentUriKey, idleQueueUris);
             this.lastSpotifyPlayerFetchAt = Date.now();
+            // Confirmed a clean (non-429) response — reset the shared exponential
+            // backoff counter so a past rate-limit episode doesn't keep escalating
+            // wait times long after Spotify has actually recovered.
+            try {
+                const { resetSpotifyPlaybackBackoff, READ } = require('../middleware/spotifyPlaybackRateLimit');
+                resetSpotifyPlaybackBackoff(READ);
+            } catch (err) {
+                // Non-fatal — avoid hard dependency cycle failures in queue sync path.
+            }
 
             // Detect track change - clean up metadata for PREVIOUS track ONLY if it's finished (not in queue and not currently playing)
             if (currentTrack && currentTrack.uri) {

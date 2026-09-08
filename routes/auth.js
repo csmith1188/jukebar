@@ -75,19 +75,19 @@ router.get('/login', (req, res) => {
 //console.log('New user added to database');
                             }
                         });
-                        const redirectTo = req.query.redirectURL || '/spotify';
+                        const redirectTo = req.query.redirectURL || '/app/player';
                         res.redirect(redirectTo);
                     }
                 });
             } else if (err && err.message.includes('UNIQUE constraint failed')) {
-                const redirectTo = req.query.redirectURL || '/spotify';
+                const redirectTo = req.query.redirectURL || '/app/player';
                 res.redirect(redirectTo);
             } else if (err) {
                 console.error('Database error:', err.message);
                 res.status(500).send('Database error');
             } else {
 //console.log('New user added to database');
-                const redirectTo = req.query.redirectURL || '/spotify';
+                const redirectTo = req.query.redirectURL || '/app/player';
                 res.redirect(redirectTo);
             }
         });

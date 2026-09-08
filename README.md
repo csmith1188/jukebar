@@ -24,8 +24,20 @@ Jukebar is a Node.js classroom jukebox that integrates with Spotify and Formbar.
     - Per-artist and per-song overrides
     - Configurable skip/shield sound selection
 - **Spotify diagnostics** endpoint for teachers
-- **SQLite persistence** for users, queue metadata, bans, transactions, playlists, and skip activity
+- **SQLite persistence** for users, queue metadata, bans, transactions, and playlists
 - **In-app changelog** loaded from `changelog.json`
+
+## Architecture
+
+- **Server:** Express (`app.js` + `routes/`) — REST API, Socket.IO, Formbar OAuth/session auth, Spotify integration, SQLite persistence.
+- **Front end:** React + Vite + antd, in `client/`, built to `client/dist` and served by Express at `/app/*`. No server-rendered HTML/EJS remains; the server only hands the SPA JSON (`/api/me`, `/api/queue`, etc.) and the SPA renders everything client-side.
+
+| React page (`client/src/pages/`) | Route | Purpose |
+|---|---|---|
+| `PlayerPage.jsx` | `/app/player` | Search, queue, now playing, playlists sidebar |
+| `TeacherPage.jsx` | `/app/teacher` | User/ban moderation, playlist allowlist, transactions |
+| `SettingsPage.jsx` | `/app/settings` | JukePix defaults/overrides |
+| `LeaderboardPage.jsx` | `/app/leaderboard` | Weekly song leaderboard |
 
 ## Prerequisites
 
@@ -52,15 +64,24 @@ npm run build
 
 (`build` runs `npm install` then `npm run migrate`.)
 
-3. Create a `.env` file from `.env-template` and fill in all values (see [Environment Variables](#environment-variables) below).
+3. Install and build the React front end (served at `/app/*`):
 
-4. Set up Spotify credentials — see [`setup.md`](docs/setup.md) for a step-by-step guide. Use `spotify.js` to generate your refresh token:
+```bash
+npm run client:install
+npm run client:build
+```
+
+(`client:install` runs `npm install` inside `client/`; `client:build` runs `vite build`, producing `client/dist`. Re-run `client:build` any time you pull changes to `client/src`. Without a build, `/app/*` returns a 503 telling you to build it.)
+
+4. Create a `.env` file from `.env-template` and fill in all values (see [Environment Variables](#environment-variables) below).
+
+5. Set up Spotify credentials — see [`setup.md`](docs/setup.md) for a step-by-step guide. Use `spotify.js` to generate your refresh token:
 
 ```bash
 node spotify.js
 ```
 
-5. Start the app:
+6. Start the app:
 
 ```bash
 npm start
@@ -72,7 +93,15 @@ For development with auto-restart:
 npm run dev
 ```
 
-6. Open in browser:
+For front-end development with hot reload, keep the Express server running and, in a second terminal, run the Vite dev server:
+
+```bash
+npm run client:dev
+```
+
+Vite proxies `/api`, `/socket.io`, `/login`, `/logout`, `/img`, and `/styles.css` to the Express server (see `client/vite.config.js`), so open `http://localhost:5173/app/player` instead of `:5000` while iterating on `client/src`.
+
+7. Open in browser:
 
 `http://localhost:5000`
 
@@ -93,11 +122,25 @@ Render sets `PORT` and `NODE_ENV=production` for you. The app binds to `0.0.0.0`
 
 ## Pages
 
+The front end is a React SPA (`client/`, built with Vite) served by Express at `/app/*`. There is no server-rendered HTML beyond that shell — EJS templates have been removed entirely.
+
 | Route | Description | Access |
 |---|---|---|
-| `/` or `/spotify` | Main jukebox player | Authenticated users |
-| `/leaderboard` | Song leaderboard | Authenticated users |
-| `/teacher` | Teacher control panel | Permission ≥ 4 or owner |
+| `/app/player` | Main jukebox player | Authenticated users |
+| `/app/leaderboard` | Song leaderboard | Authenticated users |
+| `/app/teacher` | Teacher control panel | Permission ≥ 4 or owner |
+| `/app/settings` | JukePix settings (linked from the Teacher page's gear icon) | Permission ≥ 4 or owner |
+
+Old pre-React paths still work and just redirect into the SPA, so existing bookmarks/links don't break:
+
+| Old path | Redirects to |
+|---|---|
+| `/` | `/app/player` |
+| `/player` | `/app/player` |
+| `/spotify` | `/app/player` |
+| `/settings` | `/app/settings` |
+| `/leaderboard` | `/app/leaderboard` |
+| `/teacher` | `/app/teacher` (or `/` if not a teacher/owner) |
 
 ## Environment Variables
 
@@ -122,6 +165,12 @@ SPOTIFY_CLIENT_ID=...
 SPOTIFY_CLIENT_SECRET=...
 SPOTIFY_REFRESH_TOKEN=...
 SPOTIFY_SCOPES=user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-private
+# Optional polling / backoff (defaults shown; omit to use them)
+# SPOTIFY_BACKGROUND_API=true
+# SPOTIFY_DEEP_IDLE_AFTER_MS=1800000
+# SPOTIFY_DEEP_IDLE_POLL_GAP_MS=300000
+# SPOTIFY_MAX_BACKOFF_MS=900000
+# SPOTIFY_BROKEY_MIN_COOLDOWN_MS=60000
 
 # Pricing
 SONG_AMOUNT=50
@@ -222,16 +271,16 @@ All values are environment-driven and can be changed in `.env`.
 - `GET /api/me/banned` — check if current user is banned
 - `GET /api/queueHistory` — paginated play history with album art (teacher)
 - `POST /api/users/transactions` — get transaction history for a user (teacher)
-- `POST /api/users/transactions/modal` — transaction history as HTML partial (teacher)
 - `GET /api/banned-songs` — list banned songs (teacher)
 
 ### Leaderboard
 
-- `GET /api/leaderboard`
-- `GET /api/leaderboard/last-reset`
-- `GET /api/leaderboard/update`
-- `GET /api/leaderboard/auto-check`
-- `POST /api/leaderboard/force-reset`
+- `GET /api/leaderboard` — songs played per user over the last 7 days (weekly window, not a stored/reset counter)
+
+### React Front End
+
+- `GET /api/me` — session/config JSON for the React SPA (permissions, pricing, owner IDs, changelog, feature flags, etc.) — the React equivalent of what the old EJS templates got as server-rendered locals
+- `GET /api/queue` — current queue/now-playing state, for prefetching on SPA boot (same shape as the `requestQueueUpdate` Socket.IO event)
 
 ### JukePix and Settings
 
@@ -277,6 +326,7 @@ All values are environment-driven and can be changed in `.env`.
 - Ban votes require at least **5 users online** to start.
 - Playlists and custom playlists are scoped to the current Formbar class ID.
 - Spotify's Development Mode limits apps to **10 users**. Apply for Extended Quota Mode to remove this limit.
+- Background Spotify polling (queue sync + diagnostics) backs off when playback/queue is unchanged — 8s while active, 120s after ~10 stable cycles, then 5 minutes after 30 minutes of silence — even if a browser tab stays connected. Repeated 429s escalate exponentially up to 15 minutes (`SPOTIFY_MAX_BACKOFF_MS`). Teachers can still kill background polling from the Teacher page.
 - The `spotify.js` script generates a Spotify refresh token. Credentials are loaded from `.env` — never hardcode them.
 - The batch `GET /tracks` Spotify endpoint was removed for Development Mode apps in February 2026. Track lookups use individual `GET /tracks/{id}` calls.
 
