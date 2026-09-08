@@ -21,12 +21,7 @@ const ADD_PLAYLIST_SONG_AMOUNT = () => Number(process.env.ADD_PLAYLIST_SONG_AMOU
 const REMOVE_PLAYLIST_SONG_AMOUNT = () => Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50;
 const CUSTOM_PLAYLIST_PLAY_AMOUNT = () => Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250;
 const INITIAL_FREE_SONGS = 5;
-// Songs 6+ on a new playlist cost extra (see routes/payment.js computeCreatePlaylistCost,
-// which this mirrors) — this cap just guards against an unreasonably large
-// one-shot playlist / Spotify API payload, not a pricing rule.
 const MAX_PLAYLIST_CREATE_SONGS = 30;
-// No point letting anyone create an empty (or single-song) "playlist" — the
-// client also enforces this before you can even hit Create.
 const MIN_PLAYLIST_CREATE_SONGS = 2;
 const CREATE_PLAYLIST_EXTRA_SONG_AMOUNT = () => Number(process.env.CREATE_PLAYLIST_EXTRA_SONG_AMOUNT) || 25;
 function computeCreatePlaylistCost(songCount) {
