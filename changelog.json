@@ -1,11 +1,11 @@
 [
     {
         "version": "3.0.0",
-        "releaseDate": "09/08/26",
+        "releaseDate": "09/09/26",
         "changes": [
             {
                 "type": "feature",
-                "text": "Welcome to Jukebar 3.0! I got bored last week and decided to make one last Jukebar update before it's officially passed onto the next generation of students (yes I know it technically already was passed on I don't care let me have my moment)"
+                "text": "Welcome to Jukebar 3.0! I got bored last week and decided to make another Jukebar update so, here it is!"
             },
             {
                 "type": "improvement",
