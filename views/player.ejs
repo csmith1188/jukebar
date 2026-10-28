@@ -871,7 +871,7 @@
                     let currentSearchResults = { tracks: [], artists: [], albums: [] };
                     let activeSearchFilter = 'all';
                     let searchHasMore = false;
-                    const SEARCH_SUBMIT_COOLDOWN_MS = 700;
+                    const SEARCH_SUBMIT_COOLDOWN_MS = 1000;
                     let mainSearchInFlight = false;
                     let mainSearchLastAt = 0;
                     let createPlaylistSearchInFlight = false;
@@ -1245,6 +1245,10 @@
                             }
                         } catch (error) {
                             console.error('Error searching Spotify:', error);
+                            const tabsEl = document.getElementById('searchFilterTabs');
+                            if (tabsEl) tabsEl.style.display = 'none';
+                            document.getElementById('searchResults').innerHTML =
+                                '<p style="color:#ff8a8a;padding:8px 0;">Search failed. Please check your connection and try again.</p>';
                         } finally {
                             mainSearchInFlight = false;
                         }
@@ -2260,7 +2264,7 @@
 
                 // Custom playlist modals live outside the main IIFE; their search throttles must too
                 // Separate delay/state tracking prevents search spam across multiple modal contexts
-                const SEARCH_SUBMIT_COOLDOWN_MS = 700;
+                const SEARCH_SUBMIT_COOLDOWN_MS = 1000;
                 let createPlaylistSearchInFlight = false;
                 let createPlaylistSearchLastAt = 0;
                 let addSongSearchInFlight = false;
@@ -3118,8 +3122,11 @@
                         });
                         const data = await res.json();
                         const items = data.tracks?.items || [];
-                        if (!data.ok || !items.length) {
-                            resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No results.</p>';
+                        if (!res.ok || !data.ok || !items.length) {
+                            const message = (res.ok && data.ok)
+                                ? 'No results.'
+                                : (data.error || 'Search failed. Please try again.');
+                            resultsEl.innerHTML = `<p style="color:${res.ok && data.ok ? '#b3b3b3' : '#ff5555'};text-align:center;padding:8px;">${escapeHtml(message)}</p>`;
                             return;
                         }
                         createPlaylistSearchNextOffset =
@@ -3460,8 +3467,11 @@
                         });
                         const data = await res.json();
                         const items = data.tracks?.items || [];
-                        if (!data.ok || !items.length) {
-                            resultsEl.innerHTML = '<p style="color:#b3b3b3;text-align:center;padding:8px;">No results.</p>';
+                        if (!res.ok || !data.ok || !items.length) {
+                            const message = (res.ok && data.ok)
+                                ? 'No results.'
+                                : (data.error || 'Search failed. Please try again.');
+                            resultsEl.innerHTML = `<p style="color:${res.ok && data.ok ? '#b3b3b3' : '#ff5555'};text-align:center;padding:8px;">${escapeHtml(message)}</p>`;
                             return;
                         }
                         addSongSearchNextOffset = typeof data.nextOffset === 'number' ? data.nextOffset : 0;
