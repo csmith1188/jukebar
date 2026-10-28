@@ -17,6 +17,16 @@ const cooldownUntilByCategory = {
     [READ]: 0,
     [MODIFY]: 0
 };
+// Consecutive-429 counters + exponential backoff cap. Every background job
+// (queue sync, diagnostics loop, ban enforcer) shares this same state via
+// setSpotifyPlaybackCooldown/resetSpotifyPlaybackBackoff, so repeated 429s
+// escalate the wait instead of retrying at full speed forever, and a single
+// confirmed success resets it back to normal.
+const consecutive429CountByCategory = {
+    [READ]: 0,
+    [MODIFY]: 0
+};
+const SPOTIFY_MAX_BACKOFF_MS = Number(process.env.SPOTIFY_MAX_BACKOFF_MS) || 15 * 60 * 1000; // 15 min cap
 const inFlightReads = new Map();
 const modifyQueues = new Map();
 
@@ -40,16 +50,40 @@ function parseRetryAfterMs(retryAfterHeaderValue) {
     }
     return 10000;
 }
-// Sets a cooldown for the specified category based on the Retry-After header value, and logs the cooldown duration and source
+// Sets a cooldown for the specified category based on the Retry-After header
+// value, escalating exponentially on consecutive 429s (capped at
+// SPOTIFY_MAX_BACKOFF_MS) instead of always retrying at the same flat delay.
+// Logs the cooldown duration, escalation count, and source.
 function setSpotifyPlaybackCooldown(category, retryAfterHeaderValue, source = 'spotify') {
-    const waitMs = parseRetryAfterMs(retryAfterHeaderValue);
+    const baseMs = parseRetryAfterMs(retryAfterHeaderValue);
+    const attempt = (consecutive429CountByCategory[category] || 0) + 1;
+    consecutive429CountByCategory[category] = attempt;
+    const waitMs = Math.min(baseMs * (2 ** (attempt - 1)), SPOTIFY_MAX_BACKOFF_MS);
     cooldownUntilByCategory[category] = nowMs() + waitMs;
-    console.warn(`[playback-rate-limit] ${category} cooldown for ${Math.ceil(waitMs / 1000)}s (${source})`);
+    console.warn(`[playback-rate-limit] ${category} cooldown for ${Math.ceil(waitMs / 1000)}s (attempt #${attempt}, ${source})`);
     return waitMs;
+}
+
+// Call after a confirmed successful (non-429) Spotify response so a past
+// rate-limit episode doesn't keep escalating wait times after recovery.
+function resetSpotifyPlaybackBackoff(category) {
+    consecutive429CountByCategory[category] = 0;
 }
 
 function getSpotifyPlaybackCooldownMs(category) {
     return Math.max(0, cooldownUntilByCategory[category] - nowMs());
+}
+
+// Extends the remaining cooldown to at least minMs without incrementing the
+// consecutive-429 counter. Used by brokey-mode's floor so a confirmed 429
+// that already recorded backoff isn't counted a second time.
+function ensureSpotifyPlaybackCooldownFloor(category, minMs, source = 'spotify') {
+    const remaining = getSpotifyPlaybackCooldownMs(category);
+    const floorMs = Math.max(0, Number(minMs) || 0);
+    if (remaining >= floorMs) return remaining;
+    cooldownUntilByCategory[category] = nowMs() + floorMs;
+    console.warn(`[playback-rate-limit] ${category} cooldown floor ${Math.ceil(floorMs / 1000)}s (${source})`);
+    return floorMs;
 }
 // Middleware to enforce rate limits on Spotify playback-related requests using the token buckets 
 function consumeToken(category, requesterKey) {
@@ -131,7 +165,9 @@ async function executePlaybackRead(req, operationKey, run) {
 
     const promise = (async () => {
         try {
-            return await run();
+            const result = await run();
+            resetSpotifyPlaybackBackoff(READ);
+            return result;
         } catch (error) {
             if (isSpotify429(error)) {
                 setSpotifyPlaybackCooldown(READ, getRetryAfterFromError(error), operationKey);
@@ -157,7 +193,9 @@ async function executePlaybackModify(req, operationKey, run) {
 
     await previous;
     try {
-        return await run();
+        const result = await run();
+        resetSpotifyPlaybackBackoff(MODIFY);
+        return result;
     } catch (error) {
         if (isSpotify429(error)) {
             setSpotifyPlaybackCooldown(MODIFY, getRetryAfterFromError(error), operationKey);
@@ -178,6 +216,8 @@ module.exports = {
     executePlaybackRead,
     executePlaybackModify,
     setSpotifyPlaybackCooldown,
+    resetSpotifyPlaybackBackoff,
+    ensureSpotifyPlaybackCooldownFloor,
     getSpotifyPlaybackCooldownMs,
     getRetryAfterFromError,
     isSpotify429

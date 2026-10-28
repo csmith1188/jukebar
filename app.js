@@ -14,6 +14,12 @@ const app = express();
 const port = Number(process.env.PORT) || 5000;
 const host = process.env.HOST || '0.0.0.0';
 let brokeyEnabled = false;
+/** Exposed via /api/me so the client's boot screen can wait on real Spotify
+ * queue init instead of guessing — true immediately if Spotify isn't even
+ * configured (nothing to wait for), flips true once the startup
+ * initializeQueue() below settles (success or failure — we don't want a
+ * Spotify hiccup to strand users on the boot screen forever). */
+let spotifyQueueReady = !process.env.SPOTIFY_CLIENT_ID;
 
 // Required on Render (and other reverse proxies) so secure cookies and req.ip work.
 app.set('trust proxy', 1);
@@ -38,7 +44,6 @@ const io = new Server(server);
 // Make io accessible from routes via req.app.get('io')
 app.set('io', io);
 
-app.set('view engine', 'ejs');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
@@ -48,7 +53,7 @@ const sessionMiddleware = session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // true on HTTPS in production
+        secure: 'auto', // sets Secure only when the request is actually HTTPS (respects trust proxy)
         httpOnly: true,
         sameSite: 'lax', // helps mitigate CSRF for top-level navigation
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -70,7 +75,7 @@ const userRoutes = require('./routes/users');
 const queueManager = require('./utils/queueManager');
 const { setupFormbarSocket, getCurrentClassroom } = require('./routes/socket');
 const { spotifyApi, ensureSpotifyAccessToken } = require('./utils/spotify');
-const { READ, playbackRateLimit, executePlaybackRead, setSpotifyPlaybackCooldown, getRetryAfterFromError, isSpotify429 } = require('./middleware/spotifyPlaybackRateLimit');
+const { READ, MODIFY, playbackRateLimit, executePlaybackRead, setSpotifyPlaybackCooldown, ensureSpotifyPlaybackCooldownFloor, getSpotifyPlaybackCooldownMs, getRetryAfterFromError, isSpotify429 } = require('./middleware/spotifyPlaybackRateLimit');
 const path = require('path');
 const fs = require('fs');
 
@@ -91,10 +96,25 @@ function reloadSocketSession(socket) {
     });
 }
 
+// Below this, brokey mode used to be a passive status flag only ("do not
+// block the UI" — see comment near voteBanDevModeEnabled). It now also
+// forces a minimum shared cooldown floor on every call, so a confirmed
+// Spotify 429 actually throttles the background sync/diagnostics/ban-
+// enforcer loops instead of just being logged and immediately retried.
+const BROKEY_MIN_COOLDOWN_MS = Number(process.env.SPOTIFY_BROKEY_MIN_COOLDOWN_MS) || 60 * 1000; // 60s
+
 function enableBrokey(reason = 'unknown') {
-    if (brokeyEnabled) return;
-    brokeyEnabled = true;
-    console.error(`[brokey] Enabled due to: ${reason}`);
+    if (!brokeyEnabled) {
+        brokeyEnabled = true;
+        console.error(`[brokey] Enabled due to: ${reason}`);
+    }
+    // Floor only — do not increment the consecutive-429 counter again.
+    // The 429 that tripped brokey already recorded backoff; this just
+    // guarantees background loops sit out at least BROKEY_MIN_COOLDOWN_MS.
+    if (getSpotifyPlaybackCooldownMs(READ) < BROKEY_MIN_COOLDOWN_MS) {
+        ensureSpotifyPlaybackCooldownFloor(READ, BROKEY_MIN_COOLDOWN_MS, `brokey:${reason}`);
+        queueManager.extendSpotifyCooldownMs(BROKEY_MIN_COOLDOWN_MS);
+    }
 }
 
 function isBrokeyEnabled() {
@@ -121,6 +141,77 @@ function getLimiterRetryAfterSeconds(req) {
     return Math.max(1, toRetryAfterSeconds(resetMs - Date.now()));
 }
 
+function renderRateLimitPage({ title, message, retryAfterSeconds }) {
+    const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <link rel="icon" type="image/png" href="/img/brokey.png" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .wrap {
+      max-width: 920px;
+    }
+    .msg {
+      font-size: 2rem;
+      line-height: 1.35;
+      margin: 0 0 10px;
+    }
+    .timer {
+      font-size: 1.1rem;
+      color: rgba(255, 255, 255, 0.85);
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <p class="msg">${escapeHtml(message)}</p>
+    <p class="timer">Retry in <strong id="retrySeconds">${Number(retryAfterSeconds) || 0}</strong>s</p>
+  </main>
+
+  <script>
+    // Countdown timer for the rate limit page. Reload the page when time expires
+    (function startCountdown() {
+      var el = document.getElementById('retrySeconds');
+      if (!el) return;
+      var remaining = Number(el.textContent) || 0;
+      function tick() {
+        if (remaining <= 0) {
+          el.textContent = '0';
+          window.location.reload();
+          return;
+        }
+        remaining -= 1;
+        el.textContent = String(remaining);
+        window.setTimeout(tick, 1000);
+      }
+      window.setTimeout(tick, 1000);
+    })();
+  </script>
+</body>
+</html>`;
+}
+
 const limiter = rateLimit({
     windowMs: 30 * 1000, // Keep a short rolling window for bursts.
     limit: 180, // Allow normal UI refresh/fetch bursts without false positives.
@@ -139,11 +230,11 @@ const limiter = rateLimit({
     handler: (req, res) => {
         const retryAfterSeconds = getLimiterRetryAfterSeconds(req);
         res.set('Retry-After', String(retryAfterSeconds));
-        return res.status(429).render('rateLimit.ejs', {
+        return res.status(429).send(renderRateLimitPage({
             title: 'Jukebar Rate Limited',
             message: 'Hey bud, you\'re making too many requests. Stop it.',
             retryAfterSeconds
-        });
+        }));
     }
 })
 
@@ -153,6 +244,10 @@ app.use(limiter);
 
 async function runSpotifyDiagnostics() {
     if (!process.env.SPOTIFY_CLIENT_ID) return;
+    // Respect the shared READ cooldown other background jobs (sync,
+    // ban-enforcer) may have already set — previously this probe fired every
+    // cycle unconditionally, even while another loop was mid-cooldown.
+    if (getSpotifyPlaybackCooldownMs(READ) > 0) return;
     try {
         await ensureSpotifyAccessToken();
         // Lightweight playback-health probe.
@@ -160,8 +255,9 @@ async function runSpotifyDiagnostics() {
     } catch (err) {
         const status = err?.statusCode ?? err?.response?.statusCode ?? err?.body?.error?.status;
         if (Number(status) === 429) {
-            setSpotifyPlaybackCooldown(READ, getRetryAfterFromError(err), 'runSpotifyDiagnostics');
-            queueManager.setSpotifyCooldown(getRetryAfterFromError(err), 'runSpotifyDiagnostics');
+            // executePlaybackRead already recorded the shared cooldown;
+            // just align the sync-loop skip flag and apply the brokey floor.
+            queueManager.extendSpotifyCooldownMs(getSpotifyPlaybackCooldownMs(READ));
             enableBrokey('Spotify diagnostics returned 429');
         }
     }
@@ -300,7 +396,7 @@ app.get('/diagnostics', isAuthenticated, playbackRateLimit(READ), async (req, re
         if (isSpotify429(err)) {
             const retryAfter = getRetryAfterFromError(err);
             setSpotifyPlaybackCooldown(READ, retryAfter, 'GET /diagnostics');
-            queueManager.setSpotifyCooldown(retryAfter, 'GET /diagnostics');
+            queueManager.extendSpotifyCooldownMs(getSpotifyPlaybackCooldownMs(READ));
             enableBrokey('Diagnostics endpoint returned 429');
         }
         report.error = err?.message || 'Diagnostics endpoint failed';
@@ -388,21 +484,16 @@ async function handleBanPassed(trackName, trackArtist, trackUri) {
 let lastAutoSkippedBannedUri = null;
 let lastAutoSkippedAt = 0;
 
-async function enforceCurrentTrackBanByUri() {
-    try {
-        await ensureSpotifyAccessToken();
-        const playback = await executePlaybackRead(
-            { session: null, ip: 'ban-enforcer' },
-            'ban-enforcer-current-track',
-            () => spotifyApi.getMyCurrentPlayingTrack()
-        );
-        const currentUri = String(playback?.body?.item?.uri || '').trim();
-        if (!currentUri) return false;
+async function enforceCurrentTrackBanByUri(currentUri) {
+    if (getSpotifyPlaybackCooldownMs(READ) > 0) return false;
+    const uri = String(currentUri || '').trim();
+    if (!uri) return false;
 
+    try {
         const isBanned = await new Promise((resolve) => {
             db.get(
                 'SELECT 1 FROM banned_songs WHERE TRIM(COALESCE(track_uri, \'\')) = ? LIMIT 1',
-                [currentUri],
+                [uri],
                 (err, row) => {
                     if (err) {
                         console.error('Failed checking banned track URI:', err);
@@ -416,21 +507,20 @@ async function enforceCurrentTrackBanByUri() {
         if (!isBanned) return false;
 
         // Prevent repeated skip attempts for the same URI in short bursts.
-        if (lastAutoSkippedBannedUri === currentUri && (Date.now() - lastAutoSkippedAt) < 15000) {
+        if (lastAutoSkippedBannedUri === uri && (Date.now() - lastAutoSkippedAt) < 15000) {
             return false;
         }
 
-        console.log(`Auto-skipping banned currently playing track URI: ${currentUri}`);
-        lastAutoSkippedBannedUri = currentUri;
+        console.log(`Auto-skipping banned currently playing track URI: ${uri}`);
+        lastAutoSkippedBannedUri = uri;
         lastAutoSkippedAt = Date.now();
 
+        await ensureSpotifyAccessToken();
         await spotifyApi.skipToNext();
         return true;
     } catch (err) {
         if (isSpotify429(err)) {
-            const retryAfter = getRetryAfterFromError(err);
-            setSpotifyPlaybackCooldown(READ, retryAfter, 'ban-enforcer');
-            queueManager.setSpotifyCooldown(retryAfter, 'ban-enforcer');
+            queueManager.setSpotifyCooldown(getRetryAfterFromError(err), 'ban-enforcer');
         }
         console.warn('ban-enforcer check failed:', err?.message || err);
         return false;
@@ -819,6 +909,8 @@ if (process.env.SPOTIFY_CLIENT_ID) {
             console.log('Queue initialization complete');
         } catch (error) {
             console.warn('Could not initialize queue from Spotify:', error.message);
+        } finally {
+            spotifyQueueReady = true;
         }
     }
 
@@ -831,6 +923,7 @@ if (process.env.SPOTIFY_CLIENT_ID) {
     // Periodic Spotify sync with safer default interval
     setInterval(async () => {
         if (!spotifyBackgroundApiEnabled) return;
+        if (getSpotifyPlaybackCooldownMs(READ) > 0) return;
         const minGapMs = queueManager.getSpotifyPlaybackPollMinGapMs();
         if (
             queueManager.lastSpotifyPlayerFetchAt &&
@@ -839,74 +932,73 @@ if (process.env.SPOTIFY_CLIENT_ID) {
             return;
         }
         try {
-            await queueManager.syncWithSpotify(spotifyApi);
-            await enforceCurrentTrackBanByUri();
+            const syncState = await queueManager.syncWithSpotify(spotifyApi);
+            await enforceCurrentTrackBanByUri(syncState?.currentTrack?.uri);
         } catch (error) {
             console.error('Sync interval error (non-fatal):', error.message);
         }
     }, spotifySyncIntervalMs);
 }
 
-// Main routes
+// The React app (client/, served at /app/*) is the only front end now —
+// these old pre-React paths just redirect into it so bookmarks/links keep working.
 app.get('/', isAuthenticated, (req, res) => {
-    try {
-        console.log('Session permission:', req.session.permission);
-        console.log('Changelog to render:', changelog.length, 'entries');
-        res.render('player.ejs', {
-            user: req.session.user,
-            userID: req.session.token?.id,
-            hasPaid: !!req.session.hasPaid,
-            payment: req.session.payment || null,
-            userPermission: req.session.permission || 2,
-            ownerIDs: getOwnerIds(),
-            songAmount: Number(process.env.SONG_AMOUNT) || 50,
-            skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
-            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75,
-            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
-            createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
-            addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
-            removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
-            customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
-            banVoteMinOnlineUsers: voteBanMinOnlineUsers,
-            changelog: changelog,
-            changelogLatestKey
-        });
-    } catch (error) {
-        res.send(error.message);
-    }
+    res.redirect('/app/player');
 });
 
-app.get('/spotify', isAuthenticated, (req, res) => {
-    try {
-        console.log('Session permission (spotify route):', req.session.permission);
-        res.render('player.ejs', {
-            user: req.session.user,
-            userID: req.session.token?.id,
-            hasPaid: !!req.session.hasPaid,
-            payment: req.session.payment || null,
-            userPermission: req.session.permission || 2,
-            ownerIDs: getOwnerIds(),
-            songAmount: Number(process.env.SONG_AMOUNT) || 50,
-            skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
-            skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75,
-            voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
-            createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
-            addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
-            removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
-            customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
-            banVoteMinOnlineUsers: voteBanMinOnlineUsers,
-            changelog: changelog,
-            changelogLatestKey
-        });
-    } catch (error) {
-        res.send(error.message);
-    }
+app.get(['/player', '/spotify'], isAuthenticated, (req, res) => {
+    res.redirect('/app/player');
+});
+
+app.get('/settings', isAuthenticated, (req, res) => {
+    res.redirect('/app/settings');
 });
 
 // API endpoint to get online user count
 app.get('/api/online-count', (req, res) => {
     const onlineCount = io.engine.clientsCount;
     res.json({ count: onlineCount });
+});
+
+/**
+ * JSON session/config endpoint for the React front end under /app (client/).
+ */
+app.get('/api/me', isAuthenticated, (req, res) => {
+    const jukepixUtils = require('./utils/jukepix');
+    const userId = req.session.token?.id;
+    res.json({
+        ok: true,
+        user: req.session.user,
+        userID: userId,
+        isOwner: isOwner(userId),
+        userPermission: req.session.permission || 2,
+        ownerIDs: getOwnerIds(),
+        hasPaid: !!req.session.hasPaid,
+        payment: req.session.payment || null,
+        songAmount: Number(process.env.SONG_AMOUNT) || 50,
+        skipAmount: Number(process.env.SKIP_AMOUNT) || 100,
+        skipShieldAmount: Number(process.env.SKIP_SHIELD_AMOUNT || process.env.SKIP_SHIELD) || 75,
+        voteBanAmount: Number(process.env.VOTE_BAN_AMOUNT) || 500,
+        createPlaylistAmount: Number(process.env.CREATE_PLAYLIST_AMOUNT) || 700,
+        addPlaylistSongAmount: Number(process.env.ADD_PLAYLIST_SONG_AMOUNT) || 100,
+        removePlaylistSongAmount: Number(process.env.REMOVE_PLAYLIST_SONG_AMOUNT) || 50,
+        customPlaylistPlayAmount: Number(process.env.CUSTOM_PLAYLIST_PLAY_AMOUNT) || 250,
+        banVoteMinOnlineUsers: voteBanMinOnlineUsers,
+        jukepixEnabled: jukepixUtils.isJukepixEnabled(),
+        jukepixFeatureEnabled: jukepixUtils.isJukepixFeatureEnabled(),
+        spotifyApiConfigured: !!process.env.SPOTIFY_CLIENT_ID,
+        spotifyQueueReady,
+        changelog,
+        changelogLatestKey,
+        onlineCount: io.engine.clientsCount
+    });
+});
+
+// REST equivalent of the 'requestQueueUpdate' socket event, so the React
+// SPA can prefetch current queue/now-playing state (e.g. during boot)
+// without needing a live socket connection first.
+app.get('/api/queue', isAuthenticated, (req, res) => {
+    res.json(queueManager.getCurrentState());
 });
 
 // Debug endpoint to check Formbar connection status
@@ -927,37 +1019,14 @@ app.get('/debug/formbar', isAuthenticated, (req, res) => {
 });
 
 app.get('/leaderboard', isAuthenticated, (req, res) => {
-    try {
-        res.render('leaderboard.ejs', {
-            user: req.session.user,
-            userID: req.session.token?.id,
-            userPermission: req.session.permission || null,
-            ownerIDs: getOwnerIds()
-        });
-    }
-    catch (error) {
-        res.send(error.message);
-    }
+    res.redirect('/app/leaderboard');
 });
 
 app.get('/teacher', isAuthenticated, (req, res) => {
-    try {
-        const jukepixUtils = require('./utils/jukepix');
-        if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
-            res.render('teacher.ejs', {
-                user: req.session.user,
-                userID: req.session.token?.id,
-                jukepixEnabled: jukepixUtils.isJukepixEnabled(),
-                jukepixFeatureEnabled: jukepixUtils.isJukepixFeatureEnabled(),
-                userPermission: req.session.permission || null,
-                ownerIDs: getOwnerIds(),
-                spotifyApiConfigured: !!process.env.SPOTIFY_CLIENT_ID
-            });
-        } else {
-            res.redirect('/');
-        }
-    } catch (error) {
-        res.send(error.message);
+    if (req.session.permission >= 4 || isOwner(req.session.token?.id)) {
+        res.redirect('/app/teacher');
+    } else {
+        res.redirect('/');
     }
 });
 
@@ -970,9 +1039,44 @@ app.use('/', require('./routes/jukepix'));
 app.use('/', require('./routes/settings'));
 app.use('/', require('./routes/customPlaylists'));
 
+/**
+ * React front end (client/), served at /app/*. The redirect routes above
+ * (/, /player, /spotify, /settings, /leaderboard, /teacher) all funnel
+ * here. Run `npm run build` inside client/ to (re)generate client/dist
+ * after pulling changes or editing client/src.
+ */
+const reactClientDist = path.join(__dirname, 'client', 'dist');
+if (fs.existsSync(reactClientDist)) {
+    // Vite content-hashes everything under assets/ (new filename every build),
+    // so those are safe to cache "forever" — but index.html keeps the same
+    // URL across builds and has no hash to bust, so without an explicit
+    // no-cache here browsers can keep serving a stale index.html (pointing
+    // at JS/CSS hashes that no longer exist on disk after a rebuild) straight
+    // from disk/memory cache instead of re-fetching it, making front-end
+    // changes appear to "not show up" until a hard refresh.
+    app.use('/app', express.static(reactClientDist, {
+        setHeaders(res, filePath) {
+            if (path.basename(filePath) === 'index.html') {
+                res.setHeader('Cache-Control', 'no-cache');
+            } else {
+                res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            }
+        }
+    }));
+    app.get(['/app', '/app/*splat'], isAuthenticated, (req, res) => {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(path.join(reactClientDist, 'index.html'));
+    });
+} else {
+    app.get(['/app', '/app/*splat'], (req, res) => {
+        res.status(503).send('React front end not built yet — run "npm run build" inside client/, then restart the server.');
+    });
+}
+
 server.listen(port, host, async () => {
     io.disconnectSockets();
-    console.log(`Server listening on http://${host}:${port}`);
+    // console.log(`Server listening on http://${host}:${port}`);
+    console.log(`Server listening on ${process.env.URL}`)
     if (spotifyBackgroundApiEnabled) {
         lastSpotifyDiagnosticsRunAt = Date.now();
         runSpotifyDiagnostics().catch((err) => {
@@ -982,9 +1086,11 @@ server.listen(port, host, async () => {
     // Runtime diagnostics: if Spotify starts rate limiting, fail closed to brokey mode.
     setInterval(() => {
         if (!spotifyBackgroundApiEnabled) return;
-        const diagGapMs = queueManager.isSpotifyPlaybackPollLongIdleBackoff()
-            ? SPOTIFY_DIAG_INTERVAL_IDLE_MS
-            : SPOTIFY_DIAG_INTERVAL_ACTIVE_MS;
+        const diagGapMs = queueManager.isSpotifyPlaybackPollDeepIdleBackoff()
+            ? queueManager.getSpotifyDeepIdlePollGapMs()
+            : queueManager.isSpotifyPlaybackPollLongIdleBackoff()
+                ? SPOTIFY_DIAG_INTERVAL_IDLE_MS
+                : SPOTIFY_DIAG_INTERVAL_ACTIVE_MS;
         const now = Date.now();
         if (
             lastSpotifyDiagnosticsRunAt &&

@@ -1,0 +1,989 @@
+/*
+ * Additions on top of the existing /styles.css (loaded separately in
+ * index.html). Everything that already has a class in styles.css — header,
+ * .player-shell, .queue-item, .search-result-item, .sidebar-tab, etc. — is
+ * reused as-is so the React pages look identical to the EJS ones. This file
+ * only covers things the React app needed that didn't already exist:
+ * loading/empty states, and the JukePix Settings page (which in the EJS app
+ * carried its own inline <style> block rather than living in styles.css).
+ */
+
+.page-loading,
+.page-error {
+  padding: 60px 20px;
+  text-align: center;
+  color: #b3b3b3;
+}
+
+.page-error {
+  color: #ff6b6b;
+}
+
+.react-note {
+  font-size: 0.72em;
+  color: #7a7a7a;
+  text-align: center;
+  padding: 10px 0 0;
+}
+
+/* ---------- Queue rail (antd List inside .player-rail-queue) ----------
+   .player-right-rail is a fixed 290px CSS grid column (see .player-shell),
+   but antd's List.Item.Meta flex chain doesn't shrink by default, so long
+   titles/artists were blowing past that width instead of ellipsis-ing —
+   forcing min-width:0 down the flex chain lets .queue-item-title's existing
+   text-overflow:ellipsis (styles.css) actually take effect.
+   overflow:hidden only goes on the text-content wrappers, not
+   .ant-list-item-meta itself — that one wraps the avatar too, and clipping
+   it was cutting off the shield count Badge's dot, which sits slightly
+   outside the avatar's own box in its top-right corner. */
+.player-rail-queue .ant-list-item-meta {
+  min-width: 0;
+}
+
+.player-rail-queue .ant-list-item-meta-content,
+.player-rail-queue .ant-list-item-meta-title,
+.player-rail-queue .ant-list-item-meta-description {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.player-rail-queue .queue-item-title {
+  display: block;
+}
+
+/* antd's own .ant-list-item-meta-title (wraps .queue-item-title in an <h4>)
+   and .ant-list-item-meta-description (wraps .queue-item-artist +
+   .queue-item-added-by) add their own margin/line-height on top of
+   styles.css's already-tight queue-item-* spacing, inflating each row past
+   its intended ~72px min-height. Tightening the antd wrapper's own rhythm
+   here lets the row shrink back down. */
+.player-rail-queue .ant-list-item-meta-title {
+  margin-bottom: 2px;
+  line-height: 1.25;
+}
+
+.player-rail-queue .ant-list-item-meta-description {
+  line-height: 1.25;
+}
+
+.player-rail-queue .queue-item-added-by {
+  margin-top: 2px;
+}
+
+/* The "..." (songMenu) button sits as a plain sibling after List.Item.Meta
+   rather than antd's `actions` prop, so it needs its own flex rules on the
+   row to sit at the right edge instead of getting squeezed by Meta's
+   flex:1. */
+.player-rail-queue .ant-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.player-rail-queue .queue-item-actions {
+  flex-shrink: 0;
+}
+
+/* Shielded queue items — replaces the classic EJS ".shield-badge" pill
+   (a full gold bar shown *below* the title/artist text, which grows every
+   row's height whether or not it actually has a shield) with a small
+   notification-style Badge on the cover art (antd, see QueueRail.jsx) plus
+   a subtle left-border accent here, so shielded/unshielded rows stay the
+   same height and only the corner badge + tooltip communicate the shield
+   count. */
+.player-rail-queue .queue-item--shielded {
+  border-left: 3px solid #ffd700;
+}
+
+.queue-item-shield-badge-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
+.player-sidebar .ant-list-item-meta,
+.player-sidebar .ant-list-item-meta-content,
+.player-sidebar .ant-list-item-meta-title {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.player-sidebar .ant-list-item-meta-title {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* styles.css's .player-sidebar-item is a rigid 2-column CSS grid
+   (40px cover | flexible text) built for a plain <button><img
+   class="player-sidebar-cover">...</button>. Reusing that className on
+   antd's List.Item — whose real children are .ant-list-item-meta (avatar +
+   title/description) and .ant-list-item-action — squeezed the *entire*
+   meta block (cover image included) into that 40px column, so the avatar's
+   image lost its fixed size/crop and rendered at whatever tall, narrow box
+   the squeeze left it, blowing out the row height. Dropping the grid here
+   lets antd's own (already-correct) flex layout govern instead, and pins
+   the avatar back to a proper 40x40 cropped square. */
+.ant-list-item.player-sidebar-item {
+  display: flex;
+  grid-template-columns: unset;
+  padding-left: 5px;
+}
+
+.player-sidebar-item .ant-avatar {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  flex-shrink: 0;
+  /* Keeps the cover art painted above the title/description text instead
+     of underneath it. */
+  position: relative;
+  z-index: 10;
+}
+
+.player-sidebar-item .ant-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Nudges the "Queue" tag (List.Item's `extra`) 5px left of antd's default
+   position. */
+.player-sidebar-item .ant-tag {
+  transform: translateX(-5px);
+}
+
+/* ---------- Settings page (ported from views/settings.ejs) ---------- */
+
+body.settings-page {
+  overflow: auto;
+}
+
+.settings-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 30px 40px 60px;
+}
+
+.settings-container h2 {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: #1db954;
+  margin-bottom: 8px;
+}
+
+.settings-container .subtitle {
+  color: #b3b3b3;
+  font-size: 0.95em;
+  margin-bottom: 28px;
+}
+
+.settings-section {
+  background: #1a1a1a;
+  border: 1px solid #282828;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+}
+
+.settings-section h3 {
+  font-size: 1.2em;
+  color: #1db954;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #282828;
+  padding-bottom: 10px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+.form-grid > .full-width {
+  grid-column: 1 / -1;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #535353;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.override-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.priority-hint {
+  background: rgba(29, 185, 84, 0.08);
+  border: 1px solid rgba(29, 185, 84, 0.25);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #b3b3b3;
+  font-size: 0.88em;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.priority-hint strong {
+  color: #1db954;
+}
+
+.preview-bar {
+  height: 16px;
+  border-radius: 8px;
+  margin-top: 12px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+}
+
+.preview-bar-fill {
+  height: 100%;
+  width: 60%;
+  border-radius: 8px;
+  transition: background 0.3s;
+}
+
+.preview-text {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.95em;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+/* =========================================================================
+   Page transitions & general motion polish
+   ========================================================================= */
+
+/* IMPORTANT: never put `transform` (or filter/perspective/will-change) on
+   this rule. This div wraps every routed page, including the fixed-position
+   footer bar, changelog button, leaderboard info button, modals, etc. Per
+   the CSS spec, a non-`none` transform on an ancestor becomes the
+   containing block for `position: fixed` descendants instead of the real
+   viewport — which is exactly what happened here (animation-fill-mode:
+   both kept `transform: translateY(0)` applied permanently, so every fixed
+   element on every page was silently repositioned relative to this div's
+   content box instead of the screen, cutting off the bottom bar/leaderboard
+   button depending on how tall that page's content happened to be).
+   margin-top animates fine here without that side effect. */
+.app-page-fade {
+  animation: jb-fade-up 0.28s ease both;
+}
+
+@keyframes jb-fade-up {
+  from { opacity: 0; margin-top: 6px; }
+  to { opacity: 1; margin-top: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-page-fade { animation: none; }
+}
+
+/* Subtle hover lift on search/track cards — additive, doesn't change any
+   existing color or layout rule. */
+.player-page #searchResults .search-result-item {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.player-page #searchResults .search-result-item:hover {
+  transform: translateY(-3px);
+}
+
+/* Same subtle motion pass on the Teacher page's Queue History rows.
+   The ID-scoped selector out-specifies antd's zero-specificity :where()
+   list-item styles, so the classic .queue-item padding (styles.css) can't
+   get squeezed out by antd's own ant-list-item padding. */
+.teacher-page #historyList .queue-item {
+  transition: background-color 0.15s ease;
+  padding: 12px 16px;
+}
+
+.teacher-page #historyList .queue-item:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* =========================================================================
+   Custom scrollbars — refines the existing green webkit scrollbar globally
+   and adds the Firefox equivalent, which had no styling before.
+   ========================================================================= */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(29, 185, 84, 0.7) rgba(255, 255, 255, 0.06);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(29, 185, 84, 0.65);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(29, 185, 84, 0.95);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Belt-and-suspenders: makes sure each Teacher panel's own list is the thing
+   that scrolls (not the whole grid cell), matching how the classic
+   .teacher-layout panels behave once body.teacher-page is applied. */
+.teacher-page #historyList,
+.teacher-page #playlistList,
+.teacher-page #spotifyPlayer #searchResults,
+.teacher-page #userList,
+.teacher-page #bannedSongsList {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* =========================================================================
+   Leaderboard info button + modal (replaces the old countdown pill).
+   Reuses the changelog button/modal look from styles.css for consistency —
+   same green circular trigger, same dark rounded panel — just repositioned
+   and re-themed as an info icon instead of a changelog icon.
+   ========================================================================= */
+
+.leaderboard-info-button {
+  position: fixed;
+  /* max()/env() keep this clear of the screen edge and any mobile-browser
+     safe-area inset (notches, home indicator) at every viewport size. */
+  bottom: max(15px, env(safe-area-inset-bottom));
+  right: max(16px, env(safe-area-inset-right));
+  /* !important on both: antd's own .ant-btn-circle.ant-btn-icon-only rule is
+     a higher-specificity chained-class selector than this single class, so
+     without !important it can win the width (but not height) fight and
+     leave the button taller than it is wide instead of a true circle. */
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  margin: 0;
+  padding: 0 !important;
+  box-sizing: border-box;
+  border-radius: 100% !important;
+  background-color: #1db954 !important;
+  border: none !important;
+  color: #000 !important;
+  appearance: none;
+  -webkit-appearance: none;
+  color: #fff;
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2001;
+  box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.15s ease;
+}
+
+@media (max-width: 600px) {
+  .leaderboard-info-button {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    right: max(12px, env(safe-area-inset-right));
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    font-size: 18px;
+  }
+}
+
+.leaderboard-info-button:hover {
+  background-color: #1ed760;
+  box-shadow: 0 6px 16px rgba(29, 185, 84, 0.6);
+  transform: scale(1.1);
+}
+
+.leaderboard-info-button:active {
+  transform: scale(0.95);
+}
+
+.leaderboard-info-content {
+  max-width: 480px;
+}
+
+.leaderboard-info-content .ant-modal-container {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* ---------- Artist/album modal scrolling ----------
+   styles.css's .artist-modal-content / #artistOverviewView /
+   #albumDetailView rules were written for a single classic modal <div> that
+   IS the visible box. antd's Modal (v6, built on @rc-component/dialog
+   rather than the old rc-dialog) splits that into
+   .ant-modal (positioning wrapper, className lands here) ->
+   .ant-modal-container (the actual visible box — this was named
+   .ant-modal-content in antd v5/rc-dialog, renamed in v6) -> .ant-modal-body
+   (the actual scrollable area), so the 88vh height/flex constraints
+   .artist-modal-content declares never reached the box that needed them —
+   on longer artist/album track lists the content just grew past the modal
+   instead of scrolling internally, getting cut off at the viewport edge.
+   Wiring the same height + flex chain onto the real antd layers fixes
+   that. */
+.artist-modal-content .ant-modal-container {
+  height: 88vh;
+  max-height: 88vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.artist-modal-content .ant-modal-header {
+  flex: 0 0 auto;
+}
+
+.artist-modal-content .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 600px) {
+  .artist-modal-content .ant-modal-container {
+    height: 95vh;
+    max-height: 95vh;
+  }
+}
+
+.leaderboard-info-body {
+  color: #e6e6e6;
+  font-size: 0.95em;
+  line-height: 1.6;
+}
+
+.leaderboard-info-body p {
+  margin: 0 0 14px;
+}
+
+.leaderboard-info-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.leaderboard-info-list li {
+  display: grid;
+  grid-template-columns: 44px 70px 1fr;
+  align-items: center;
+  gap: 10px;
+  background: rgba(29, 185, 84, 0.08);
+  border: 1px solid rgba(29, 185, 84, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.leaderboard-info-place {
+  font-weight: 700;
+  color: #fff;
+}
+
+.leaderboard-info-pct {
+  font-weight: 700;
+  color: #1db954;
+}
+
+.leaderboard-info-pogs {
+  color: #b3b3b3;
+  font-size: 0.92em;
+}
+
+.leaderboard-rank-1 td { background: rgba(255, 215, 0, 0.06) !important; }
+.leaderboard-rank-2 td { background: rgba(192, 192, 192, 0.06) !important; }
+.leaderboard-rank-3 td { background: rgba(205, 127, 50, 0.06) !important; }
+
+/* styles.css's .leaderboard-container has a fixed `height: 75vh` — it was
+   sized for the classic version's own internally-scrolling flex list of
+   .leaderboard-item rows. antd's Table only grows to fit however many rows
+   there are, so with a small class that fixed height just left the table
+   stuck at the top of a mostly-empty, oversized (and therefore visually
+   off-center) box. Letting it size to content — capped by the same 75vh via
+   max-height instead, so it still scrolls once a class actually gets long —
+   fixes both the size mismatch and the "not centered" look. */
+.leaderboard-container {
+  height: auto;
+  max-height: 75vh;
+}
+
+.leaderboard-info-note {
+  color: #8a8a8a;
+  font-size: 0.85em;
+  margin-bottom: 0 !important;
+}
+
+/* =========================================================================
+   Modal + view-transition animations — covers "artist modal open" and
+   "pulling up an album" from the animation request. Most modals (Payment,
+   BanReason, CreatePlaylist, ChangelogModal, etc.) are antd Modals now, so
+   their pop-in comes from antd's own zoom transition instead of a custom
+   rule here.
+   ========================================================================= */
+
+/* Switching between the artist overview and an album's track list (or back)
+   re-mounts this element, so the fade/slide replays each time — makes
+   "pulling up an album" feel like a distinct transition rather than a
+   content swap. */
+.artist-view-enter {
+  animation: jb-view-slide-in 0.22s ease both;
+}
+
+@keyframes jb-view-slide-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.artist-track-row-enter,
+.artist-album-card-enter {
+  animation: jb-fade-up-tip 0.25s ease both;
+}
+
+/* Search results fade/stagger in as they arrive rather than popping in all
+   at once. Descendant (not direct-child) selector because antd's List
+   nests each .search-result-item a couple levels down (ul.ant-list-items >
+   li.search-result-item) instead of as a direct child of #searchResults. */
+#searchResults .search-result-item {
+  animation: jb-fade-up-tip 0.22s ease both;
+}
+#searchResults .search-result-item:nth-child(1) { animation-delay: 0.02s; }
+#searchResults .search-result-item:nth-child(2) { animation-delay: 0.05s; }
+#searchResults .search-result-item:nth-child(3) { animation-delay: 0.08s; }
+#searchResults .search-result-item:nth-child(4) { animation-delay: 0.11s; }
+#searchResults .search-result-item:nth-child(5) { animation-delay: 0.14s; }
+#searchResults .search-result-item:nth-child(6) { animation-delay: 0.17s; }
+#searchResults .search-result-item:nth-child(7) { animation-delay: 0.2s; }
+#searchResults .search-result-item:nth-child(8) { animation-delay: 0.23s; }
+#searchResults .search-result-item:nth-child(n+9) { animation-delay: 0.26s; }
+
+.ban-vote-modal {
+  animation: jb-ban-vote-slide-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes jb-ban-vote-slide-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artist-view-enter,
+  .artist-track-row-enter,
+  .artist-album-card-enter,
+  .ban-vote-modal,
+  #searchResults .search-result-item {
+    animation: none;
+  }
+}
+
+/* =========================================================================
+   Playlists sidebar clarity pass — tab hints, richer empty states, and
+   icon+label actions on class playlists so "Play" vs "Manage" reads at a
+   glance instead of two identical-looking small buttons.
+   ========================================================================= */
+
+.player-sidebar-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.player-sidebar-tab-hint {
+  margin: 0;
+  color: var(--inbetween3);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
+  width: fit-content;
+}
+
+.player-sidebar-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--inbetween3);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+/* Create/Manage playlist modals are antd Modals now (no more
+   #createPlaylistModal / #customPlaylistTracksModal wrapper divs), so the
+   handful of styles.css rules that were ID-scoped to those wrappers for
+   equal-height, independently-scrolling columns need a class-scoped
+   equivalent here. The base two-column flex row itself still comes from
+   styles.css's unscoped `.playlist-modal-body-but-better` rule. */
+.playlist-modal-content .create-playlist-songs,
+.playlist-modal-content .playlist-selected-songs {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  align-self: stretch;
+}
+
+.playlist-modal-content .playlist-search-results .ant-list-items,
+.playlist-modal-content .playlist-tracks-list .ant-list-items {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* Artist name line above the year in the album detail view — album name
+   itself now lives in the antd Modal's title bar instead of here. */
+.album-detail-artist {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: #fff;
+}
+
+.player-banned-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  text-align: center;
+  font-weight: 600;
+  background: #ff4444 !important;
+  border: none !important;
+}
+
+.player-banned-banner .ant-alert-message {
+  color: #fff;
+}
+
+/* =========================================================================
+   Header nav — antd Menu dropped into the existing .app-header/.logo
+   layout from styles.css; just needs to sit flush right with no default
+   Menu chrome (bottom border, opaque background) showing through.
+   ========================================================================= */
+
+/* =========================================================================
+   Teacher page tabs — antd Tabs replaces the old 3x2 CSS grid (which gave
+   up below ~1180px and stacked all 5 panels into one long scroll). Only
+   one panel is visible at a time so the page itself never scrolls; the
+   active panel fills the remaining height and scrolls internally.
+   ========================================================================= */
+
+.teacher-tabs {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.teacher-tabs .ant-tabs-nav {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+/* This antd version (v6, backed by @rc-component/tabs instead of the old
+   rc-tabs) renamed these wrapper classes — every rule below used to target
+   .ant-tabs-content-holder / .ant-tabs-content / .ant-tabs-tabpane, which
+   simply don't exist in the actual rendered DOM here (real classes are
+   .ant-tabs-body-holder / .ant-tabs-body / .ant-tabs-content), so none of
+   this ever actually applied. That's the real reason no amount of
+   min-height/overflow tuning ever produced a scrollbar: body/main-content
+   pins the page to the viewport with overflow hidden (by design — no page
+   scroll, only the active tab's content scrolls internally) and the inner
+   scroll container that was supposed to compensate for that was never
+   actually being styled at all. */
+.teacher-tabs .ant-tabs-body-holder {
+  flex: 1 1 auto;
+  /* height:0 (not just min-height:0) forces the flex-basis computation to
+     ignore this item's content size entirely, so flex-grow reliably
+     produces a definite pixel height no matter how tall a given tabpane's
+     content naturally is (e.g. a long Users table) — min-height:0 alone
+     was letting this grow to fit content instead of clipping/scrolling. */
+  height: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.teacher-tabs .ant-tabs-body {
+  height: 100%;
+  position: relative;
+}
+
+/* Taking the tabpane out of normal flow entirely with absolute positioning
+   means its own content height can *never* push out its ancestors
+   (body-holder, .main-content, etc.), no matter what antd does
+   internally when switching tabs — this always gives it a real, fixed
+   pixel-height box to work with, regardless of how tall its content is.
+   The tabpane itself is the scroll container (overflow-y:auto directly
+   here, not just on the inner #userList/#historyList/etc.) — that inner
+   overflow:auto is still there as a nicety when it works, but the panels
+   below have their own height/overflow relaxed to auto/visible so that,
+   worst case, this outer scroll always has something real to grab. */
+.teacher-tabs .ant-tabs-content {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.teacher-tabs #userManagement,
+.teacher-tabs #bannedSongsPanel,
+.teacher-tabs #playlistColumn,
+.teacher-tabs #queueHistory,
+.teacher-tabs #spotifyPlayer {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.teacher-tabs #queueHistory {
+  max-width: none;
+  margin: 0;
+}
+
+/* These inner lists normally scroll on their own (flex:1; height:0;
+   overflow-y:auto — see styles.css), which only works when their flex
+   parent has a *definite* height to grow into. Now that the panels above
+   are height:auto (so the outer tabpane scroll always has real overflow
+   to grab), that assumption no longer holds — flex-grow can't distribute
+   space in an auto-height container, which would otherwise collapse these
+   back down to 0px. Let them size to their natural content instead and
+   defer all scrolling to the tabpane. */
+.teacher-tabs #userList,
+.teacher-tabs #bannedSongsList,
+.teacher-tabs #playlistList,
+.teacher-tabs #historyList,
+.teacher-tabs #spotifyPlayer #searchResults {
+  height: auto;
+  max-height: none;
+  flex: none;
+  overflow: visible;
+}
+
+/* =========================================================================
+   Boot screen — shown once per page load while the backend finishes
+   syncing the Spotify queue (see App.jsx / BootScreen.jsx). Reuses the
+   header's font ('miners') and the app's green (--accent) for the fill, so
+   it reads as "the same logo, mid-load" rather than a different brand.
+   ========================================================================= */
+
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+.boot-screen--fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boot-logo-wrap {
+  position: relative;
+  line-height: 1;
+}
+
+.boot-logo {
+  display: flex;
+  font-family: 'miners', sans-serif !important;
+  font-size: clamp(2.6em, 9vw, 5em);
+  letter-spacing: 0.03em;
+  /* Headroom above the glyphs themselves so the letter-bounce peak (-14px,
+     see @keyframes boot-letter-bounce) stays inside this box. .boot-logo--fill
+     is clip-path'd for the progress reveal, and clip-path always clips to
+     the element's own box — without this padding the bounce got cut off
+     right at the box's top edge every time a letter arced upward. */
+  padding-top: 24px;
+}
+
+.boot-logo--base {
+  /* Solid (not stroke-only) so the blocky Minecraft glyphs are clearly
+     legible pre-fill, instead of a thin, easy-to-miss outline. */
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.boot-logo--fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: #1db954;
+  /* clip-path (set inline from JS progress) reveals this left-to-right, so
+     the loaded portion of the wordmark sweeps across like a solid wipe
+     instead of a gradient meter. */
+  transition: clip-path 0.08s linear;
+}
+
+.boot-logo-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+
+}
+
+.boot-letter {
+  display: inline-block;
+  animation: boot-letter-bounce 1.1s ease-in-out infinite;
+  /* Confirmed via isolated rendering tests: relying on inheritance from
+     .boot-logo alone silently drops the 'miners' font the moment the text
+     crosses into a child element — a bare, completely unstyled <span> with
+     no rule of its own is enough to trigger the fallback to sans-serif,
+     while an un-wrapped text node right next to it renders correctly. Each
+     letter needs its own span for the staggered bounce delay, so the fix is
+     to set font-family explicitly here too instead of depending on it being
+     inherited from the parent. */
+  font-family: 'miners', sans-serif !important;
+}
+
+@keyframes boot-letter-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-14px); }
+}
+
+.boot-status {
+  margin: -6px 0 0;
+  color: #7a7a7a;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.boot-tip {
+  max-width: min(480px, 84vw);
+  margin: 0;
+  padding: 0 20px;
+  color: #9a9a9a;
+  font-size: 0.9em;
+  text-align: center;
+  line-height: 1.5;
+  animation: jb-fade-up-tip 0.35s ease both;
+}
+
+@keyframes jb-fade-up-tip {
+  from { opacity: 0; margin-top: 8px; }
+  to { opacity: 1; margin-top: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-letter { animation: none; }
+  .boot-screen { transition: none; }
+}
+
+/* =========================================================================
+   Changelog "fun text" animations — small CSS-only flourishes for specific
+   words inside changelog.json's raw HTML `text` (rendered via
+   dangerouslySetInnerHTML in ChangelogModal.jsx). No JS/component logic
+   needed: changelog.json just wraps a word or two in one of these classes.
+   ========================================================================= */
+.jb-fun-rainbow {
+  animation: jb-fun-rainbow 1.8s linear infinite;
+}
+
+@keyframes jb-fun-rainbow {
+  0% { color: #ff5959; }
+  20% { color: #ffb84d; }
+  40% { color: #ffe94d; }
+  60% { color: #59ff8f; }
+  80% { color: #59c3ff; }
+  100% { color: #ff5959; }
+}
+
+.jb-fun-pulse {
+  display: inline-block;
+  animation: jb-fun-pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes jb-fun-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+
+/* Per-letter bounce, same idea as .boot-letter/@keyframes boot-letter-bounce
+   but lighter — each letter is its own <span> with a staggered inline
+   animation-delay set directly in changelog.json's HTML. */
+.jb-fun-letter {
+  display: inline-block;
+  animation: jb-fun-letter-bounce 1s ease-in-out infinite;
+}
+
+@keyframes jb-fun-letter-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-8px); }
+}
+
+.jb-fun-wiggle {
+  display: inline-block;
+  animation: jb-fun-wiggle 0.5s ease-in-out infinite;
+}
+
+@keyframes jb-fun-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+.jb-fun-tada {
+  display: inline-block;
+  animation: jb-fun-tada 1.2s ease-in-out infinite;
+}
+
+@keyframes jb-fun-tada {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  10%, 20% { transform: scale(0.9) rotate(-4deg); }
+  30%, 50%, 70%, 90% { transform: scale(1.15) rotate(4deg); }
+  40%, 60%, 80% { transform: scale(1.15) rotate(-4deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jb-fun-rainbow,
+  .jb-fun-pulse,
+  .jb-fun-letter,
+  .jb-fun-wiggle,
+  .jb-fun-tada {
+    animation: none;
+  }
+}

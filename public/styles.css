@@ -512,6 +512,7 @@ h1 {
 #playlistList {
     width: 100%;
     flex: 1;
+    height: 0;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -778,6 +779,7 @@ h1 {
 #bannedSongsList {
     width: 100%;
     flex: 1;
+    height: 0;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -1021,6 +1023,7 @@ h1 {
     box-shadow: none;
     padding: 18px 18px;
     height: 100%;
+    min-height: 0;
     overflow: auto;
     align-items: stretch;
 }
@@ -1164,6 +1167,9 @@ h1 {
     font-weight: 600;
     color: rgba(255, 255, 255, 0.85);
     padding: 4px 2px 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .recently-queued-divider {
@@ -1202,6 +1208,14 @@ h1 {
     letter-spacing: 0.06em;
     color: rgba(255, 255, 255, 0.66);
     margin-bottom: 8px;
+    text-align: center;
+}
+
+.player-rail-divider {
+    width: 100%;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin: -4px 0 0;
 }
 
 .player-rail-track {
@@ -1241,7 +1255,7 @@ h1 {
 
 .player-rail-queue .queue-item {
     margin-bottom: 8px;
-    min-height: 72px;
+    min-height: 64px;
     padding: 8px;
     border-radius: 9px;
 }
@@ -1289,121 +1303,6 @@ h1 {
 .player-nowplaying-right {
     display: flex;
     justify-content: flex-end;
-}
-
-.skip-activity-box {
-    position: relative;
-    width: 400px;
-    max-width: min(400px, calc(100vw - 220px));
-    height: 78px;
-    min-height: 78px;
-    max-height: 78px;
-    margin-right: 84px;
-    box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 4px 28px 4px 8px;
-}
-
-.skip-activity-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 2px;
-}
-
-.skip-activity-title {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.68);
-}
-
-.skip-activity-toggle {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    bottom: 4px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    padding: 0 4px;
-    border-radius: 4px;
-    transition: color 0.15s, background 0.15s;
-}
-
-.skip-activity-toggle:hover {
-    color: rgba(255, 255, 255, 0.9);
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.skip-activity-box.minimized {
-    height: auto;
-    min-height: unset;
-    max-height: unset;
-    padding: 4px 8px;
-}
-
-.skip-activity-box.minimized .skip-activity-list {
-    display: none;
-}
-
-.skip-activity-box.minimized .skip-activity-header {
-    margin-bottom: 0;
-}
-
-.skip-activity-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    height: 54px;
-    max-height: 54px;
-    overflow: auto;
-}
-
-.skip-activity-item {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.9);
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.25;
-}
-
-.skip-activity-empty {
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.skip-user {
-    color: #1db954;
-    font-weight: 600;
-}
-
-.skip-song {
-    color: #ff4d4f;
-    font-style: italic;
-}
-
-.skip-time,
-.skip-action {
-    color: rgba(255, 255, 255, 0.84);
-}
-
-@media (max-width: 980px) {
-    .skip-activity-box {
-        width: min(360px, 100%);
-        max-width: 100%;
-        margin-right: 0;
-    }
 }
 
 .player-nowplaying-center {
@@ -1681,6 +1580,8 @@ h1 {
 
 #historyList {
     flex: 1;
+    height: 0;
+    min-height: 0;
     overflow-y: auto;
     padding-right: 15px;
     margin-right: -15px;
@@ -2525,6 +2426,7 @@ p {
 @font-face {
     font-family: 'miners';
     src: url(./MinecraftTen-VGORe.ttf);
+    font-display: block;
 }
 
 @media screen and (orientation: portrait) {
@@ -2669,6 +2571,7 @@ p {
 /* User list rows */
 #userList {
     flex: 1;
+    height: 0;
     overflow-y: auto;
     min-height: 0;
 }
@@ -4784,6 +4687,7 @@ p {
 
 .artist-modal-header {
     padding: 18px 18px 0 18px;
+    flex-shrink: 0;
 }
 
 .artist-modal-hero {
@@ -4840,6 +4744,8 @@ p {
     min-height: 0;
     /* Stable scrollbar gutter prevents layout shift */
     scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 #artistTopTracksSection,
@@ -4996,6 +4902,7 @@ p {
 
 .album-detail-header {
     padding: 22px 54px 18px 22px;
+    flex-shrink: 0;
 }
 
 .album-detail-hero {
@@ -5067,6 +4974,8 @@ p {
     max-height: 100%;
     min-height: 0;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 .album-detail-footer {
