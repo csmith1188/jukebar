@@ -843,6 +843,15 @@
                                     Notify('Track added to queue!', 'success');
                                 } else {
                                     return response.json().then(data => {
+                                        if (response.status === 429 && paymentConsumed) {
+                                            hasPaid = true;
+                                            const retryAfter = Number(data.retryAfterSeconds);
+                                            const retryMessage = retryAfter > 0
+                                                ? `Playback is rate limited. Your payment is still available; try again in ${retryAfter} seconds.`
+                                                : 'Playback is rate limited. Your payment is still available; please try again shortly.';
+                                            Notify(retryMessage, 'error');
+                                            return;
+                                        }
                                         Notify(data.error || 'Failed to add track to queue', 'error');
                                         if (paymentConsumed) {
                                             refund();
